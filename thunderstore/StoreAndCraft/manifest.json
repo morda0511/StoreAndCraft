@@ -1,7 +1,7 @@
 {
     "name": "StoreAndCraft",
     "version_number": "1.0.0",
-    "website_url": "",
+    "website_url": "https://github.com/morda0511/StoreAndCraft",
     "description": "Auto-store and dump items into nearby chests, craft/build from those chests, and rename them. Required on server and all clients. Valheim 1.0.",
     "dependencies": [
         "denikson-BepInExPack_Valheim-5.4.2350"
