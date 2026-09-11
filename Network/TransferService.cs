@@ -22,10 +22,10 @@ namespace StoreAndCraft
             public Inventory From;
             public int Amount;
             public float Deadline;
-            public bool Withdraw;
-            public string SharedName;
-            public bool LeaveOne;
+            public bool FillStack;
         }
+
+        internal static int FillsQueued;
 
         public static void RegisterGrant()
         {
@@ -70,7 +70,6 @@ namespace StoreAndCraft
             if (TryOwner(chest, true))
                 return DepositLocal(chest, from, item, amount);
 
-            InvokeDeposit(chest, item, amount);
             Enqueue(new PendingMove
             {
                 Chest = chest,
@@ -95,8 +94,12 @@ namespace StoreAndCraft
                 drop.RequestOwn();
 
             ZNetView chestView = Refs.View(chest);
-            if (chestView != null && chestView.IsValid() && dropView != null && dropView.GetZDO() != null)
+            if (chestView != null && chestView.IsValid() && !chestView.IsOwner()
+                && dropView != null && dropView.GetZDO() != null)
+            {
                 chestView.InvokeRPC(RpcStoreDrop, dropView.GetZDO().m_uid);
+                return true;
+            }
 
             Enqueue(new PendingMove
             {
@@ -119,16 +122,6 @@ namespace StoreAndCraft
             ZNetView view = Refs.View(chest);
             if (view != null && view.IsValid())
                 view.InvokeRPC(RpcRemove, sharedName, amount, leaveOne ? 1 : 0);
-            Enqueue(new PendingMove
-            {
-                Chest = chest,
-                From = playerInv,
-                SharedName = sharedName,
-                Amount = amount,
-                LeaveOne = leaveOne,
-                Withdraw = true,
-                Deadline = Time.time + 2f
-            });
             return 0;
         }
 
@@ -283,8 +276,8 @@ namespace StoreAndCraft
                 return StoreDropLocal(op.Chest, op.Drop);
             }
 
-            if (op.Withdraw)
-                return WithdrawLocal(op.Chest, op.SharedName, op.Amount, op.From, op.LeaveOne) > 0;
+            if (op.FillStack)
+                return FillQueuedStack(op) > 0;
 
             return DepositLocal(op.Chest, op.From, op.Item, op.Amount);
         }
@@ -292,26 +285,146 @@ namespace StoreAndCraft
         private static bool DepositLocal(Container chest, Inventory from, ItemDrop.ItemData item, int amount)
         {
             Inventory inv = chest.GetInventory();
-            if (inv == null || item == null)
+            if (inv == null || item == null || item.m_shared == null)
                 return false;
 
             int take = Mathf.Min(amount, item.m_stack);
             if (take <= 0 || !inv.CanAddItem(item, take))
                 return false;
 
+            string shared = item.m_shared.m_name;
+            int before = inv.CountItems(shared, item.m_quality, true);
+
             ItemDrop.ItemData clone = item.Clone();
             clone.m_stack = take;
-            if (!inv.AddItem(clone))
+            inv.AddItem(clone);
+
+            int added = inv.CountItems(shared, item.m_quality, true) - before;
+            if (added <= 0)
                 return false;
 
-            from.RemoveItem(item, take);
+            from.RemoveItem(item, added);
+            Refs.NotifyChanged(from);
             Highlight(chest);
+            return true;
+        }
+
+        public static int TakeIntoExistingStack(Container chest, ItemDrop.ItemData dest, int amount)
+        {
+            if (chest == null || dest == null || dest.m_shared == null || amount <= 0)
+                return 0;
+            if (ChestNames.IsIgnored(chest))
+                return 0;
+
+            ContainerFilter.RefreshInventory(chest);
+            if (TryOwner(chest, true, false))
+                return TakeIntoExistingStackLocal(chest, dest, amount);
+
+            Enqueue(new PendingMove
+            {
+                Chest = chest,
+                Item = dest,
+                Amount = amount,
+                FillStack = true,
+                Deadline = Time.time + 2f
+            });
+            FillsQueued++;
+            return 0;
+        }
+
+        private static int FillQueuedStack(PendingMove op)
+        {
+            if (op.Item == null || op.Item.m_shared == null || op.Chest == null)
+                return 0;
+
+            Player player = Player.m_localPlayer;
+            int room = StackLimits.RoomInStack(op.Item);
+            room = StackLimits.FitByWeight(player, op.Item, room);
+            int want = Mathf.Min(op.Amount, room);
+            if (want <= 0)
+                return 0;
+
+            ContainerFilter.RefreshInventory(op.Chest);
+            int got = TakeIntoExistingStackLocal(op.Chest, op.Item, want);
+            if (got > 0 && player != null)
+            {
+                player.Message(
+                    MessageHud.MessageType.TopLeft,
+                    Loc.T("Filled stack +" + got + ".", "Stapel +" + got + "."),
+                    0, null, false);
+            }
+            return got;
+        }
+
+        private static int TakeIntoExistingStackLocal(Container chest, ItemDrop.ItemData dest, int amount)
+        {
+            Inventory inv = chest.GetInventory();
+            if (inv == null || dest == null || dest.m_shared == null || amount <= 0)
+                return 0;
+
+            int taken = 0;
+            var items = new List<ItemDrop.ItemData>(inv.GetAllItems());
+            int available = 0;
+            foreach (ItemDrop.ItemData src in items)
+            {
+                if (CanFillFrom(dest, src))
+                    available += src.m_stack;
+            }
+            if (Plugin.Settings != null && Plugin.Settings.LeaveOneItem.Value && available > 0)
+                available -= 1;
+            amount = Mathf.Min(amount, available);
+            if (amount <= 0)
+                return 0;
+
+            foreach (ItemDrop.ItemData src in items)
+            {
+                if (taken >= amount)
+                    break;
+                if (!CanFillFrom(dest, src))
+                    continue;
+
+                int move = Mathf.Min(amount - taken, src.m_stack);
+                if (move <= 0)
+                    continue;
+
+                dest.m_stack += move;
+                src.m_stack -= move;
+                taken += move;
+                if (src.m_stack <= 0)
+                    inv.RemoveItem(src);
+            }
+
+            if (taken <= 0)
+                return 0;
+
+            Player player = Player.m_localPlayer;
+            if (player != null)
+                Refs.NotifyChanged(player.GetInventory());
+            Refs.NotifyChanged(inv);
+            Highlight(chest);
+            return taken;
+        }
+
+        private static bool CanFillFrom(ItemDrop.ItemData dest, ItemDrop.ItemData src)
+        {
+            if (dest?.m_shared == null || src?.m_shared == null || src.m_stack <= 0)
+                return false;
+            if (dest.m_shared.m_name != src.m_shared.m_name)
+                return false;
+            if (dest.m_worldLevel != src.m_worldLevel)
+                return false;
+            if (dest.m_shared.m_maxStackSize <= 1)
+                return dest.m_quality == src.m_quality;
             return true;
         }
 
         private static bool StoreDropLocal(Container chest, ItemDrop drop)
         {
             if (drop == null || drop.m_itemData == null)
+                return false;
+
+            ZNetView dropView = Refs.View(drop);
+            if (dropView == null || !dropView.IsValid() || !dropView.IsOwner())
                 return false;
 
             Inventory inv = chest.GetInventory();
@@ -322,8 +435,7 @@ namespace StoreAndCraft
             if (!inv.AddItem(clone))
                 return false;
 
-            ZNetView dropView = Refs.View(drop);
-            if (dropView != null && dropView.IsValid() && ZNetScene.instance != null)
+            if (ZNetScene.instance != null)
                 ZNetScene.instance.Destroy(drop.gameObject);
             else
                 Object.Destroy(drop.gameObject);
@@ -359,11 +471,37 @@ namespace StoreAndCraft
                     return 0;
             }
 
+            InventoryCountPatches.Skip++;
+            int beforePlayer;
+            try
+            {
+                beforePlayer = playerInv.CountItems(sharedName, -1, true);
+            }
+            finally
+            {
+                InventoryCountPatches.Skip--;
+            }
+
             if (!playerInv.AddItem(prefab, take))
                 return 0;
 
-            inv.RemoveItem(sharedName, take, -1, true);
-            return take;
+            InventoryCountPatches.Skip++;
+            int afterPlayer;
+            try
+            {
+                afterPlayer = playerInv.CountItems(sharedName, -1, true);
+            }
+            finally
+            {
+                InventoryCountPatches.Skip--;
+            }
+
+            int got = afterPlayer - beforePlayer;
+            if (got <= 0)
+                return 0;
+
+            inv.RemoveItem(sharedName, got, -1, true);
+            return got;
         }
 
         private static float MaxStoreRange()
@@ -387,7 +525,7 @@ namespace StoreAndCraft
             return true;
         }
 
-        private static bool TryOwner(Container chest, bool claim)
+        private static bool TryOwner(Container chest, bool claim, bool throttle = true)
         {
             ZNetView nv = Refs.View(chest);
             if (nv == null || !nv.IsValid())
@@ -397,13 +535,19 @@ namespace StoreAndCraft
             if (!claim)
                 return false;
 
-            int id = chest.GetInstanceID();
-            float next;
-            if (ClaimThrottle.TryGetValue(id, out next) && Time.time < next)
-                return false;
+            if (throttle)
+            {
+                int id = chest.GetInstanceID();
+                float next;
+                if (ClaimThrottle.TryGetValue(id, out next) && Time.time < next)
+                    return false;
+
+                nv.ClaimOwnership();
+                ClaimThrottle[id] = Time.time + 0.35f;
+                return nv.IsOwner();
+            }
 
             nv.ClaimOwnership();
-            ClaimThrottle[id] = Time.time + 0.35f;
             return nv.IsOwner();
         }
 

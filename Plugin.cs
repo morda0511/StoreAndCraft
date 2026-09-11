@@ -11,7 +11,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.0.0";
+        public const string ModVersion = "1.1.0";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -44,7 +44,9 @@ namespace StoreAndCraft
 
             NearbyIndex.Tick();
             AutoIntake.Tick();
+            AutoStack.Tick();
             StagingPull.Tick();
+            DisplayTypeMenu.Tick();
         }
 
         private void LateUpdate()

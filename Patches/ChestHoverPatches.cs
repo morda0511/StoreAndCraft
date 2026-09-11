@@ -28,7 +28,12 @@ namespace StoreAndCraft
         {
             string custom = ChestNames.Get(__instance);
             if (!string.IsNullOrEmpty(custom))
-                __result = custom;
+            {
+                string shown = ChestNames.DisplayName(custom);
+                if (string.IsNullOrEmpty(shown))
+                    shown = custom;
+                __result = shown;
+            }
         }
     }
 
@@ -41,19 +46,29 @@ namespace StoreAndCraft
                 return;
 
             string custom = ChestNames.Get(__instance);
+            bool ignored = ChestNames.IsIgnoredName(custom);
             if (!string.IsNullOrEmpty(custom))
             {
+                string shown = ChestNames.DisplayName(custom);
+                if (string.IsNullOrEmpty(shown))
+                    shown = custom;
+
                 string vanilla = Refs.VanillaHoverName(__instance);
                 if (!string.IsNullOrEmpty(vanilla) && Localization.instance != null)
                     vanilla = Localization.instance.Localize(vanilla);
 
                 if (!string.IsNullOrEmpty(vanilla) && __result.StartsWith(vanilla))
-                    __result = custom + __result.Substring(vanilla.Length);
-                else if (__result.IndexOf(custom, System.StringComparison.Ordinal) < 0)
-                    __result = custom + "\n" + __result;
+                    __result = shown + __result.Substring(vanilla.Length);
+                else if (__result.IndexOf(shown, System.StringComparison.Ordinal) < 0
+                    && __result.IndexOf(custom, System.StringComparison.Ordinal) < 0)
+                    __result = shown + "\n" + __result;
+                else if (__result.IndexOf(custom, System.StringComparison.Ordinal) >= 0 && custom != shown)
+                    __result = __result.Replace(custom, shown);
             }
 
             __result += "\n[<color=yellow><b>" + ChestRename.PromptLabel() + "</b></color>] Rename";
+            if (ignored)
+                __result = "<color=#e74c3c>" + __result + "</color>";
         }
     }
 }

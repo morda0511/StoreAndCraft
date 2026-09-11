@@ -82,53 +82,61 @@ namespace StoreAndCraft
             Vector3 origin = player.transform.position;
             bool allOwned = true;
 
-            foreach (Piece.Requirement req in requirements)
+            InventoryCountPatches.Skip++;
+            try
             {
-                if (req == null || req.m_resItem == null)
-                    continue;
-
-                int need = req.GetAmount(qualityLevel) * Mathf.Max(1, multiplier);
-                if (need <= 0)
-                    continue;
-
-                string shared = req.m_resItem.m_itemData != null
-                    ? req.m_resItem.m_itemData.m_shared.m_name
-                    : null;
-                if (string.IsNullOrEmpty(shared))
-                    continue;
-
-                int have = inv.CountItems(shared, itemQuality, true);
-                int deficit = need - have;
-                if (deficit <= 0)
-                    continue;
-
-                foreach (Container chest in NearbyIndex.Current)
+                foreach (Piece.Requirement req in requirements)
                 {
+                    if (req == null || req.m_resItem == null)
+                        continue;
+
+                    int need = req.GetAmount(qualityLevel) * Mathf.Max(1, multiplier);
+                    if (need <= 0)
+                        continue;
+
+                    string shared = req.m_resItem.m_itemData != null
+                        ? req.m_resItem.m_itemData.m_shared.m_name
+                        : null;
+                    if (string.IsNullOrEmpty(shared))
+                        continue;
+
+                    int have = inv.CountItems(shared, itemQuality, true);
+                    int deficit = need - have;
                     if (deficit <= 0)
-                        break;
-
-                    if (chest == null)
                         continue;
 
-                    string pieceName = ContainerFilter.PiecePrefab(chest);
-                    if (!RulesFile.AllowsCraft(pieceName, shared))
-                        continue;
-                    float chestRange = RulesFile.CraftRange(pieceName, cfgCraft);
-                    if (ContainerFilter.Distance(origin, chest.transform.position) > chestRange)
-                        continue;
-
-                    ZNetView nv = Refs.View(chest);
-                    if (nv == null || !nv.IsOwner())
+                    foreach (Container chest in NearbyIndex.Current)
                     {
-                        TransferService.Withdraw(chest, shared, deficit, inv, leaveOne);
-                        allOwned = false;
-                        waiting = true;
-                        continue;
-                    }
+                        if (deficit <= 0)
+                            break;
 
-                    int took = TransferService.Withdraw(chest, shared, deficit, inv, leaveOne);
-                    deficit -= took;
+                        if (chest == null || ChestNames.IsIgnored(chest))
+                            continue;
+
+                        string pieceName = ContainerFilter.PiecePrefab(chest);
+                        if (!RulesFile.AllowsCraft(pieceName, shared))
+                            continue;
+                        float chestRange = RulesFile.CraftRange(pieceName, cfgCraft);
+                        if (ContainerFilter.Distance(origin, chest.transform.position) > chestRange)
+                            continue;
+
+                        ZNetView nv = Refs.View(chest);
+                        if (nv == null || !nv.IsOwner())
+                        {
+                            TransferService.Withdraw(chest, shared, deficit, inv, leaveOne);
+                            allOwned = false;
+                            waiting = true;
+                            continue;
+                        }
+
+                        int took = TransferService.Withdraw(chest, shared, deficit, inv, leaveOne);
+                        deficit -= took;
+                    }
                 }
+            }
+            finally
+            {
+                InventoryCountPatches.Skip--;
             }
 
             return allOwned;

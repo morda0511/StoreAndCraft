@@ -60,4 +60,32 @@ namespace StoreAndCraft
             return true;
         }
     }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.HaveRequirements), typeof(Piece), typeof(Player.RequirementMode))]
+    internal static class HavePieceRequirementsPatch
+    {
+        private static void Prefix()
+        {
+            StationHover.Begin();
+        }
+
+        private static void Postfix()
+        {
+            StationHover.End();
+        }
+    }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.HaveRequirements), typeof(Recipe), typeof(bool), typeof(int), typeof(int))]
+    internal static class HaveRecipeRequirementsPatch
+    {
+        private static void Prefix()
+        {
+            StationHover.Begin();
+        }
+
+        private static void Postfix()
+        {
+            StationHover.End();
+        }
+    }
 }

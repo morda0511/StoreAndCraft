@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyName>StoreAndCraftServer</AssemblyName>
+    <RootNamespace>StoreAndCraftServer</RootNamespace>
+    <Product>StoreAndCraftServer</Product>
+    <Version>1.0.0</Version>
+    <ModVersion>1.0.0</ModVersion>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Server\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExDir)\core\BepInEx.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExDir)\core\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="assembly_valheim">
+      <HintPath>$(ManagedDir)\assembly_valheim.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="assembly_guiutils">
+      <HintPath>$(ManagedDir)\assembly_guiutils.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="assembly_utils">
+      <HintPath>$(ManagedDir)\assembly_utils.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(ManagedDir)\UnityEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(ManagedDir)\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="Deploy" AfterTargets="Build">
+    <PropertyGroup>
+      <ThunderstorePackRoot>$(MSBuildThisFileDirectory)thunderstore\StoreAndCraftServer</ThunderstorePackRoot>
+    </PropertyGroup>
+    <MakeDir Directories="$(ThunderstorePackRoot)\plugins\StoreAndCraftServer" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ThunderstorePackRoot)\plugins\StoreAndCraftServer" OverwriteReadOnlyFiles="true" />
+  </Target>
+  <Target Name="PackThunderstore" AfterTargets="Deploy" Condition="'$(Configuration)' == 'Release'">
+    <MakeDir Directories="$(MSBuildThisFileDirectory)thunderstore\packs" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)pack-thunderstore.ps1&quot; -Version &quot;$(ModVersion)&quot; -PackRoot &quot;$(MSBuildThisFileDirectory)thunderstore\StoreAndCraftServer&quot; -OutputDir &quot;$(MSBuildThisFileDirectory)thunderstore\packs&quot; -PackageName &quot;StoreAndCraftServer&quot;" />
+  </Target>
+</Project>

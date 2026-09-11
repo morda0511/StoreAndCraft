@@ -13,6 +13,8 @@ namespace StoreAndCraft
         private static readonly FieldInfo ContainerName = AccessTools.Field(typeof(Container), "m_name");
         private static readonly FieldInfo GuiRecipe = AccessTools.Field(typeof(InventoryGui), "m_craftRecipe");
         private static readonly FieldInfo GuiMulti = AccessTools.Field(typeof(InventoryGui), "m_multiCrafting");
+        private static readonly MethodInfo InventoryChanged = AccessTools.Method(typeof(Inventory), "Changed", System.Type.EmptyTypes)
+            ?? AccessTools.Method(typeof(Inventory), "Changed");
 
         public static ZNetView View(Container container)
         {
@@ -65,6 +67,23 @@ namespace StoreAndCraft
                 return false;
             object v = GuiMulti.GetValue(gui);
             return v is bool && (bool)v;
+        }
+
+        public static void NotifyChanged(Inventory inventory)
+        {
+            if (inventory == null || InventoryChanged == null)
+                return;
+            try
+            {
+                if (InventoryChanged.GetParameters().Length == 0)
+                    InventoryChanged.Invoke(inventory, null);
+                else
+                    InventoryChanged.Invoke(inventory, new object[] { true, false });
+            }
+            catch
+            {
+                InventoryChanged.Invoke(inventory, null);
+            }
         }
     }
 }

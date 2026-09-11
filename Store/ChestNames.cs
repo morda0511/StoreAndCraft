@@ -6,6 +6,31 @@ namespace StoreAndCraft
     {
         public const string ZdoKey = "kac_label";
         public const int MaxLength = 32;
+        public const string IgnorePrefix = "[I]";
+
+        public static bool IsIgnored(Container container)
+        {
+            return IsIgnoredName(Get(container));
+        }
+
+        public static bool IsIgnoredName(string stored)
+        {
+            if (string.IsNullOrEmpty(stored))
+                return false;
+            string t = stored.TrimStart();
+            // Only the ignore tag "[I]", not every renamed chest.
+            return t.StartsWith(IgnorePrefix, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static string DisplayName(string stored)
+        {
+            if (string.IsNullOrEmpty(stored))
+                return stored;
+            string t = stored.Trim();
+            if (t.StartsWith(IgnorePrefix, System.StringComparison.OrdinalIgnoreCase))
+                t = t.Substring(IgnorePrefix.Length).TrimStart();
+            return t;
+        }
 
         public static bool CanRename(Container container)
         {
@@ -31,6 +56,11 @@ namespace StoreAndCraft
 
             if (!nv.IsOwner())
                 nv.ClaimOwnership();
+
+            ContainerFilter.RefreshInventory(container);
+            Inventory inv = container.GetInventory();
+            if (inv != null && inv.NrOfItems() > 0)
+                ContainerFilter.SaveInventory(container);
 
             nv.GetZDO().Set(ZdoKey, Sanitize(name));
             return true;

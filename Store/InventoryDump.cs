@@ -18,7 +18,7 @@ namespace StoreAndCraft
             if (inv == null)
                 return;
 
-            NearbyIndex.Rescan(player.transform.position, NearbyIndex.ScanRange());
+            NearbyIndex.Rescan(player.transform.position, NearbyIndex.AccessRange());
             var items = new List<ItemDrop.ItemData>(inv.GetAllItems());
             int stored = 0;
 
@@ -57,7 +57,7 @@ namespace StoreAndCraft
             if (inv == null)
                 return false;
 
-            NearbyIndex.Rescan(player.transform.position, NearbyIndex.ScanRange());
+            NearbyIndex.Rescan(player.transform.position, NearbyIndex.AccessRange());
             Container chest = ChestPicker.FindStoreTarget(
                 player.transform.position,
                 item,

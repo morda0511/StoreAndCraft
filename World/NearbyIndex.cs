@@ -35,14 +35,21 @@ namespace StoreAndCraft
             _nextScan = Time.time + 0.6f;
         }
 
+        public static float AccessRange()
+        {
+            return Plugin.Settings != null ? Plugin.Settings.StorageRange.Value : 10f;
+        }
+
         public static float ScanRange()
         {
             if (Plugin.Settings == null)
                 return 20f;
-            return RulesFile.MaxScanRange(
-                Plugin.Settings.StoreRange.Value,
-                Plugin.Settings.CraftRange.Value,
-                Plugin.Settings.PlayerDumpRange.Value);
+            return Mathf.Max(
+                AccessRange(),
+                RulesFile.MaxScanRange(
+                    Plugin.Settings.StoreRange.Value,
+                    Plugin.Settings.CraftRange.Value,
+                    Plugin.Settings.PlayerDumpRange.Value));
         }
 
         public static void Rescan(Vector3 origin, float range)
@@ -51,7 +58,7 @@ namespace StoreAndCraft
             if (range <= 0f)
                 return;
 
-            Collider[] hits = Physics.OverlapSphere(origin, range);
+            Collider[] hits = Physics.OverlapSphere(origin, range, ~0, QueryTriggerInteraction.Collide);
             var seen = new HashSet<int>();
             foreach (Collider hit in hits)
             {

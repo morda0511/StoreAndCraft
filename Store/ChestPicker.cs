@@ -10,7 +10,7 @@ namespace StoreAndCraft
             if (item == null)
                 return null;
 
-            float cfgDump = Plugin.Settings != null ? Plugin.Settings.PlayerDumpRange.Value : 8f;
+            float cfgDump = NearbyIndex.AccessRange();
             Container best = null;
             float bestDist = float.MaxValue;
 
@@ -69,10 +69,14 @@ namespace StoreAndCraft
 
             foreach (Container chest in NearbyIndex.Within(origin, range))
             {
+                if (chest == null || ChestNames.IsIgnored(chest))
+                    continue;
+
+                ContainerFilter.RefreshInventory(chest);
                 Inventory inv = chest.GetInventory();
                 if (inv == null)
                     continue;
-                if (inv.CountItems(sharedName, -1, true) > 0)
+                if (CountShared(inv, sharedName) > 0)
                     list.Add(chest);
             }
 
@@ -80,6 +84,22 @@ namespace StoreAndCraft
                 ContainerFilter.Distance(origin, a.transform.position)
                     .CompareTo(ContainerFilter.Distance(origin, b.transform.position)));
             return list;
+        }
+
+        public static int CountShared(Inventory inv, string sharedName)
+        {
+            if (inv == null || string.IsNullOrEmpty(sharedName))
+                return 0;
+
+            int n = 0;
+            foreach (ItemDrop.ItemData item in inv.GetAllItems())
+            {
+                if (item == null || item.m_shared == null || item.m_stack <= 0)
+                    continue;
+                if (item.m_shared.m_name == sharedName)
+                    n += item.m_stack;
+            }
+            return n;
         }
     }
 }

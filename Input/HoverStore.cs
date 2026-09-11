@@ -1,4 +1,3 @@
-using System.Collections;
 using HarmonyLib;
 using UnityEngine;
 
@@ -12,11 +11,7 @@ namespace StoreAndCraft
             if (gui == null || !InventoryGui.IsVisible() || gui.m_playerGrid == null)
                 return null;
 
-            ItemDrop.ItemData item = FromGrid(gui.m_playerGrid);
-            if (item != null)
-                return item;
-
-            return FromGridByMouse(gui.m_playerGrid);
+            return ItemFromGrid(gui.m_playerGrid);
         }
 
         public static void TryStoreHovered()
@@ -29,80 +24,66 @@ namespace StoreAndCraft
                 return;
 
             if (!InventoryGui.IsVisible())
+                return;
+
+            ItemDrop.ItemData item = GetHoveredPlayerItem();
+            if (item == null)
             {
                 player.Message(
                     MessageHud.MessageType.Center,
-                    Loc.T("Open your inventory and middle-click an item.", "Inventar öffnen und mit mittlerer Maustaste auf ein Item klicken."),
+                    Loc.T("Hover an inventory item first.", "Zuerst über ein Inventar-Item zeigen."),
                     0, null, false);
                 return;
             }
 
-            ItemDrop.ItemData item = GetHoveredPlayerItem();
-            if (item != null)
+            if (InventoryDump.StoreOne(item))
             {
-                if (InventoryDump.StoreOne(item))
-                {
-                    player.Message(
-                        MessageHud.MessageType.TopLeft,
-                        Loc.T("Stored hovered item.", "Gehovertes Item eingelagert."),
-                        0, null, false);
-                }
-                return;
+                player.Message(
+                    MessageHud.MessageType.TopLeft,
+                    Loc.T("Stored hovered item.", "Gehovertes Item eingelagert."),
+                    0, null, false);
             }
-
-            InventoryDump.DumpNearby();
         }
 
-        private static ItemDrop.ItemData FromGrid(InventoryGrid grid)
+        private static ItemDrop.ItemData ItemFromGrid(InventoryGrid grid)
         {
             if (grid == null)
                 return null;
 
-            var method = AccessTools.Method(typeof(InventoryGrid), "GetHoveredElement");
-            if (method == null)
-                return null;
-
-            var element = method.Invoke(grid, null) as InventoryElement;
+            InventoryElement element = GetHoveredElement(grid);
             if (element == null)
                 return null;
 
-            return grid.GetItem(element.Position);
+            Inventory inv = grid.GetInventory();
+            if (inv == null)
+                return null;
+
+            Vector2i pos = GetElementPos(grid, element);
+            if (pos.x < 0 || pos.y < 0)
+                return null;
+
+            return inv.GetItemAt(pos.x, pos.y);
         }
 
-        private static ItemDrop.ItemData FromGridByMouse(InventoryGrid grid)
+        private static InventoryElement GetHoveredElement(InventoryGrid grid)
         {
-            if (grid == null)
+            var method = AccessTools.Method(typeof(InventoryGrid), "GetHoveredElement");
+            if (method == null)
                 return null;
+            return method.Invoke(grid, null) as InventoryElement;
+        }
 
-            var field = AccessTools.Field(typeof(InventoryGrid), "m_elements");
-            if (field == null)
-                return null;
-
-            IList elements = field.GetValue(grid) as IList;
-            if (elements == null)
-                return null;
-
-            Vector3 pointer = Input.mousePosition;
-            foreach (object raw in elements)
+        private static Vector2i GetElementPos(InventoryGrid grid, InventoryElement element)
+        {
+            var method = AccessTools.Method(typeof(InventoryGrid), "GetElementPos");
+            if (method != null)
             {
-                InventoryElement element = raw as InventoryElement;
-                if (element == null)
-                    continue;
-
-                RectTransform rect = element.GetElementRectTransform();
-                if (rect == null)
-                    continue;
-
-                Vector2 local = rect.InverseTransformPoint(pointer);
-                if (!rect.rect.Contains(local))
-                    continue;
-
-                ItemDrop.ItemData item = grid.GetItem(element.Position);
-                if (item != null)
-                    return item;
+                object raw = method.Invoke(grid, new object[] { element });
+                if (raw is Vector2i fromGrid)
+                    return fromGrid;
             }
 
-            return null;
+            return element.Position;
         }
     }
 }

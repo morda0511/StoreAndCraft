@@ -5,7 +5,7 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        public const int ProtocolVersion = 1;
+        public const int ProtocolVersion = 2;
 
         public ConfigEntry<bool> LockConfig { get; }
         public ConfigEntry<bool> ModEnabled { get; }
@@ -18,6 +18,8 @@ namespace StoreAndCraft
         public ConfigEntry<bool> PingOnStore { get; }
         public ConfigEntry<float> PlayerDumpRange { get; }
         public ConfigEntry<float> StoreRange { get; }
+        public ConfigEntry<float> StorageRange { get; }
+        public ConfigEntry<bool> AutoStackEnabled { get; }
         public ConfigEntry<float> CraftRange { get; }
         public ConfigEntry<float> IntakeInterval { get; }
         public ConfigEntry<float> PauseSeconds { get; }
@@ -28,6 +30,7 @@ namespace StoreAndCraft
         public ConfigEntry<KeyboardShortcut> SearchKey { get; }
         public ConfigEntry<KeyboardShortcut> PreventPullKey { get; }
         public ConfigEntry<KeyboardShortcut> RenameKey { get; }
+        public ConfigEntry<KeyboardShortcut> TakeStackKey { get; }
 
         public ModConfig(ConfigFile file)
         {
@@ -38,11 +41,11 @@ namespace StoreAndCraft
             StoreEnabled = file.Bind("2 - Store", "StoreEnabled", true,
                 "If enabled, ground items can be auto-stored and dump / middle-click store works.");
             CraftEnabled = file.Bind("3 - Craft", "CraftEnabled", true,
-                "If enabled, crafting and building can use items stored in nearby chests.");
+                "If enabled, crafting, building, and station refill ([E] on smelters, kilns, ovens, torches, fires, fermenters, turrets) can use items stored in nearby chests.");
             MustHaveExisting = file.Bind("2 - Store", "MustHaveExisting", true,
                 "If enabled, a chest only accepts an item if that item is already inside it. Empty chests will not vacuum new item types.");
             LeaveOneItem = file.Bind("3 - Craft", "LeaveOneItem", true,
-                "If enabled, crafting/building leaves 1 item in each chest so auto-store can keep filling that stack.");
+                "If enabled, every pull from a chest (craft, build, station [E], Ctrl+middle-click fill) leaves 1 item so auto-store can keep filling that stack.");
             IgnoreHotbar = file.Bind("2 - Store", "IgnoreHotbar", true,
                 "If enabled, dump will not move items from the hotbar (first inventory row).");
             HighlightOnStore = file.Bind("2 - Store", "HighlightOnStore", true,
@@ -53,6 +56,10 @@ namespace StoreAndCraft
                 "Fallback dump / middle-click range in meters (player to chest). YAML dumpRange overrides this.");
             StoreRange = file.Bind("2 - Store", "StoreRange", 10f,
                 "Fallback auto-store range in meters (item on ground to chest). YAML storeRange overrides this.");
+            StorageRange = file.Bind("2 - Store", "StorageRange", 10f,
+                "How far (meters) StoreAndCraft can reach containers for dump, hover-store, take-stack, search, and storage displays.");
+            AutoStackEnabled = file.Bind("2 - Store", "AutoStackEnabled", false,
+                "If enabled, stacks already inside a chest are compacted toward the Valheim max. Never moves items from your inventory; dump and middle-click do that.");
             CraftRange = file.Bind("3 - Craft", "CraftRange", 20f,
                 "Fallback craft/build range in meters (player to chest). YAML craftRange overrides this.");
             IntakeInterval = file.Bind("2 - Store", "IntakeInterval", 5f,
@@ -64,7 +71,7 @@ namespace StoreAndCraft
             DumpKey = file.Bind("4 - Keys", "DumpKey", new KeyboardShortcut(KeyCode.Period),
                 "Hotkey: move allowed inventory stacks into nearby chests that already hold those items.");
             HoverStoreKey = file.Bind("4 - Keys", "HoverStoreKey", new KeyboardShortcut(KeyCode.Mouse2),
-                "Hotkey: store the inventory item under the cursor. If no item is hovered, dumps all allowed stacks.");
+                "Hotkey: store only the inventory item under the cursor into a nearby chest that already holds it.");
             PauseKey = file.Bind("4 - Keys", "PauseKey", new KeyboardShortcut(KeyCode.P, KeyCode.LeftAlt),
                 "Hotkey: pause auto-store for PauseSeconds.");
             SearchKey = file.Bind("4 - Keys", "SearchKey", new KeyboardShortcut(KeyCode.Y),
@@ -72,7 +79,9 @@ namespace StoreAndCraft
             PreventPullKey = file.Bind("4 - Keys", "PreventPullKey", new KeyboardShortcut(KeyCode.O, KeyCode.LeftAlt),
                 "Hotkey: locally disable pulling from chests for crafting/building.");
             RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.E, KeyCode.LeftAlt),
-                "Look at a chest and hold this combo instead of opening it. Shift+E (Valheim alt-use) also renames. The custom name is shown on hover.");
+                "Look at a chest and hold this combo instead of opening it. Shift+E (Valheim alt-use) also renames. Prefix the name with [I] to ignore the container. The custom name is shown on hover.");
+            TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
+                "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
         }
 
         public void WriteToPackage(ZPackage pkg)
@@ -85,6 +94,8 @@ namespace StoreAndCraft
             pkg.Write(LeaveOneItem.Value);
             pkg.Write(PlayerDumpRange.Value);
             pkg.Write(StoreRange.Value);
+            pkg.Write(StorageRange.Value);
+            pkg.Write(AutoStackEnabled.Value);
             pkg.Write(CraftRange.Value);
             pkg.Write(IntakeInterval.Value);
             pkg.Write(PauseSeconds.Value);
@@ -101,6 +112,8 @@ namespace StoreAndCraft
             LeaveOneItem.Value = pkg.ReadBool();
             PlayerDumpRange.Value = pkg.ReadSingle();
             StoreRange.Value = pkg.ReadSingle();
+            StorageRange.Value = pkg.ReadSingle();
+            AutoStackEnabled.Value = pkg.ReadBool();
             CraftRange.Value = pkg.ReadSingle();
             IntakeInterval.Value = pkg.ReadSingle();
             PauseSeconds.Value = pkg.ReadSingle();

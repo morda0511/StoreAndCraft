@@ -8,14 +8,21 @@ namespace StoreAndCraft
         {
             if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
                 return;
-            if (Console.IsVisible() || (Chat.instance != null && Chat.instance.HasFocus()) || TextInput.IsVisible())
+            if (Console.IsVisible() || (Chat.instance != null && Chat.instance.HasFocus()) || TextInput.IsVisible() || DisplayTypeMenu.IsOpen)
                 return;
 
             if (KeyUtil.Down(Plugin.Settings.DumpKey.Value))
                 InventoryDump.DumpNearby();
 
-            if (KeyUtil.Down(Plugin.Settings.HoverStoreKey.Value))
-                HoverStore.TryStoreHovered();
+            if (InventoryGui.IsVisible())
+            {
+                if (KeyUtil.Down(Plugin.Settings.TakeStackKey.Value))
+                    TakeStack.TryFillHovered();
+                else if (KeyUtil.Down(Plugin.Settings.HoverStoreKey.Value)
+                    && !Input.GetKey(KeyCode.LeftControl)
+                    && !Input.GetKey(KeyCode.RightControl))
+                    HoverStore.TryStoreHovered();
+            }
 
             if (KeyUtil.Down(Plugin.Settings.PauseKey.Value))
                 AutoIntake.TogglePause();
