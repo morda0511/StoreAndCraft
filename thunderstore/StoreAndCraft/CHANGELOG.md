@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2 — Multiplayer Hotfix
+
+- Multiplayer: dump / store no longer steals chest ownership (no more kicking the other player out of an open chest)
+- Multiplayer: deposits go to the chest owner via RPC; failed deposits are refunded (fixes items vanishing)
+
 ## 1.1.1
 
 - Dedicated / hosted servers: handshake uses the vanilla connection (ZRpc), no kick on slow load

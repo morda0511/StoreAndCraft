@@ -11,18 +11,14 @@ namespace StoreAndCraft
         public const string RpcStoreDrop = "KAC_StoreDrop";
 
         private static readonly Queue<PendingMove> Queue = new Queue<PendingMove>();
-        private static readonly Dictionary<int, float> ClaimThrottle = new Dictionary<int, float>();
         private static bool _grantRegistered;
 
         private struct PendingMove
         {
             public Container Chest;
             public ItemDrop Drop;
-            public ItemDrop.ItemData Item;
-            public Inventory From;
             public int Amount;
             public float Deadline;
-            public bool FillStack;
         }
 
         internal static int FillsQueued;
@@ -49,16 +45,12 @@ namespace StoreAndCraft
                 if (op.Chest == null || !ContainerFilter.IsUsable(op.Chest))
                     continue;
 
-                if (TryOwner(op.Chest, true))
-                {
-                    Execute(op);
+                // Never steal ownership here — that kicks players out of open chests
+                // and can wipe items on ZDO rollback.
+                if (ExecuteWithoutStealing(op))
                     n++;
-                }
                 else
-                {
                     Queue.Enqueue(op);
-                    break;
-                }
             }
         }
 
@@ -66,39 +58,40 @@ namespace StoreAndCraft
         {
             if (chest == null || from == null || item == null || amount <= 0)
                 return false;
+            if (ChestNames.IsIgnored(chest))
+                return false;
 
-            if (TryOwner(chest, true))
+            // Already owner: write locally. Otherwise RPC the owner — do NOT ClaimOwnership
+            // (stealing ownership closes the chest for whoever has it open).
+            if (IsChestOwner(chest))
                 return DepositLocal(chest, from, item, amount);
 
-            Enqueue(new PendingMove
-            {
-                Chest = chest,
-                From = from,
-                Item = item,
-                Amount = amount,
-                Deadline = Time.time + 2f
-            });
-            return true;
+            return DepositRemote(chest, from, item, amount);
         }
 
         public static bool StoreDrop(Container chest, ItemDrop drop)
         {
             if (chest == null || drop == null || drop.m_itemData == null)
                 return false;
+            if (ChestNames.IsIgnored(chest))
+                return false;
 
             ZNetView dropView = Refs.View(drop);
-            if (TryOwner(chest, true) && dropView != null && dropView.IsOwner())
+            if (IsChestOwner(chest) && dropView != null && dropView.IsOwner())
                 return StoreDropLocal(chest, drop);
 
-            if (dropView != null && dropView.IsValid())
+            if (dropView != null && dropView.IsValid() && !dropView.IsOwner())
                 drop.RequestOwn();
 
             ZNetView chestView = Refs.View(chest);
-            if (chestView != null && chestView.IsValid() && !chestView.IsOwner()
-                && dropView != null && dropView.GetZDO() != null)
+            if (chestView != null && chestView.IsValid() && dropView != null && dropView.GetZDO() != null)
             {
-                chestView.InvokeRPC(RpcStoreDrop, dropView.GetZDO().m_uid);
-                return true;
+                // Ask the current chest owner to pull the drop. Never claim the chest.
+                if (dropView.IsOwner())
+                {
+                    chestView.InvokeRPC(RpcStoreDrop, dropView.GetZDO().m_uid);
+                    return true;
+                }
             }
 
             Enqueue(new PendingMove
@@ -116,9 +109,10 @@ namespace StoreAndCraft
             if (chest == null || playerInv == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
                 return 0;
 
-            if (TryOwner(chest, true))
+            if (IsChestOwner(chest))
                 return WithdrawLocal(chest, sharedName, amount, playerInv, leaveOne);
 
+            // Never steal ownership from an open chest — ask the owner via RPC.
             ZNetView view = Refs.View(chest);
             if (view != null && view.IsValid())
                 view.InvokeRPC(RpcRemove, sharedName, amount, leaveOne ? 1 : 0);
@@ -176,6 +170,7 @@ namespace StoreAndCraft
                 return;
 
             inv.RemoveItem(sharedName, take, -1, true);
+            ContainerFilter.SaveInventory(container);
             var pkg = new ZPackage();
             pkg.Write(sharedName);
             pkg.Write(take);
@@ -188,8 +183,12 @@ namespace StoreAndCraft
             if (container == null || nv == null || !nv.IsOwner() || pkg == null)
                 return;
             if (!ValidateRpc(container, sender, MaxStoreRange()))
+            {
+                RefundDeposit(sender, pkg, true);
                 return;
+            }
 
+            long resetPos = pkg.GetPos();
             string name = pkg.ReadString();
             int stack = pkg.ReadInt();
             int quality = pkg.ReadInt();
@@ -201,18 +200,89 @@ namespace StoreAndCraft
 
             Inventory inv = container.GetInventory();
             if (inv == null)
-                return;
-
-            ItemDrop.ItemData added = inv.AddItem(name, stack, quality, variant, crafterId, crafterName, false, false);
-            if (added == null)
-                return;
-            if (!RulesFile.AllowsStore(ContainerFilter.PiecePrefab(container), added))
             {
-                inv.RemoveItem(added, added.m_stack);
+                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
                 return;
             }
 
+            GameObject prefab = ItemIds.PrefabFromToken(name);
+            if (prefab == null)
+            {
+                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                return;
+            }
+
+            ItemDrop.ItemData probe = prefab.GetComponent<ItemDrop>()?.m_itemData?.Clone();
+            if (probe == null)
+            {
+                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                return;
+            }
+
+            probe.m_stack = stack;
+            probe.m_quality = quality;
+            probe.m_variant = variant;
+            probe.m_crafterID = crafterId;
+            probe.m_crafterName = crafterName ?? "";
+
+            if (!RulesFile.AllowsStore(ContainerFilter.PiecePrefab(container), probe))
+            {
+                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                return;
+            }
+
+            if (!inv.CanAddItem(probe, stack))
+            {
+                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                return;
+            }
+
+            ItemDrop.ItemData added = inv.AddItem(name, stack, quality, variant, crafterId, crafterName, false, false);
+            if (added == null)
+            {
+                // Fallback: clone path
+                if (!inv.AddItem(probe))
+                {
+                    RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                    return;
+                }
+            }
+
+            ContainerFilter.SaveInventory(container);
             Highlight(container);
+        }
+
+        private static void RefundDeposit(long sender, ZPackage pkg, bool reset)
+        {
+            if (pkg == null)
+                return;
+            if (reset)
+                pkg.SetPos(0);
+            try
+            {
+                string name = pkg.ReadString();
+                int stack = pkg.ReadInt();
+                int quality = pkg.ReadInt();
+                int variant = pkg.ReadInt();
+                long crafterId = pkg.ReadLong();
+                string crafterName = pkg.ReadString();
+                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+            }
+            catch
+            {
+            }
+        }
+
+        private static void RefundDeposit(long sender, string name, int stack, int quality, int variant, long crafterId, string crafterName)
+        {
+            if (stack <= 0 || ZRoutedRpc.instance == null)
+                return;
+            var pkg = new ZPackage();
+            pkg.Write(name);
+            pkg.Write(stack);
+            // Grant currently only uses name+amount; quality etc. ignored by Grant which is OK for stackables
+            ZRoutedRpc.instance.InvokeRoutedRPC(sender, RpcGrant, pkg);
+            Plugin.Log.LogDebug("Refunded deposit to " + sender + ": " + name + " x" + stack);
         }
 
         internal static void OnStoreDrop(Container container, long sender, ZDOID dropId)
@@ -262,24 +332,88 @@ namespace StoreAndCraft
             player.GetInventory().AddItem(prefab, amount);
         }
 
-        private static bool Execute(PendingMove op)
+        private static bool ExecuteWithoutStealing(PendingMove op)
         {
             if (op.Drop != null)
             {
                 ZNetView dropView = Refs.View(op.Drop);
-                if (dropView != null && !dropView.IsOwner())
+                if (dropView == null || !dropView.IsValid())
+                    return true; // drop gone
+                if (!dropView.IsOwner())
                 {
                     op.Drop.RequestOwn();
-                    Queue.Enqueue(op);
                     return false;
                 }
-                return StoreDropLocal(op.Chest, op.Drop);
+
+                if (IsChestOwner(op.Chest))
+                    return StoreDropLocal(op.Chest, op.Drop);
+
+                ZNetView chestView = Refs.View(op.Chest);
+                if (chestView != null && chestView.IsValid() && dropView.GetZDO() != null)
+                {
+                    chestView.InvokeRPC(RpcStoreDrop, dropView.GetZDO().m_uid);
+                    return true;
+                }
+                return false;
             }
 
-            if (op.FillStack)
-                return FillQueuedStack(op) > 0;
+            return true;
+        }
 
-            return DepositLocal(op.Chest, op.From, op.Item, op.Amount);
+        private static bool DepositRemote(Container chest, Inventory from, ItemDrop.ItemData item, int amount)
+        {
+            if (chest == null || from == null || item == null || item.m_shared == null)
+                return false;
+
+            int take = Mathf.Min(amount, item.m_stack);
+            if (take <= 0)
+                return false;
+
+            // Best-effort room check on our view of the chest. Owner re-checks and refunds.
+            Inventory chestInv = chest.GetInventory();
+            if (chestInv != null && !chestInv.CanAddItem(item, take))
+                return false;
+
+            string prefabName = ItemIds.PrefabName(item) ?? ItemIds.SharedName(item) ?? "";
+            if (string.IsNullOrEmpty(prefabName))
+                return false;
+
+            int quality = item.m_quality;
+            int variant = item.m_variant;
+            long crafterId = item.m_crafterID;
+            string crafterName = item.m_crafterName ?? "";
+
+            from.RemoveItem(item, take);
+            Refs.NotifyChanged(from);
+
+            var pkg = new ZPackage();
+            pkg.Write(prefabName);
+            pkg.Write(take);
+            pkg.Write(quality);
+            pkg.Write(variant);
+            pkg.Write(crafterId);
+            pkg.Write(crafterName);
+
+            ZNetView nv = Refs.View(chest);
+            if (nv == null || !nv.IsValid())
+            {
+                // Chest view lost — refund locally
+                RefundLocal(from, prefabName, take);
+                return false;
+            }
+
+            nv.InvokeRPC(RpcDeposit, pkg);
+            return true;
+        }
+
+        private static void RefundLocal(Inventory inv, string token, int amount)
+        {
+            if (inv == null || amount <= 0)
+                return;
+            GameObject prefab = ItemIds.PrefabFromToken(token);
+            if (prefab != null)
+                inv.AddItem(prefab, amount);
+            Refs.NotifyChanged(inv);
         }
 
         private static bool DepositLocal(Container chest, Inventory from, ItemDrop.ItemData item, int amount)
@@ -305,6 +439,7 @@ namespace StoreAndCraft
 
             from.RemoveItem(item, added);
             Refs.NotifyChanged(from);
+            ContainerFilter.SaveInventory(chest);
             Highlight(chest);
             return true;
         }
@@ -316,44 +451,24 @@ namespace StoreAndCraft
             if (ChestNames.IsIgnored(chest))
                 return 0;
 
-            ContainerFilter.RefreshInventory(chest);
-            if (TryOwner(chest, true, false))
-                return TakeIntoExistingStackLocal(chest, dest, amount);
-
-            Enqueue(new PendingMove
+            // Do not steal ownership from someone using the chest.
+            if (IsChestOwner(chest))
             {
-                Chest = chest,
-                Item = dest,
-                Amount = amount,
-                FillStack = true,
-                Deadline = Time.time + 2f
-            });
+                ContainerFilter.RefreshInventory(chest);
+                return TakeIntoExistingStackLocal(chest, dest, amount);
+            }
+
+            if (chest.IsInUse())
+                return 0;
+
+            // Safe path: ask owner to remove; Grant merges into inventory stacks.
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return 0;
+            Withdraw(chest, dest.m_shared.m_name, amount, player.GetInventory(),
+                Plugin.Settings != null && Plugin.Settings.LeaveOneItem.Value);
             FillsQueued++;
             return 0;
-        }
-
-        private static int FillQueuedStack(PendingMove op)
-        {
-            if (op.Item == null || op.Item.m_shared == null || op.Chest == null)
-                return 0;
-
-            Player player = Player.m_localPlayer;
-            int room = StackLimits.RoomInStack(op.Item);
-            room = StackLimits.FitByWeight(player, op.Item, room);
-            int want = Mathf.Min(op.Amount, room);
-            if (want <= 0)
-                return 0;
-
-            ContainerFilter.RefreshInventory(op.Chest);
-            int got = TakeIntoExistingStackLocal(op.Chest, op.Item, want);
-            if (got > 0 && player != null)
-            {
-                player.Message(
-                    MessageHud.MessageType.TopLeft,
-                    Loc.T("Filled stack +" + got + ".", "Stapel +" + got + "."),
-                    0, null, false);
-            }
-            return got;
         }
 
         private static int TakeIntoExistingStackLocal(Container chest, ItemDrop.ItemData dest, int amount)
@@ -440,6 +555,7 @@ namespace StoreAndCraft
             else
                 Object.Destroy(drop.gameObject);
 
+            ContainerFilter.SaveInventory(chest);
             Highlight(chest);
             return true;
         }
@@ -501,6 +617,7 @@ namespace StoreAndCraft
                 return 0;
 
             inv.RemoveItem(sharedName, got, -1, true);
+            ContainerFilter.SaveInventory(chest);
             return got;
         }
 
@@ -525,46 +642,10 @@ namespace StoreAndCraft
             return true;
         }
 
-        private static bool TryOwner(Container chest, bool claim, bool throttle = true)
+        private static bool IsChestOwner(Container chest)
         {
             ZNetView nv = Refs.View(chest);
-            if (nv == null || !nv.IsValid())
-                return false;
-            if (nv.IsOwner())
-                return true;
-            if (!claim)
-                return false;
-
-            if (throttle)
-            {
-                int id = chest.GetInstanceID();
-                float next;
-                if (ClaimThrottle.TryGetValue(id, out next) && Time.time < next)
-                    return false;
-
-                nv.ClaimOwnership();
-                ClaimThrottle[id] = Time.time + 0.35f;
-                return nv.IsOwner();
-            }
-
-            nv.ClaimOwnership();
-            return nv.IsOwner();
-        }
-
-        private static void InvokeDeposit(Container chest, ItemDrop.ItemData item, int amount)
-        {
-            ZNetView nv = Refs.View(chest);
-            if (nv == null || !nv.IsValid() || item == null)
-                return;
-
-            var pkg = new ZPackage();
-            pkg.Write(ItemIds.PrefabName(item) ?? ItemIds.SharedName(item) ?? "");
-            pkg.Write(amount);
-            pkg.Write(item.m_quality);
-            pkg.Write(item.m_variant);
-            pkg.Write(item.m_crafterID);
-            pkg.Write(item.m_crafterName ?? "");
-            nv.InvokeRPC(RpcDeposit, pkg);
+            return nv != null && nv.IsValid() && nv.IsOwner();
         }
 
         private static void Enqueue(PendingMove op)

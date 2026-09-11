@@ -1,6 +1,6 @@
 {
     "name":  "StoreAndCraft",
-    "version_number":  "1.1.1",
+    "version_number":  "1.1.2",
     "website_url":  "https://github.com/morda0511/StoreAndCraft",
     "description":  "Chests that work with you: auto-store, dump, craft/build from storage, [E] station refill, ignore with [I], Storage Displays. Required on server + all clients.",
     "dependencies":  [
