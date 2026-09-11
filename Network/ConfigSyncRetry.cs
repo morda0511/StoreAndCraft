@@ -9,13 +9,19 @@ namespace StoreAndCraft
 
         private void Update()
         {
-            if (AdminUtil.IsServer() || ConfigSync.HasReceivedConfig)
+            if (AdminUtil.IsServer())
             {
                 enabled = false;
                 return;
             }
 
-            if (!ConfigSync.Registered || ZRoutedRpc.instance == null || ZNet.instance == null)
+            if (VersionGate.ClientVerified && ConfigSync.HasReceivedConfig)
+            {
+                enabled = false;
+                return;
+            }
+
+            if (ZNet.instance == null)
                 return;
 
             if (Time.time < _nextRequest)
@@ -23,11 +29,19 @@ namespace StoreAndCraft
 
             _attempts++;
             _nextRequest = Time.time + 2f;
-            ConfigSync.RequestConfigFromServer();
             VersionGate.SendHello();
 
+            if (ConfigSync.Registered && !ConfigSync.HasReceivedConfig)
+                ConfigSync.RequestConfigFromServer();
+
             if (_attempts == 1 || _attempts % 5 == 0)
-                Plugin.Log.LogInfo("StoreAndCraft: waiting for server config (attempt " + _attempts + ")...");
+            {
+                Plugin.Log.LogInfo(
+                    "StoreAndCraft: waiting for server" +
+                    (VersionGate.ClientVerified ? "" : " handshake") +
+                    (ConfigSync.HasReceivedConfig ? "" : " config") +
+                    " (attempt " + _attempts + ")...");
+            }
         }
     }
 }

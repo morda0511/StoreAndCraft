@@ -13,11 +13,23 @@ namespace StoreAndCraft
         }
     }
 
+    [HarmonyPatch(typeof(ZNet), "OnNewConnection")]
+    internal static class NewConnectionPatch
+    {
+        private static void Postfix(ZNetPeer peer)
+        {
+            if (peer == null)
+                return;
+            VersionGate.RegisterOn(peer.m_rpc);
+        }
+    }
+
     [HarmonyPatch(typeof(Game), "Start")]
     internal static class GameStartPatch
     {
         private static void Postfix(Game __instance)
         {
+            VersionGate.ResetClient();
             ConfigSync.Register();
             TransferService.RegisterGrant();
             VersionGate.SendHello();
@@ -34,17 +46,30 @@ namespace StoreAndCraft
     {
         private static void Postfix(ZRpc rpc)
         {
-            if (!AdminUtil.IsServer() || rpc == null || ZNet.instance == null)
+            if (rpc == null || ZNet.instance == null)
                 return;
 
-            foreach (var peer in ZNet.instance.GetPeers())
+            if (ZNet.instance.IsServer())
             {
-                if (peer == null || peer.m_rpc != rpc)
-                    continue;
+                ZNetPeer peer = VersionGate.PeerFor(rpc);
+                if (peer == null)
+                    return;
                 VersionGate.OnPeerReady(peer.m_uid);
                 ConfigSync.SendToPeer(peer.m_uid);
-                break;
+                return;
             }
+
+            VersionGate.SendHello(rpc);
+        }
+    }
+
+    [HarmonyPatch(typeof(ZNet), nameof(ZNet.Disconnect), typeof(ZNetPeer))]
+    internal static class DisconnectPatch
+    {
+        private static void Postfix(ZNetPeer peer)
+        {
+            if (peer != null)
+                VersionGate.Forget(peer.m_uid);
         }
     }
 

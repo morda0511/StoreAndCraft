@@ -35,19 +35,48 @@ namespace StoreAndCraft
 
         public static void Tick()
         {
-            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value || !Plugin.Settings.StoreEnabled.Value)
-                return;
-            if (Paused)
-                return;
+            TickFor(Player.m_localPlayer, true);
+        }
 
-            Player player = Player.m_localPlayer;
-            if (player == null || player.IsDead() || player.IsTeleporting())
+        public static void TickDedicated()
+        {
+            if (!Ready())
                 return;
-
             if (Time.time < _next)
                 return;
 
             _next = Time.time + Mathf.Max(1f, Plugin.Settings.IntakeInterval.Value);
+
+            List<Player> players = Player.GetAllPlayers();
+            if (players == null)
+                return;
+
+            foreach (Player player in players)
+                TickFor(player, false);
+        }
+
+        private static bool Ready()
+        {
+            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value || !Plugin.Settings.StoreEnabled.Value)
+                return false;
+            if (Paused)
+                return false;
+            return true;
+        }
+
+        private static void TickFor(Player player, bool respectInterval)
+        {
+            if (!Ready())
+                return;
+            if (player == null || player.IsDead() || player.IsTeleporting())
+                return;
+
+            if (respectInterval)
+            {
+                if (Time.time < _next)
+                    return;
+                _next = Time.time + Mathf.Max(1f, Plugin.Settings.IntakeInterval.Value);
+            }
 
             List<ItemDrop> drops = Refs.Drops();
             if (drops == null)
@@ -56,6 +85,7 @@ namespace StoreAndCraft
             int moved = 0;
             int cap = Plugin.Settings.MaxTransfersPerTick.Value;
             Vector3 origin = player.transform.position;
+            NearbyIndex.Rescan(origin, NearbyIndex.ScanRange());
 
             foreach (ItemDrop drop in drops)
             {

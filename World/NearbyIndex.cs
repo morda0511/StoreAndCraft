@@ -17,8 +17,14 @@ namespace StoreAndCraft
 
         public static void Tick()
         {
+            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
+            {
+                Cached.Clear();
+                return;
+            }
+
             Player player = Player.m_localPlayer;
-            if (player == null || Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
+            if (player == null)
             {
                 Cached.Clear();
                 return;

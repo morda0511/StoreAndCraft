@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- Dedicated / hosted servers: handshake uses the vanilla connection (ZRpc), no kick on slow load
+- Dedicated auto-store runs around every player, not only a local character
+- Config request targets the server peer
+
 ## 1.1.0
 
 - Storage Display (Hammer): shows nearby chest totals by type; **[E]** opens the Valheim skills-style type list

@@ -2,7 +2,7 @@
 
 **Your chests work with you.** Ground loot stores itself, one key dumps your inventory, crafting and building pull from nearby chests, smelters refill with **[E]**, and Storage Displays show what’s in stock — by type (Wood, Ore, Food, …).
 
-**Required on the server and every client.** Valheim 1.0 · BepInExPack 5.4.2350+ · no crossplay.
+**Required on the dedicated / hosted server and every PC client** (same version). Valheim 1.0 · BepInExPack 5.4.2350+. Console players via crossplay cannot load the mod.
 
 **Bug reports:** https://github.com/morda0511/StoreAndCraft/issues/1
 

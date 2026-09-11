@@ -68,7 +68,7 @@ namespace StoreAndCraft
         {
             if (AdminUtil.IsServer() || ZRoutedRpc.instance == null)
                 return;
-            ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, RpcRequestName);
+            ZRoutedRpc.instance.InvokeRoutedRPC(VersionGate.ServerPeerId(), RpcRequestName);
         }
 
         private static int ModConfigProtocol()
