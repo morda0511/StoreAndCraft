@@ -41,7 +41,11 @@ namespace StoreAndCraft
                     File.WriteAllText(Path, DefaultText(), Encoding.UTF8);
 
                 Parse(File.ReadAllLines(Path));
-                Plugin.Log.LogInfo("StoreAndCraft rules loaded (" + Pieces.Count + " piece entries).");
+                Plugin.Log.LogInfo("StoreAndCraft rules loaded (" + Pieces.Count + " piece entries) from " + Path
+                    + " defaults store/dump/craft="
+                    + (DefaultStoreRange.HasValue ? DefaultStoreRange.Value.ToString() : "-") + "/"
+                    + (DefaultDumpRange.HasValue ? DefaultDumpRange.Value.ToString() : "-") + "/"
+                    + (DefaultCraftRange.HasValue ? DefaultCraftRange.Value.ToString() : "-"));
             }
             catch (Exception ex)
             {
@@ -203,8 +207,13 @@ namespace StoreAndCraft
                     continue;
 
                 int indent = 0;
-                while (indent < line.Length && line[indent] == ' ')
+                while (indent < line.Length && (line[indent] == ' ' || line[indent] == '\t'))
                     indent++;
+                // Count tabs as 2 spaces so Windows editors that insert tabs still parse
+                int visualIndent = 0;
+                for (int i = 0; i < indent; i++)
+                    visualIndent += line[i] == '\t' ? 2 : 1;
+                indent = visualIndent;
                 line = line.Trim();
 
                 if (indent == 0 && line.EndsWith(":") && !line.Equals("defaults:", StringComparison.OrdinalIgnoreCase)

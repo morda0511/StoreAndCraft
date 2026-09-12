@@ -11,7 +11,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.1.2";
+        public const string ModVersion = "1.1.3";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -25,6 +25,15 @@ namespace StoreAndCraft
             Instance = this;
             Log = Logger;
             Settings = new ModConfig(Config);
+            try
+            {
+                Config.Save();
+            }
+            catch (System.Exception ex)
+            {
+                Logger.LogWarning("Config save: " + ex.Message);
+            }
+
             RulesFile.LoadOrCreate();
             ConfigWatch.Start();
 
@@ -32,6 +41,8 @@ namespace StoreAndCraft
             _harmony.PatchAll(Assembly.GetExecutingAssembly());
 
             Logger.LogInfo(ModName + " v" + ModVersion + " by " + ModAuthor + " loaded.");
+            Logger.LogInfo("Config file: " + Config.ConfigFilePath);
+            Logger.LogInfo("Rules file:  " + RulesFile.Path);
         }
 
         private void Update()

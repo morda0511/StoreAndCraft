@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.3
+
+- Craft-from-chests: pull real item stacks (quality / world level / crafter) instead of spawning blank prefabs — fixes materials stuck in inventory that could not finish crafting, be re-stored, or be used until traded to another player
+- Config: create/save `com.morda.storeandcraft.cfg` reliably; log full config + rules paths on startup; hot-reload watches the real GUID `.cfg` (not only `StoreAndCraft.*`)
+- Config: dump/take/display range no longer ignores `StoreAndCraft.rules.yml` (was capped by StorageRange alone)
+- Docs: correct config filename for dedicated servers
+
 ## 1.1.2 — Multiplayer Hotfix
 
 - Multiplayer: dump / store no longer steals chest ownership (no more kicking the other player out of an open chest)

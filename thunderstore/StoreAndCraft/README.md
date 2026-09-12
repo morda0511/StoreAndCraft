@@ -79,5 +79,13 @@ Place more Storage Displays of the **same type** next to each other. They share 
 
 ## Config
 
-- `BepInEx/config/StoreAndCraft.cfg` — range, keys, LeaveOneItem, …
-- `StoreAndCraft.rules.yml` — optional allow/deny lists per chest name
+**Dedicated server:** edit files on the **server** (clients receive gameplay `.cfg` values via sync).
+
+| File | Purpose |
+|---|---|
+| `BepInEx/config/com.morda.storeandcraft.cfg` | Ranges, toggles, hotkeys (`LockConfig`, `MustHaveExisting`, …) |
+| `BepInEx/config/StoreAndCraft.rules.yml` | Per-chest allow/deny + optional `storeRange` / `dumpRange` / `craftRange` |
+
+The log prints both full paths on startup (`Config file:` / `Rules file:`). After saving, the mod reloads automatically; a server restart also works.
+
+> Note: the file is **not** named `StoreAndCraft.cfg` — BepInEx uses the plugin GUID.

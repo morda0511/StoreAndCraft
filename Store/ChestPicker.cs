@@ -10,7 +10,9 @@ namespace StoreAndCraft
             if (item == null)
                 return null;
 
-            float cfgDump = NearbyIndex.AccessRange();
+            float cfgDump = Plugin.Settings != null
+                ? Plugin.Settings.PlayerDumpRange.Value
+                : 8f;
             Container best = null;
             float bestDist = float.MaxValue;
 

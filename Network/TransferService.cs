@@ -153,7 +153,10 @@ namespace StoreAndCraft
             ZNetView nv = Refs.View(container);
             if (container == null || nv == null || !nv.IsOwner() || amount <= 0)
                 return;
-            if (!ValidateRpc(container, sender, Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f))
+            if (!ValidateRpc(container, sender,
+                    RulesFile.CraftRange(
+                        ContainerFilter.PiecePrefab(container),
+                        Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f)))
                 return;
             if (!RulesFile.AllowsCraft(ContainerFilter.PiecePrefab(container), sharedName))
                 return;
@@ -169,12 +172,41 @@ namespace StoreAndCraft
             if (take <= 0)
                 return;
 
-            inv.RemoveItem(sharedName, take, -1, true);
-            ContainerFilter.SaveInventory(container);
-            var pkg = new ZPackage();
-            pkg.Write(sharedName);
-            pkg.Write(take);
-            ZRoutedRpc.instance.InvokeRoutedRPC(sender, RpcGrant, pkg);
+            // Move real stacks (quality / worldLevel / crafter), never spawn fresh prefab defaults.
+            int granted = 0;
+            var items = new List<ItemDrop.ItemData>(inv.GetAllItems());
+            foreach (ItemDrop.ItemData src in items)
+            {
+                if (granted >= take)
+                    break;
+                if (src?.m_shared == null || src.m_stack <= 0)
+                    continue;
+                if (src.m_shared.m_name != sharedName)
+                    continue;
+
+                int move = Mathf.Min(take - granted, src.m_stack);
+                if (move <= 0)
+                    continue;
+
+                string prefabName = ItemIds.PrefabName(src) ?? sharedName;
+                SendGrant(
+                    sender,
+                    prefabName,
+                    move,
+                    src.m_quality,
+                    src.m_variant,
+                    src.m_crafterID,
+                    src.m_crafterName ?? "",
+                    src.m_worldLevel);
+
+                src.m_stack -= move;
+                granted += move;
+                if (src.m_stack <= 0)
+                    inv.RemoveItem(src);
+            }
+
+            if (granted > 0)
+                ContainerFilter.SaveInventory(container);
         }
 
         internal static void OnDeposit(Container container, long sender, ZPackage pkg)
@@ -277,12 +309,34 @@ namespace StoreAndCraft
         {
             if (stack <= 0 || ZRoutedRpc.instance == null)
                 return;
-            var pkg = new ZPackage();
-            pkg.Write(name);
-            pkg.Write(stack);
-            // Grant currently only uses name+amount; quality etc. ignored by Grant which is OK for stackables
-            ZRoutedRpc.instance.InvokeRoutedRPC(sender, RpcGrant, pkg);
+            // World level unknown on refund path — use current world level so items stay usable.
+            int worldLevel = Game.m_worldLevel;
+            SendGrant(sender, name, stack, quality, variant, crafterId, crafterName ?? "", worldLevel);
             Plugin.Log.LogDebug("Refunded deposit to " + sender + ": " + name + " x" + stack);
+        }
+
+        private static void SendGrant(
+            long sender,
+            string prefabOrShared,
+            int amount,
+            int quality,
+            int variant,
+            long crafterId,
+            string crafterName,
+            int worldLevel)
+        {
+            if (amount <= 0 || ZRoutedRpc.instance == null || string.IsNullOrEmpty(prefabOrShared))
+                return;
+
+            var pkg = new ZPackage();
+            pkg.Write(prefabOrShared);
+            pkg.Write(amount);
+            pkg.Write(quality);
+            pkg.Write(variant);
+            pkg.Write(crafterId);
+            pkg.Write(crafterName ?? "");
+            pkg.Write(worldLevel);
+            ZRoutedRpc.instance.InvokeRoutedRPC(sender, RpcGrant, pkg);
         }
 
         internal static void OnStoreDrop(Container container, long sender, ZDOID dropId)
@@ -321,15 +375,41 @@ namespace StoreAndCraft
             if (player == null || pkg == null)
                 return;
 
-            string shared = pkg.ReadString();
+            string token = pkg.ReadString();
             int amount = pkg.ReadInt();
-            GameObject prefab = ItemIds.PrefabFromToken(shared);
-            if (prefab == null)
-                prefab = ObjectDB.instance != null ? ObjectDB.instance.GetItemPrefab(shared) : null;
-            if (prefab == null)
+            if (amount <= 0 || string.IsNullOrEmpty(token))
                 return;
 
-            player.GetInventory().AddItem(prefab, amount);
+            int quality = 1;
+            int variant = 0;
+            long crafterId = 0L;
+            string crafterName = "";
+            int worldLevel = Game.m_worldLevel;
+            try
+            {
+                if (pkg.Size() > pkg.GetPos())
+                {
+                    quality = pkg.ReadInt();
+                    variant = pkg.ReadInt();
+                    crafterId = pkg.ReadLong();
+                    crafterName = pkg.ReadString() ?? "";
+                    if (pkg.Size() > pkg.GetPos())
+                        worldLevel = pkg.ReadInt();
+                }
+            }
+            catch
+            {
+                // Older grants were name+amount only.
+            }
+
+            Inventory inv = player.GetInventory();
+            if (inv == null)
+                return;
+
+            if (!TryAddItem(inv, token, amount, quality, variant, crafterId, crafterName, worldLevel))
+                Plugin.Log.LogWarning("Grant failed: " + token + " x" + amount);
+            else
+                Refs.NotifyChanged(inv);
         }
 
         private static bool ExecuteWithoutStealing(PendingMove op)
@@ -410,10 +490,61 @@ namespace StoreAndCraft
         {
             if (inv == null || amount <= 0)
                 return;
-            GameObject prefab = ItemIds.PrefabFromToken(token);
-            if (prefab != null)
-                inv.AddItem(prefab, amount);
+            TryAddItem(inv, token, amount, 1, 0, 0L, "", Game.m_worldLevel);
             Refs.NotifyChanged(inv);
+        }
+
+        private static bool TryAddItem(
+            Inventory inv,
+            string token,
+            int amount,
+            int quality,
+            int variant,
+            long crafterId,
+            string crafterName,
+            int worldLevel)
+        {
+            if (inv == null || amount <= 0 || string.IsNullOrEmpty(token))
+                return false;
+
+            // Prefer the overload that keeps crafter metadata, then force world level.
+            ItemDrop.ItemData added = inv.AddItem(
+                token,
+                amount,
+                quality,
+                variant,
+                crafterId,
+                crafterName ?? "",
+                false,
+                false);
+            if (added != null)
+            {
+                added.m_worldLevel = worldLevel;
+                if (added.m_dropPrefab == null)
+                {
+                    GameObject prefab = ItemIds.PrefabFromToken(token);
+                    if (prefab != null)
+                        added.m_dropPrefab = prefab;
+                }
+                return true;
+            }
+
+            GameObject go = ItemIds.PrefabFromToken(token);
+            if (go == null && ObjectDB.instance != null)
+                go = ObjectDB.instance.GetItemPrefab(token);
+            ItemDrop drop = go != null ? go.GetComponent<ItemDrop>() : null;
+            if (drop?.m_itemData == null)
+                return false;
+
+            ItemDrop.ItemData clone = drop.m_itemData.Clone();
+            clone.m_stack = amount;
+            clone.m_quality = quality;
+            clone.m_variant = variant;
+            clone.m_crafterID = crafterId;
+            clone.m_crafterName = crafterName ?? "";
+            clone.m_worldLevel = worldLevel;
+            clone.m_dropPrefab = go;
+            return inv.AddItem(clone);
         }
 
         private static bool DepositLocal(Container chest, Inventory from, ItemDrop.ItemData item, int amount)
@@ -563,62 +694,61 @@ namespace StoreAndCraft
         private static int WithdrawLocal(Container chest, string sharedName, int amount, Inventory playerInv, bool leaveOne)
         {
             Inventory inv = chest.GetInventory();
-            if (inv == null || playerInv == null)
+            if (inv == null || playerInv == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
                 return 0;
 
-            int available = inv.CountItems(sharedName, -1, true);
+            // Clone real chest stacks so quality / worldLevel stay valid for crafting & storing.
+            // AddItem(prefab, n) spawned worldLevel-0 items that could not finish crafts or be re-stored.
+            var items = new List<ItemDrop.ItemData>(inv.GetAllItems());
+            int available = 0;
+            foreach (ItemDrop.ItemData src in items)
+            {
+                if (src?.m_shared != null && src.m_shared.m_name == sharedName && src.m_stack > 0)
+                    available += src.m_stack;
+            }
             if (leaveOne && available > 0)
                 available -= 1;
+
             int take = Mathf.Min(amount, available);
             if (take <= 0)
                 return 0;
 
-            GameObject prefab = ItemIds.PrefabFromToken(sharedName);
-            if (prefab == null && ObjectDB.instance != null)
-                prefab = ObjectDB.instance.GetItemPrefab(sharedName);
-            if (prefab == null)
+            int taken = 0;
+            foreach (ItemDrop.ItemData src in items)
+            {
+                if (taken >= take)
+                    break;
+                if (src?.m_shared == null || src.m_stack <= 0)
+                    continue;
+                if (src.m_shared.m_name != sharedName)
+                    continue;
+
+                int move = Mathf.Min(take - taken, src.m_stack);
+                while (move > 0 && !playerInv.CanAddItem(src, move))
+                    move--;
+                if (move <= 0)
+                    break;
+
+                ItemDrop.ItemData clone = src.Clone();
+                clone.m_stack = move;
+                if (clone.m_dropPrefab == null)
+                    clone.m_dropPrefab = ItemIds.PrefabFromToken(ItemIds.PrefabName(src) ?? sharedName);
+
+                if (!playerInv.AddItem(clone))
+                    break;
+
+                src.m_stack -= move;
+                taken += move;
+                if (src.m_stack <= 0)
+                    inv.RemoveItem(src);
+            }
+
+            if (taken <= 0)
                 return 0;
 
-            if (!playerInv.CanAddItem(prefab, take))
-            {
-                while (take > 0 && !playerInv.CanAddItem(prefab, take))
-                    take--;
-                if (take <= 0)
-                    return 0;
-            }
-
-            InventoryCountPatches.Skip++;
-            int beforePlayer;
-            try
-            {
-                beforePlayer = playerInv.CountItems(sharedName, -1, true);
-            }
-            finally
-            {
-                InventoryCountPatches.Skip--;
-            }
-
-            if (!playerInv.AddItem(prefab, take))
-                return 0;
-
-            InventoryCountPatches.Skip++;
-            int afterPlayer;
-            try
-            {
-                afterPlayer = playerInv.CountItems(sharedName, -1, true);
-            }
-            finally
-            {
-                InventoryCountPatches.Skip--;
-            }
-
-            int got = afterPlayer - beforePlayer;
-            if (got <= 0)
-                return 0;
-
-            inv.RemoveItem(sharedName, got, -1, true);
+            Refs.NotifyChanged(playerInv);
             ContainerFilter.SaveInventory(chest);
-            return got;
+            return taken;
         }
 
         private static float MaxStoreRange()

@@ -35,7 +35,7 @@ namespace StoreAndCraft
         public ModConfig(ConfigFile file)
         {
             LockConfig = file.Bind("1 - General", "LockConfig", true,
-                "If enabled, gameplay settings come from the server and clients cannot override them.");
+                "Server authority: clients receive these gameplay settings from the dedicated/host server. Edit com.morda.storeandcraft.cfg on the SERVER (not StoreAndCraft.cfg). Client edits are overwritten on join when synced.");
             ModEnabled = file.Bind("1 - General", "ModEnabled", true,
                 "Turns the whole mod on or off without uninstalling.");
             StoreEnabled = file.Bind("2 - Store", "StoreEnabled", true,

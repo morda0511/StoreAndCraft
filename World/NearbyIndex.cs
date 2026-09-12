@@ -43,7 +43,9 @@ namespace StoreAndCraft
 
         public static float AccessRange()
         {
-            return Plugin.Settings != null ? Plugin.Settings.StorageRange.Value : 10f;
+            // Used for dump / take-stack / displays. Must include YAML dump/store defaults,
+            // otherwise StoreAndCraft.rules.yml ranges appear "ignored".
+            return ScanRange();
         }
 
         public static float ScanRange()
@@ -51,7 +53,7 @@ namespace StoreAndCraft
             if (Plugin.Settings == null)
                 return 20f;
             return Mathf.Max(
-                AccessRange(),
+                Plugin.Settings.StorageRange.Value,
                 RulesFile.MaxScanRange(
                     Plugin.Settings.StoreRange.Value,
                     Plugin.Settings.CraftRange.Value,
