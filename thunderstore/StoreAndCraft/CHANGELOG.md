@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.6 — FPS Hotfix
+
+- **FPS:** opening inventory / stations near chests no longer tanks frame rate; session no longer degrades over time
+- **FPS:** pickup / drop lag with `CraftEnabled` reduced (chest index no longer rebuilt with huge CraftRange physics scans)
+- Chest index uses registered containers + frame count cache; dead containers pruned; chest-count flag reset each frame
+- Dump / auto-store / search / Storage Displays share the index (no OverlapSphere rebuilds that wiped craft-range caches)
+
 ## 1.1.5
 
 - **Upgrade button:** chest mats now enable craft/upgrade on **all** stations (workbench, forge, black forge, galdr, artisan, …). 1.1.4 fixed the workbench UI path; forge and other upgraders needed a matching `HaveRequirementItems` check

@@ -8,8 +8,18 @@ namespace StoreAndCraft
         private static void Postfix(Container __instance)
         {
             TransferService.RegisterOn(__instance);
+            NearbyIndex.Register(__instance);
             if (__instance.GetComponent<ChestRenameReceiver>() == null)
                 __instance.gameObject.AddComponent<ChestRenameReceiver>();
+        }
+    }
+
+    [HarmonyPatch(typeof(Container), "OnDestroy")]
+    internal static class ContainerDestroyPatch
+    {
+        private static void Prefix(Container __instance)
+        {
+            NearbyIndex.Unregister(__instance);
         }
     }
 
@@ -33,6 +43,7 @@ namespace StoreAndCraft
             ConfigSync.Register();
             TransferService.RegisterGrant();
             ConfigCommands.RegisterRpc();
+            NearbyIndex.BootstrapExisting();
             VersionGate.SendHello();
 
             if (__instance != null && __instance.GetComponent<ConfigSyncRetry>() == null)

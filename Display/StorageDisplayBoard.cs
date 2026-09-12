@@ -335,19 +335,16 @@ namespace StoreAndCraft
 
         private void Resubscribe()
         {
-            float range = NearbyIndex.AccessRange();
-            Collider[] hits = Physics.OverlapSphere(transform.position, range, ~0, QueryTriggerInteraction.Collide);
+            NearbyIndex.Tick();
+            float range = Plugin.Settings != null ? Plugin.Settings.StorageRange.Value : NearbyIndex.AccessRange();
+            Vector3 origin = transform.position;
             var next = new List<Container>();
             var ids = new List<int>();
-            var seen = new HashSet<int>();
-            foreach (Collider hit in hits)
+            foreach (Container container in NearbyIndex.Within(origin, range))
             {
-                if (hit == null)
+                if (container == null)
                     continue;
-                Container container = hit.GetComponentInParent<Container>();
-                if (container == null || !seen.Add(container.GetInstanceID()))
-                    continue;
-                if (!ContainerFilter.PlayerMayUse(container, transform.position))
+                if (!ContainerFilter.PlayerMayUse(container, origin))
                     continue;
                 Inventory inv = container.GetInventory();
                 if (inv == null)

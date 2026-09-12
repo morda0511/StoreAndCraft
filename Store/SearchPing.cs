@@ -54,7 +54,7 @@ namespace StoreAndCraft
 
             string shared = ItemIds.SharedFromToken(sharedOrToken);
             float range = Plugin.Settings != null ? Plugin.Settings.StorageRange.Value : NearbyIndex.ScanRange();
-            NearbyIndex.Rescan(player.transform.position, NearbyIndex.ScanRange());
+            NearbyIndex.Tick();
             List<Container> holding = ChestPicker.FindHolding(player.transform.position, range, shared);
 
             if (holding.Count == 0 && !string.IsNullOrEmpty(prefabHint))

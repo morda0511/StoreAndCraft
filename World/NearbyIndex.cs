@@ -3,16 +3,57 @@ using UnityEngine;
 
 namespace StoreAndCraft
 {
+    /// <summary>
+    /// Nearby chests via Awake registration (no per-tick OverlapSphere).
+    /// </summary>
     internal static class NearbyIndex
     {
+        private static readonly List<Container> Registered = new List<Container>();
+        private static readonly HashSet<int> RegisteredIds = new HashSet<int>();
         private static readonly List<Container> Cached = new List<Container>();
         private static float _nextScan;
+        private static float _nextPrune;
         private static Vector3 _lastOrigin;
+        private static int _cacheFrame = -1;
+        private static readonly Dictionary<string, int> CountCache = new Dictionary<string, int>();
         private const float RescanMove = 1.5f;
 
         public static IReadOnlyList<Container> Current
         {
             get { return Cached; }
+        }
+
+        public static void Register(Container container)
+        {
+            if (container == null)
+                return;
+            int id = container.GetInstanceID();
+            if (!RegisteredIds.Add(id))
+                return;
+            Registered.Add(container);
+        }
+
+        public static void Unregister(Container container)
+        {
+            if (container == null)
+                return;
+            int id = container.GetInstanceID();
+            if (!RegisteredIds.Remove(id))
+                return;
+            Registered.Remove(container);
+        }
+
+        public static void BootstrapExisting()
+        {
+            Container[] all = Resources.FindObjectsOfTypeAll<Container>();
+            if (all == null)
+                return;
+            foreach (Container c in all)
+            {
+                if (c == null || !c.gameObject.scene.IsValid())
+                    continue;
+                Register(c);
+            }
         }
 
         public static void Tick()
@@ -28,6 +69,12 @@ namespace StoreAndCraft
             {
                 Cached.Clear();
                 return;
+            }
+
+            if (Time.unscaledTime >= _nextPrune)
+            {
+                PruneDead();
+                _nextPrune = Time.unscaledTime + 5f;
             }
 
             float range = ScanRange();
@@ -56,22 +103,22 @@ namespace StoreAndCraft
         public static void Rescan(Vector3 origin, float range)
         {
             Cached.Clear();
+            CountCache.Clear();
+            _cacheFrame = Time.frameCount;
             if (range <= 0f)
                 return;
 
-            Collider[] hits = Physics.OverlapSphere(origin, range, ~0, QueryTriggerInteraction.Collide);
-            var seen = new HashSet<int>();
-            foreach (Collider hit in hits)
+            float rangeSq = range * range;
+            for (int i = Registered.Count - 1; i >= 0; i--)
             {
-                if (hit == null)
+                Container container = Registered[i];
+                if (!IsAlive(container))
+                {
+                    RemoveAt(i);
                     continue;
+                }
 
-                Container container = hit.GetComponentInParent<Container>();
-                if (container == null)
-                    continue;
-
-                int id = container.GetInstanceID();
-                if (!seen.Add(id))
+                if (ContainerFilter.SqrDistance(origin, container.transform.position) > rangeSq)
                     continue;
 
                 if (!ContainerFilter.PlayerMayUse(container, origin))
@@ -84,11 +131,12 @@ namespace StoreAndCraft
         public static List<Container> Within(Vector3 origin, float range)
         {
             var result = new List<Container>();
+            float rangeSq = range * range;
             foreach (Container c in Cached)
             {
                 if (c == null)
                     continue;
-                if (ContainerFilter.Distance(origin, c.transform.position) <= range)
+                if (ContainerFilter.SqrDistance(origin, c.transform.position) <= rangeSq)
                     result.Add(c);
             }
             return result;
@@ -99,17 +147,28 @@ namespace StoreAndCraft
             if (string.IsNullOrEmpty(sharedName))
                 return 0;
 
+            if (_cacheFrame != Time.frameCount)
+            {
+                CountCache.Clear();
+                _cacheFrame = Time.frameCount;
+            }
+
+            string key = sharedName + "|" + quality + "|" + (leaveOne ? 1 : 0);
+            int cached;
+            if (CountCache.TryGetValue(key, out cached))
+                return cached;
+
             int total = 0;
             float craftRange = Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : range;
+            float craftSq = craftRange * craftRange;
             foreach (Container c in Cached)
             {
                 if (c == null)
                     continue;
 
-                if (ContainerFilter.Distance(origin, c.transform.position) > craftRange)
+                if (ContainerFilter.SqrDistance(origin, c.transform.position) > craftSq)
                     continue;
 
-                ContainerFilter.RefreshInventory(c);
                 Inventory inv = c.GetInventory();
                 if (inv == null)
                     continue;
@@ -121,7 +180,42 @@ namespace StoreAndCraft
                     total += n;
             }
 
+            CountCache[key] = total;
             return total;
+        }
+
+        private static void PruneDead()
+        {
+            for (int i = Registered.Count - 1; i >= 0; i--)
+            {
+                if (!IsAlive(Registered[i]))
+                    RemoveAt(i);
+            }
+        }
+
+        private static void RemoveAt(int index)
+        {
+            Container c = Registered[index];
+            Registered.RemoveAt(index);
+            if (c != null)
+                RegisteredIds.Remove(c.GetInstanceID());
+            else if (RegisteredIds.Count != Registered.Count)
+            {
+                RegisteredIds.Clear();
+                foreach (Container x in Registered)
+                {
+                    if (x != null)
+                        RegisteredIds.Add(x.GetInstanceID());
+                }
+            }
+        }
+
+        private static bool IsAlive(Container container)
+        {
+            if (container == null)
+                return false;
+            ZNetView nv = Refs.View(container);
+            return nv != null && nv.IsValid();
         }
     }
 }

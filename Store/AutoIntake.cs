@@ -57,7 +57,8 @@ namespace StoreAndCraft
             int moved = 0;
             int cap = Plugin.Settings.MaxTransfersPerTick.Value;
             Vector3 origin = player.transform.position;
-            NearbyIndex.Rescan(origin, NearbyIndex.ScanRange());
+            float storeRange = Plugin.Settings.StoreRange.Value;
+            NearbyIndex.Tick();
 
             foreach (ItemDrop drop in drops)
             {
@@ -73,19 +74,16 @@ namespace StoreAndCraft
                 if (!drop.CanPickup(true))
                     continue;
 
-                float storeRange = Plugin.Settings.StoreRange.Value;
                 Container chest = null;
                 float best = float.MaxValue;
 
-                foreach (Container candidate in NearbyIndex.Current)
+                foreach (Container candidate in NearbyIndex.Within(origin, storeRange))
                 {
                     if (candidate == null)
                         continue;
 
                     float distItem = ContainerFilter.Distance(drop.transform.position, candidate.transform.position);
                     if (distItem > storeRange)
-                        continue;
-                    if (ContainerFilter.Distance(origin, candidate.transform.position) > NearbyIndex.ScanRange())
                         continue;
                     if (!ChestPicker.CanAccept(candidate, drop.m_itemData, drop.transform.position, Plugin.Settings.MustHaveExisting.Value))
                         continue;

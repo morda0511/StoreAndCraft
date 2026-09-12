@@ -13,7 +13,6 @@ namespace StoreAndCraft
             if (player == null || Plugin.Settings == null || string.IsNullOrEmpty(sharedName))
                 return 0;
 
-            NearbyIndex.Tick();
             return NearbyIndex.CountItem(
                 player.transform.position,
                 0f,
@@ -25,8 +24,6 @@ namespace StoreAndCraft
         /// <summary>
         /// Same rules as vanilla HaveRequirementItems (forge / workbench / black forge / …),
         /// but counts inventory + chests the way SetupRequirement does (all qualities).
-        /// Vanilla takes the max of each quality tier separately, which can leave the upgrade
-        /// button grey while the requirement row already looks OK.
         /// </summary>
         public static bool RecipeHasItems(Player player, Recipe recipe, int qualityLevel, int amount)
         {
@@ -37,7 +34,7 @@ namespace StoreAndCraft
             if (inv == null)
                 return false;
 
-            NearbyIndex.Tick();
+            // Index is refreshed in Plugin.Update; avoid per-requirement Tick spam.
             CraftingStation station = player.GetCurrentCraftingStation();
             bool onlyOne = recipe.m_requireOnlyOneIngredient;
             int mult = Mathf.Max(1, amount);
@@ -47,7 +44,6 @@ namespace StoreAndCraft
                 if (req?.m_resItem?.m_itemData?.m_shared == null)
                     continue;
 
-                // Mirror Player.HaveRequirementItems station / upgrader filtering.
                 if (station != null && station.m_upgrader != req.m_upgraderResource)
                     continue;
                 if (station == null && req.m_upgraderResource)
@@ -58,7 +54,6 @@ namespace StoreAndCraft
                     continue;
 
                 string shared = req.m_resItem.m_itemData.m_shared.m_name;
-                // quality -1: match InventoryGui.SetupRequirement (button must agree with UI).
                 int have = inv.CountItems(shared);
                 if (onlyOne)
                 {

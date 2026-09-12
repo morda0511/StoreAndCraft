@@ -132,5 +132,10 @@ namespace StoreAndCraft
         {
             return Vector3.Distance(a, b);
         }
+
+        public static float SqrDistance(Vector3 a, Vector3 b)
+        {
+            return (a - b).sqrMagnitude;
+        }
     }
 }

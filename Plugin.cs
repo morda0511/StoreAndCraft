@@ -12,7 +12,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.1.5";
+        public const string ModVersion = "1.1.6";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -85,6 +85,9 @@ namespace StoreAndCraft
 
         private void LateUpdate()
         {
+            // Never leave chest-counting enabled across frames (inventory FPS collapse).
+            StationHover.ResetFrame();
+
             if (Player.m_localPlayer == null)
                 return;
 

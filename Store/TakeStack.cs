@@ -37,10 +37,11 @@ namespace StoreAndCraft
                 return;
             }
 
-            NearbyIndex.Rescan(player.transform.position, NearbyIndex.AccessRange());
+            NearbyIndex.Tick();
             TransferService.FillsQueued = 0;
             int taken = 0;
-            foreach (Container chest in ChestPicker.FindHolding(player.transform.position, NearbyIndex.AccessRange(), item.m_shared.m_name))
+            float range = NearbyIndex.AccessRange();
+            foreach (Container chest in ChestPicker.FindHolding(player.transform.position, range, item.m_shared.m_name))
             {
                 if (room <= 0)
                     break;

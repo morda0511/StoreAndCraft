@@ -22,8 +22,9 @@ namespace StoreAndCraft
                 return;
             _next = Time.time + Mathf.Max(1f, Plugin.Settings.IntakeInterval.Value);
 
-            NearbyIndex.Rescan(player.transform.position, NearbyIndex.AccessRange());
-            foreach (Container chest in NearbyIndex.Within(player.transform.position, NearbyIndex.AccessRange()))
+            float range = Mathf.Max(Plugin.Settings.StoreRange.Value, Plugin.Settings.StorageRange.Value);
+            NearbyIndex.Tick();
+            foreach (Container chest in NearbyIndex.Within(player.transform.position, range))
             {
                 if (chest == null)
                     continue;

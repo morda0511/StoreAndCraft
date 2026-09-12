@@ -11,7 +11,8 @@ namespace StoreAndCraft
         {
             if (!StagingPull.Active)
                 return;
-            NearbyIndex.Tick();
+            // Do not Tick() here — SetupRequirement / HaveRequirements call Begin many
+            // times per frame; Plugin.Update already refreshes the index.
             InventoryCountPatches.IncludeChests++;
         }
 
@@ -19,6 +20,14 @@ namespace StoreAndCraft
         {
             if (InventoryCountPatches.IncludeChests > 0)
                 InventoryCountPatches.IncludeChests--;
+        }
+
+        /// <summary>
+        /// Safety: never leave IncludeChests stuck across frames (FPS death with inventory open).
+        /// </summary>
+        public static void ResetFrame()
+        {
+            InventoryCountPatches.IncludeChests = 0;
         }
 
         public static Switch HoveredSwitch()
