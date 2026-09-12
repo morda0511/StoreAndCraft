@@ -70,10 +70,10 @@ namespace StoreAndCraft
 
         public string HoverLabel()
         {
-            int filter = FilterId();
-            string name = DisplayFilters.Label(filter);
+            List<int> filters = FilterIds();
+            string name = DisplayFilters.Label(filters);
             string use = "[<color=yellow><b>E</b></color>] " + Loc.T("Select type", "Typ wählen");
-            if (filter <= 0)
+            if (filters.Count == 0)
                 return "Storage Display\n" + use;
 
             RefreshClusterPages();
@@ -83,25 +83,70 @@ namespace StoreAndCraft
             return title + "\n" + use;
         }
 
-        public int FilterId()
+        public List<int> FilterIds()
         {
             ZNetView nv = GetComponent<ZNetView>();
             ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
-            if (zdo == null)
-                return 0;
-            int id = zdo.GetInt(DisplayFilters.ZdoKey, 0);
-            DisplayFilter unused;
-            return DisplayFilters.TryGet(id, out unused) ? id : 0;
+            return DisplayFilters.ReadIds(zdo);
+        }
+
+        /// <summary>Legacy single-id helper (first selected, or 0).</summary>
+        public int FilterId()
+        {
+            List<int> ids = FilterIds();
+            return ids.Count > 0 ? ids[0] : 0;
         }
 
         public void SetFilter(int id)
+        {
+            // Replaced by multi-select ToggleFilter; keep for callers that set one type.
+            var ids = new List<int>();
+            if (id > 0)
+                ids.Add(id);
+            WriteFilters(ids);
+        }
+
+        public void ToggleFilter(int id)
+        {
+            if (id <= 0)
+            {
+                WriteFilters(new List<int>());
+                return;
+            }
+
+            List<int> ids = FilterIds();
+            if (ids.Contains(id))
+                ids.Remove(id);
+            else
+                ids.Add(id);
+            WriteFilters(ids);
+        }
+
+        public void WriteFilters(List<int> ids)
         {
             ZNetView nv = GetComponent<ZNetView>();
             if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
                 return;
             if (!nv.IsOwner())
                 nv.ClaimOwnership();
-            nv.GetZDO().Set(DisplayFilters.ZdoKey, id);
+
+            string encoded = DisplayFilters.EncodeIds(ids);
+            ZDO zdo = nv.GetZDO();
+            zdo.Set(DisplayFilters.ZdoKeyMulti, encoded);
+            // Keep legacy key in sync for older clients (first id or 0).
+            int legacy = 0;
+            if (ids != null)
+            {
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    if (ids[i] > 0)
+                    {
+                        legacy = ids[i];
+                        break;
+                    }
+                }
+            }
+            zdo.Set(DisplayFilters.ZdoKey, legacy);
             _dirty = true;
             _cluster = null;
             InvalidateClusters();
@@ -168,7 +213,7 @@ namespace StoreAndCraft
         {
             if (_signText == null)
                 return;
-            if (FilterId() > 0)
+            if (FilterIds().Count > 0)
             {
                 SilenceSignText();
                 return;
@@ -368,6 +413,7 @@ namespace StoreAndCraft
             var queue = new Queue<StorageDisplayBoard>();
             var seen = new HashSet<int>();
             float link = NearbyIndex.AccessRange();
+            List<int> myFilters = FilterIds();
 
             queue.Enqueue(this);
             seen.Add(GetInstanceID());
@@ -389,7 +435,7 @@ namespace StoreAndCraft
                     }
                     if (!seen.Add(other.GetInstanceID()))
                         continue;
-                    if (other.FilterId() != FilterId() || FilterId() <= 0)
+                    if (myFilters.Count == 0 || !DisplayFilters.SameIds(other.FilterIds(), myFilters))
                         continue;
                     if (Vector3.Distance(pos, other.transform.position) <= link)
                         queue.Enqueue(other);
@@ -439,7 +485,8 @@ namespace StoreAndCraft
                 return;
 
             ApplyTitle();
-            if (FilterId() <= 0)
+            List<int> filters = FilterIds();
+            if (filters.Count == 0)
             {
                 for (int i = 0; i < Slots; i++)
                     ClearSlot(i);
@@ -468,7 +515,7 @@ namespace StoreAndCraft
                     {
                         if (item?.m_shared == null || item.m_stack <= 0)
                             continue;
-                        if (!DisplayFilters.Matches(item, FilterId()))
+                        if (!DisplayFilters.MatchesAny(item, filters))
                             continue;
                         string key = item.m_shared.m_name;
                         int n;

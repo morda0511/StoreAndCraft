@@ -103,6 +103,16 @@ namespace StoreAndCraft
             if (player == null || sharedNames == null || amount <= 0)
                 return false;
 
+            // Prefer anything already in the inventory before touching chests
+            // (e.g. deer meat on you vs boar meat in a nearby chest).
+            foreach (string shared in sharedNames)
+            {
+                if (string.IsNullOrEmpty(shared))
+                    continue;
+                if (LocalCount(player, shared) >= amount)
+                    return true;
+            }
+
             foreach (string shared in sharedNames)
             {
                 if (string.IsNullOrEmpty(shared))
@@ -153,12 +163,34 @@ namespace StoreAndCraft
             string want = requested != null && requested.m_shared != null ? requested.m_shared.m_name : null;
 
             if (!string.IsNullOrEmpty(want))
-                EnsureInInventory(player, want, 1);
+            {
+                // Filtered allow-list: do not chest-pull denied types.
+                // Manual use (item already chosen) still works from inventory only.
+                bool allowedPull = fallbackNames == null
+                    || fallbackNames.Count == 0
+                    || fallbackNames.Contains(want);
+                if (allowedPull)
+                    EnsureInInventory(player, want, 1);
+            }
             else
+            {
                 EnsureAny(player, fallbackNames, 1);
-
-            if (requested == null)
+                // Vanilla FindCookableItem runs after us with item still null — pick an allowed stack now.
+                if (fallbackNames != null)
+                {
+                    foreach (string shared in fallbackNames)
+                    {
+                        ItemDrop.ItemData local = GetLocal(player, shared);
+                        if (local == null)
+                            continue;
+                        if (local.m_dropPrefab == null)
+                            local.m_dropPrefab = ItemIds.PrefabFromToken(ItemIds.PrefabName(local) ?? shared);
+                        item = local;
+                        return;
+                    }
+                }
                 return;
+            }
 
             ItemDrop.ItemData found = GetLocal(player, want);
             if (found == null)

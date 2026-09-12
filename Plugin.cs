@@ -37,6 +37,7 @@ namespace StoreAndCraft
 
             Config.SettingChanged += OnSettingChanged;
             ConfigWatch.Start();
+            Favorites.Load();
 
             _harmony = new Harmony(ModGuid);
             _harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -77,8 +78,9 @@ namespace StoreAndCraft
             NearbyIndex.Tick();
             AutoIntake.Tick();
             AutoStack.Tick();
-            StagingPull.Tick();
+            SearchPing.Tick();
             DisplayTypeMenu.Tick();
+            StationFilterMenu.Tick();
         }
 
         private void LateUpdate()

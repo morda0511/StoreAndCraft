@@ -2,9 +2,14 @@
 
 ## 1.1.4
 
-- Config simplified: **YAML removed** — ranges and gameplay toggles live only in `com.morda.storeandcraft.cfg`
-- Server sync hardened: server/host `.cfg` is source of truth with `LockConfig` (default on); clients receive Dump/Store/Storage/Craft ranges on join; local client edits ignored while locked
-- Dump range now uses `PlayerDumpRange` from the synced cfg directly (set e.g. `50` on the server)
+- **Craft fix:** materials for craft / upgrade / build are consumed from chests **in place** instead of being moved into the backpack first. Staging filled free inventory slots (worse with EquipmentQuickSlots), so the craft result could not be added; mats appeared, craft “fizzled”; stacking onto an existing arrow stack still worked
+- **Kiln / smelter pull filter:** Alt+E on multi-input stations to choose which inputs may be pulled (per station, synced)
+- **Storage Display:** multi-select filters (same skills-style UI); boards with the same filter set cluster together
+- **Search:** inventory open, hover item, press **Y** — nearest chest blinks 3× + map ping
+- **Favorites:** hover an inventory item + **F** to protect it from dump / hover-store (local)
+- Removed **Alt+P** (pause auto-store) and **Alt+O** (toggle chest pull); store/craft stay on while the mod is enabled
+- Config: **YAML removed**; ranges live in `com.morda.storeandcraft.cfg`; `LockConfig` server sync; carts & ships count as storage
+- Discord for support: https://discord.gg/aVKVVmyzj
 
 ## 1.1.3
 

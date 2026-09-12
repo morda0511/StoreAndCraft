@@ -6,11 +6,15 @@ using UnityEngine.UI;
 
 namespace StoreAndCraft
 {
-    internal static class DisplayTypeMenu
+    /// <summary>
+    /// Multi-select SkillsDialog UI: toggle which Smelter/kiln inputs may be
+    /// auto-pulled from chests. Same visual language as Storage Display type menu.
+    /// </summary>
+    internal static class StationFilterMenu
     {
         public static bool IsOpen { get; private set; }
 
-        private static StorageDisplayBoard _board;
+        private static Smelter _smelter;
         private static SkillsDialog _skills;
         private static bool _skillsWasEnabled;
         private static bool _openedInventory;
@@ -23,19 +27,26 @@ namespace StoreAndCraft
         private static readonly List<bool> _titleLocalize = new List<bool>();
         private static bool _closing;
 
-        public static void Open(StorageDisplayBoard board)
+        public static bool AnySkillsMenuOpen
         {
-            if (board == null || Player.m_localPlayer == null)
+            get { return IsOpen || DisplayTypeMenu.IsOpen; }
+        }
+
+        public static void Open(Smelter smelter)
+        {
+            if (smelter == null || Player.m_localPlayer == null)
                 return;
 
             InventoryGui gui = InventoryGui.instance;
             if (gui == null || gui.m_skillsDialog == null)
                 return;
 
+            if (DisplayTypeMenu.IsOpen)
+                DisplayTypeMenu.Close();
             if (IsOpen)
                 Close();
 
-            _board = board;
+            _smelter = smelter;
             _skills = gui.m_skillsDialog;
             _openedAt = Time.unscaledTime;
             _openedInventory = false;
@@ -70,7 +81,7 @@ namespace StoreAndCraft
                 SkillsDialog skills = _skills;
                 IsOpen = false;
                 _openedInventory = false;
-                _board = null;
+                _smelter = null;
                 _suppressMenuFrame = Time.frameCount;
 
                 ClearOurRows();
@@ -94,9 +105,9 @@ namespace StoreAndCraft
             }
         }
 
-        public static void CloseIf(StorageDisplayBoard board)
+        public static void CloseIf(Smelter smelter)
         {
-            if (IsOpen && _board == board)
+            if (IsOpen && _smelter == smelter)
                 Close();
         }
 
@@ -109,7 +120,7 @@ namespace StoreAndCraft
         {
             if (!IsOpen)
                 return;
-            if (_board == null || _skills == null || Player.m_localPlayer == null)
+            if (_smelter == null || _skills == null || Player.m_localPlayer == null)
             {
                 Close();
                 return;
@@ -128,15 +139,20 @@ namespace StoreAndCraft
             Close();
         }
 
-        private static void Pick(int id)
+        private static void Toggle(string shared)
         {
-            StorageDisplayBoard board = _board;
-            if (board == null)
+            if (_smelter == null || string.IsNullOrEmpty(shared))
                 return;
-            if (id == 0)
-                board.WriteFilters(new List<int>());
-            else
-                board.ToggleFilter(id);
+            bool nowDenied = !StationPullFilter.IsDenied(_smelter, shared);
+            StationPullFilter.SetDenied(_smelter, shared, nowDenied);
+            RebuildRows();
+        }
+
+        private static void AllowAll()
+        {
+            if (_smelter == null)
+                return;
+            StationPullFilter.Clear(_smelter);
             RebuildRows();
         }
 
@@ -182,33 +198,11 @@ namespace StoreAndCraft
                 return;
 
             ClearOurRows();
-            int count = DisplayFilters.Choices.Length + 2;
-            List<int> selected = _board != null ? _board.FilterIds() : new List<int>();
+            List<string> choices = StationPullFilter.OreChoices(_smelter);
+            int count = choices.Count + 2;
 
             for (int i = 0; i < count; i++)
             {
-                int id;
-                string label;
-                bool on;
-                if (i < DisplayFilters.Choices.Length)
-                {
-                    id = DisplayFilters.Choices[i].Id;
-                    label = DisplayFilters.Choices[i].Label();
-                    on = selected.Contains(id);
-                }
-                else if (i == DisplayFilters.Choices.Length)
-                {
-                    id = 0;
-                    label = Loc.T("Clear", "Zurücksetzen");
-                    on = false;
-                }
-                else
-                {
-                    id = -1;
-                    label = Loc.T("Done", "Fertig");
-                    on = false;
-                }
-
                 GameObject row = Object.Instantiate(
                     _skills.m_elementPrefab,
                     Vector3.zero,
@@ -218,10 +212,25 @@ namespace StoreAndCraft
                 RectTransform rt = row.transform as RectTransform;
                 if (rt != null)
                     rt.anchoredPosition = new Vector2(0f, -i * _skills.m_spacing);
-                if (id < 0)
-                    BindActionRow(row, label, Close);
+
+                if (i < choices.Count)
+                {
+                    string shared = choices[i];
+                    bool allowed = StationPullFilter.IsAllowed(_smelter, shared);
+                    // ASCII only — Valheim-AveriaSerifLibre has no ✓/✗ glyphs.
+                    string mark = allowed ? "[+]" : "[-]";
+                    string label = StationPullFilter.DisplayName(shared);
+                    BindToggleRow(row, shared, mark + "  " + label, allowed);
+                }
+                else if (i == choices.Count)
+                {
+                    BindActionRow(row, Loc.T("Allow all", "Alle erlauben"), AllowAll);
+                }
                 else
-                    BindToggleRow(row, id, label, on);
+                {
+                    BindActionRow(row, Loc.T("Done", "Fertig"), Close);
+                }
+
                 _rows.Add(row);
             }
 
@@ -231,28 +240,26 @@ namespace StoreAndCraft
             if (_skills.m_totalSkillText != null)
             {
                 _skills.m_totalSkillText.text = Loc.T(
-                    "ON = show. OFF = hide. Combine several types. Done closes.",
-                    "AN = anzeigen. AUS = ausblenden. Mehrere Typen kombinieren. Fertig schließt.");
+                    "ON = may use / pull. OFF = ignore (turn Wood OFF to keep Fine/Core wood).",
+                    "AN = darf ziehen. AUS = ignorieren (Holz AUS = nur Fein-/Kernholz).");
             }
         }
 
-        private static void BindToggleRow(GameObject row, int id, string label, bool selected)
+        private static void BindToggleRow(GameObject row, string shared, string label, bool allowed)
         {
             Transform t = row.transform;
-            string mark = selected ? "[+]" : "[-]";
-            Color color = selected ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f);
-            SetChildText(t, "name", mark + "  " + label, color);
-            SetChildText(t, "leveltext", selected ? "ON" : "OFF", color);
+            SetChildText(t, "name", label, allowed ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
+            SetChildText(t, "leveltext", allowed ? "ON" : "OFF", allowed ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
             StripSkillChrome(t);
 
             Button button = EnsureButton(row);
-            int captured = id;
+            string captured = shared;
             button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(() => Pick(captured));
+            button.onClick.AddListener(() => Toggle(captured));
 
             UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
             if (input != null)
-                input.m_onLeftClick = go => Pick(captured);
+                input.m_onLeftClick = go => Toggle(captured);
         }
 
         private static void BindActionRow(GameObject row, string label, UnityEngine.Events.UnityAction action)
@@ -272,6 +279,9 @@ namespace StoreAndCraft
                 input.m_onLeftClick = go => action();
         }
 
+        /// <summary>
+        /// Skills rows ship with an empty icon slot (square). Hide bars/icons so only the name remains.
+        /// </summary>
         private static void StripSkillChrome(Transform root)
         {
             HideChild(root, "bonustext");
@@ -289,7 +299,9 @@ namespace StoreAndCraft
                 Transform child = all[i];
                 if (child == null || child == root)
                     continue;
+
                 string n = child.gameObject.name.ToLowerInvariant();
+                // Empty skill icon / icon frame shows as a square slot beside the name.
                 if (!(n.Contains("icon") || n.Contains("skillicon") || n.EndsWith("_icon")))
                     continue;
                 if (child.GetComponent<TMP_Text>() != null)
@@ -314,7 +326,7 @@ namespace StoreAndCraft
         private static void ApplyTitle()
         {
             CacheTitles();
-            string title = Loc.T("Select types", "Typen wählen");
+            string title = Loc.T("Chest pull filter", "Truhen-Zug Filter");
             for (int i = 0; i < _titleTexts.Count; i++)
             {
                 TMP_Text tmp = _titleTexts[i];
@@ -416,64 +428,64 @@ namespace StoreAndCraft
     }
 
     [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.IsVisible))]
-    internal static class DisplayMenuInventoryVisiblePatch
+    internal static class StationFilterInventoryVisiblePatch
     {
         private static void Postfix(ref bool __result)
         {
-            if (DisplayTypeMenu.IsOpen)
+            if (StationFilterMenu.IsOpen)
                 __result = true;
         }
     }
 
     [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Show))]
-    internal static class DisplayMenuInventoryShowPatch
+    internal static class StationFilterInventoryShowPatch
     {
         private static bool Prefix()
         {
-            if (!DisplayTypeMenu.IsOpen)
+            if (!StationFilterMenu.IsOpen)
                 return true;
-            DisplayTypeMenu.Close();
+            StationFilterMenu.Close();
             return false;
         }
     }
 
     [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Hide))]
-    internal static class DisplayMenuInventoryHidePatch
+    internal static class StationFilterInventoryHidePatch
     {
         private static void Postfix()
         {
-            if (DisplayTypeMenu.IsOpen)
-                DisplayTypeMenu.Close();
+            if (StationFilterMenu.IsOpen)
+                StationFilterMenu.Close();
         }
     }
 
     [HarmonyPatch(typeof(Menu), nameof(Menu.Show))]
-    internal static class DisplayMenuPausePatch
+    internal static class StationFilterPausePatch
     {
         private static bool Prefix()
         {
-            if (!DisplayTypeMenu.ShouldBlockPause())
+            if (!StationFilterMenu.ShouldBlockPause())
                 return true;
-            DisplayTypeMenu.Close();
+            StationFilterMenu.Close();
             return false;
         }
     }
 
     [HarmonyPatch(typeof(SkillsDialog), nameof(SkillsDialog.OnClose))]
-    internal static class DisplayMenuSkillsClosePatch
+    internal static class StationFilterSkillsClosePatch
     {
         private static void Prefix(SkillsDialog __instance)
         {
-            DisplayTypeMenu.OnSkillsClosed(__instance);
+            StationFilterMenu.OnSkillsClosed(__instance);
         }
     }
 
     [HarmonyPatch(typeof(SkillsDialog), nameof(SkillsDialog.Setup))]
-    internal static class DisplayMenuSkillsSetupPatch
+    internal static class StationFilterSkillsSetupPatch
     {
         private static bool Prefix()
         {
-            return !DisplayTypeMenu.IsOpen;
+            return !StationFilterMenu.IsOpen;
         }
     }
 }

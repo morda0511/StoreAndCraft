@@ -57,6 +57,15 @@ namespace StoreAndCraft
             if (inv == null)
                 return false;
 
+            if (Favorites.IsFavorite(item))
+            {
+                player.Message(
+                    MessageHud.MessageType.Center,
+                    Loc.T("Favorite — protected from store. Press F to unfavorite.", "Favorit — vor Einlagern geschützt. F zum Entfernen."),
+                    0, null, false);
+                return false;
+            }
+
             NearbyIndex.Rescan(player.transform.position, NearbyIndex.AccessRange());
             Container chest = ChestPicker.FindStoreTarget(
                 player.transform.position,
@@ -77,6 +86,8 @@ namespace StoreAndCraft
             if (item == null || item.m_stack <= 0)
                 return false;
             if (item.m_equipped)
+                return false;
+            if (Favorites.IsFavorite(item))
                 return false;
             if (Plugin.Settings.IgnoreHotbar.Value && item.m_gridPos.y == 0)
                 return false;

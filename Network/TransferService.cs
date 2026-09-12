@@ -6,6 +6,7 @@ namespace StoreAndCraft
     internal static class TransferService
     {
         public const string RpcRemove = "KAC_Remove";
+        public const string RpcConsume = "KAC_Consume";
         public const string RpcDeposit = "KAC_Deposit";
         public const string RpcGrant = "KAC_Grant";
         public const string RpcStoreDrop = "KAC_StoreDrop";
@@ -119,6 +120,24 @@ namespace StoreAndCraft
             return 0;
         }
 
+        /// <summary>
+        /// Destroy items in a chest for craft/build cost. Does NOT move them into the player
+        /// inventory (avoids filling free slots so the crafted item cannot be added).
+        /// </summary>
+        public static int Consume(Container chest, string sharedName, int amount, bool leaveOne, int quality = -1)
+        {
+            if (chest == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
+                return 0;
+
+            if (IsChestOwner(chest))
+                return ConsumeLocal(chest, sharedName, amount, leaveOne, quality);
+
+            ZNetView view = Refs.View(chest);
+            if (view != null && view.IsValid())
+                view.InvokeRPC(RpcConsume, sharedName, amount, leaveOne ? 1 : 0, quality);
+            return 0;
+        }
+
         public static void RegisterOn(Container container)
         {
             ZNetView nv = Refs.View(container);
@@ -128,6 +147,10 @@ namespace StoreAndCraft
             TryRegister(nv, RpcRemove, () => nv.Register<string, int, int>(RpcRemove,
                 (long sender, string name, int amount, int leaveOne) =>
                     OnRemove(container, sender, name, amount, leaveOne != 0)));
+
+            TryRegister(nv, RpcConsume, () => nv.Register<string, int, int, int>(RpcConsume,
+                (long sender, string name, int amount, int leaveOne, int quality) =>
+                    OnConsume(container, sender, name, amount, leaveOne != 0, quality)));
 
             TryRegister(nv, RpcDeposit, () => nv.Register<ZPackage>(RpcDeposit,
                 (long sender, ZPackage pkg) => OnDeposit(container, sender, pkg)));
@@ -203,6 +226,19 @@ namespace StoreAndCraft
 
             if (granted > 0)
                 ContainerFilter.SaveInventory(container);
+        }
+
+        internal static void OnConsume(Container container, long sender, string sharedName, int amount, bool leaveOne, int quality)
+        {
+            ZNetView nv = Refs.View(container);
+            if (container == null || nv == null || !nv.IsOwner() || amount <= 0)
+                return;
+            if (!ValidateRpc(container, sender,
+                    Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f))
+                return;
+
+            if (ConsumeLocal(container, sharedName, amount, leaveOne, quality) > 0)
+                return;
         }
 
         internal static void OnDeposit(Container container, long sender, ZPackage pkg)
@@ -739,6 +775,63 @@ namespace StoreAndCraft
             return taken;
         }
 
+        private static int ConsumeLocal(Container chest, string sharedName, int amount, bool leaveOne, int quality)
+        {
+            Inventory inv = chest.GetInventory();
+            if (inv == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
+                return 0;
+
+            var items = new List<ItemDrop.ItemData>(inv.GetAllItems());
+            int available = 0;
+            foreach (ItemDrop.ItemData src in items)
+            {
+                if (!MatchesConsume(src, sharedName, quality))
+                    continue;
+                available += src.m_stack;
+            }
+            if (leaveOne && available > 0)
+                available -= 1;
+
+            int take = Mathf.Min(amount, available);
+            if (take <= 0)
+                return 0;
+
+            int taken = 0;
+            foreach (ItemDrop.ItemData src in items)
+            {
+                if (taken >= take)
+                    break;
+                if (!MatchesConsume(src, sharedName, quality))
+                    continue;
+
+                int move = Mathf.Min(take - taken, src.m_stack);
+                if (move <= 0)
+                    continue;
+
+                src.m_stack -= move;
+                taken += move;
+                if (src.m_stack <= 0)
+                    inv.RemoveItem(src);
+            }
+
+            if (taken <= 0)
+                return 0;
+
+            ContainerFilter.SaveInventory(chest);
+            return taken;
+        }
+
+        private static bool MatchesConsume(ItemDrop.ItemData src, string sharedName, int quality)
+        {
+            if (src?.m_shared == null || src.m_stack <= 0)
+                return false;
+            if (src.m_shared.m_name != sharedName)
+                return false;
+            if (quality >= 0 && src.m_quality != quality)
+                return false;
+            return true;
+        }
+
         private static float MaxStoreRange()
         {
             if (Plugin.Settings == null)
@@ -776,14 +869,22 @@ namespace StoreAndCraft
                 return;
 
             if (Plugin.Settings.HighlightOnStore.Value)
-            {
-                WearNTear wnt = chest.GetComponent<WearNTear>();
-                if (wnt != null)
-                    wnt.Highlight();
-            }
+                Flash(chest);
 
             if (Plugin.Settings.PingOnStore.Value && Chat.instance != null)
                 Chat.instance.SendPing(chest.transform.position);
+        }
+
+        /// <summary>Always flash WearNTear highlight (used by item search).</summary>
+        public static void Flash(Container chest)
+        {
+            if (chest == null)
+                return;
+            WearNTear wnt = chest.GetComponent<WearNTear>()
+                ?? chest.GetComponentInParent<WearNTear>()
+                ?? chest.GetComponentInChildren<WearNTear>();
+            if (wnt != null)
+                wnt.Highlight();
         }
     }
 }

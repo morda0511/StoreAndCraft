@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace StoreAndCraft
 {
     internal struct DisplayFilter
@@ -189,6 +191,94 @@ namespace StoreAndCraft
             return Loc.T("Select type", "Typ wählen");
         }
 
+        public static string Label(IReadOnlyList<int> ids)
+        {
+            if (ids == null || ids.Count == 0)
+                return Loc.T("Select type", "Typ wählen");
+            if (ids.Count == 1)
+                return Label(ids[0]);
+
+            var parts = new List<string>();
+            for (int i = 0; i < ids.Count; i++)
+            {
+                DisplayFilter found;
+                if (TryGet(ids[i], out found))
+                    parts.Add(found.Label());
+            }
+            if (parts.Count == 0)
+                return Loc.T("Select type", "Typ wählen");
+            if (parts.Count <= 3)
+                return string.Join(", ", parts.ToArray());
+            return parts[0] + ", " + parts[1] + " +" + (parts.Count - 2);
+        }
+
+        public const string ZdoKeyMulti = "sac_filters";
+
+        public static List<int> ReadIds(ZDO zdo)
+        {
+            var ids = new List<int>();
+            if (zdo == null)
+                return ids;
+
+            string raw = zdo.GetString(ZdoKeyMulti, "");
+            if (!string.IsNullOrEmpty(raw))
+            {
+                string[] parts = raw.Split('|');
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    int id;
+                    if (!int.TryParse(parts[i], out id) || id <= 0)
+                        continue;
+                    DisplayFilter unused;
+                    if (!TryGet(id, out unused))
+                        continue;
+                    if (!ids.Contains(id))
+                        ids.Add(id);
+                }
+                ids.Sort();
+                return ids;
+            }
+
+            // Legacy single-filter boards.
+            int legacy = zdo.GetInt(ZdoKey, 0);
+            DisplayFilter found;
+            if (legacy > 0 && TryGet(legacy, out found))
+                ids.Add(legacy);
+            return ids;
+        }
+
+        public static string EncodeIds(IEnumerable<int> ids)
+        {
+            if (ids == null)
+                return "";
+            var list = new List<int>();
+            foreach (int id in ids)
+            {
+                DisplayFilter unused;
+                if (id <= 0 || !TryGet(id, out unused) || list.Contains(id))
+                    continue;
+                list.Add(id);
+            }
+            list.Sort();
+            if (list.Count == 0)
+                return "";
+            return string.Join("|", list.ConvertAll(i => i.ToString()).ToArray());
+        }
+
+        public static bool SameIds(IReadOnlyList<int> a, IReadOnlyList<int> b)
+        {
+            if (a == null || b == null)
+                return a == b;
+            if (a.Count != b.Count)
+                return false;
+            for (int i = 0; i < a.Count; i++)
+            {
+                if (a[i] != b[i])
+                    return false;
+            }
+            return true;
+        }
+
         public static bool Matches(ItemDrop.ItemData item, int filterId)
         {
             DisplayFilter found;
@@ -206,6 +296,18 @@ namespace StoreAndCraft
                 return !IsClaimedByNamedFilter(key, item.m_shared.m_itemType);
 
             return true;
+        }
+
+        public static bool MatchesAny(ItemDrop.ItemData item, IReadOnlyList<int> filterIds)
+        {
+            if (item?.m_shared == null || filterIds == null || filterIds.Count == 0)
+                return false;
+            for (int i = 0; i < filterIds.Count; i++)
+            {
+                if (Matches(item, filterIds[i]))
+                    return true;
+            }
+            return false;
         }
 
         private static bool TypeAllowed(ItemDrop.ItemData.ItemType type, ItemDrop.ItemData.ItemType[] types)

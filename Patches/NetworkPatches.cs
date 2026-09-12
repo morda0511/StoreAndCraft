@@ -32,6 +32,7 @@ namespace StoreAndCraft
             VersionGate.ResetClient();
             ConfigSync.Register();
             TransferService.RegisterGrant();
+            ConfigCommands.RegisterRpc();
             VersionGate.SendHello();
 
             if (__instance != null && __instance.GetComponent<ConfigSyncRetry>() == null)
@@ -103,6 +104,73 @@ namespace StoreAndCraft
                 "Find an item in nearby containers",
                 SearchPing.OnCommand,
                 false, false, false, false, false, false, null, false, false, false);
+
+            // Admin config — onlyAdmin=true (last bool in this overload)
+            new Terminal.ConsoleCommand(
+                "sac",
+                "StoreAndCraft admin: sac <dump|store|storage|craft|status|help> [meters]",
+                ConfigCommands.OnConsole,
+                false, false, false, false, false, false, null, false, false, true);
+
+            new Terminal.ConsoleCommand(
+                "storerange",
+                "StoreAndCraft: set auto-store range (meters). Host/admin.",
+                ConfigCommands.OnConsole,
+                false, false, false, false, false, false, null, false, false, true);
+
+            new Terminal.ConsoleCommand(
+                "dumprange",
+                "StoreAndCraft: set dump range (meters). Host/admin.",
+                ConfigCommands.OnConsole,
+                false, false, false, false, false, false, null, false, false, true);
+
+            new Terminal.ConsoleCommand(
+                "craftrange",
+                "StoreAndCraft: set craft/build pull range (meters). Host/admin.",
+                ConfigCommands.OnConsole,
+                false, false, false, false, false, false, null, false, false, true);
+
+            new Terminal.ConsoleCommand(
+                "storagerange",
+                "StoreAndCraft: set storage/display range (meters). Host/admin.",
+                ConfigCommands.OnConsole,
+                false, false, false, false, false, false, null, false, false, true);
+
+            new Terminal.ConsoleCommand(
+                "storehelp",
+                "StoreAndCraft: list admin chat/console commands",
+                args => ConfigCommands.ShowHelp(),
+                false, false, false, false, false, false, null, false, false, false);
+        }
+    }
+
+    /// <summary>
+    /// Console (F5): accept "help store" and slash forms like "/dumprange 50".
+    /// </summary>
+    [HarmonyPatch(typeof(Terminal), "TryRunCommand")]
+    internal static class TerminalHelpStorePatch
+    {
+        private static bool Prefix(ref string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return true;
+
+            string raw = text.Trim();
+            string t = raw.ToLowerInvariant();
+
+            if (t == "help store" || t == "help storeandcraft" || t == "help sac"
+                || t == "/help store" || t == "/help storeandcraft" || t == "/help sac")
+            {
+                ConfigCommands.ShowHelp();
+                return false;
+            }
+
+            // F5 users often type chat-style "/dumprange 50" — strip slash for our commands.
+            if (raw.StartsWith("/", System.StringComparison.Ordinal)
+                && ConfigCommands.TryHandleChat(raw))
+                return false;
+
+            return true;
         }
     }
 }

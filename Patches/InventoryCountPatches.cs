@@ -26,7 +26,7 @@ namespace StoreAndCraft
             Skip++;
             try
             {
-                __result += RequirementBridge.CountNearby(player, name);
+                __result += RequirementBridge.CountNearby(player, name, quality);
             }
             finally
             {

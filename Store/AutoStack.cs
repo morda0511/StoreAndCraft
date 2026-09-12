@@ -13,8 +13,6 @@ namespace StoreAndCraft
                 return;
             if (!Plugin.Settings.AutoStackEnabled.Value)
                 return;
-            if (AutoIntake.Paused)
-                return;
 
             Player player = Player.m_localPlayer;
             if (player == null || player.IsDead() || player.IsTeleporting())

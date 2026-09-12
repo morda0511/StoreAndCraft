@@ -9,8 +9,10 @@ namespace StoreAndCraft
     {
         public static void Begin()
         {
-            if (StagingPull.Active)
-                InventoryCountPatches.IncludeChests++;
+            if (!StagingPull.Active)
+                return;
+            NearbyIndex.Tick();
+            InventoryCountPatches.IncludeChests++;
         }
 
         public static void End()
@@ -52,7 +54,7 @@ namespace StoreAndCraft
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null)
                 return;
-            StationFeed.EnsureForUse(player, ref item, OreNames(__instance));
+            StationFeed.EnsureForUse(player, ref item, StationPullFilter.AllowedOreNames(__instance));
         }
 
         internal static List<string> OreNames(Smelter smelter)
@@ -90,7 +92,7 @@ namespace StoreAndCraft
                     return;
                 if (hovered != null && hovered == __instance.m_addOreSwitch)
                 {
-                    if (StationFeed.HasOrChestsAny(player, SmelterAddOrePatch.OreNames(__instance)))
+                    if (StationFeed.HasOrChestsAny(player, StationPullFilter.AllowedOreNames(__instance)))
                         __result = true;
                     return;
                 }
@@ -102,12 +104,66 @@ namespace StoreAndCraft
                 }
 
                 if (StationFeed.HasOrChests(player, StationFeed.SharedFrom(__instance.m_fuelItem))
-                    || StationFeed.HasOrChestsAny(player, SmelterAddOrePatch.OreNames(__instance)))
+                    || StationFeed.HasOrChestsAny(player, StationPullFilter.AllowedOreNames(__instance)))
                     __result = true;
             }
             finally
             {
                 StationHover.End();
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(Smelter), "OnHoverAddOre")]
+    internal static class SmelterHoverAddOrePatch
+    {
+        private static void Postfix(Smelter __instance, ref string __result)
+        {
+            if (__instance == null || !StationPullFilter.CanConfigure(__instance) || !StationFeed.Ready())
+                return;
+            string key = StationPullFilter.PromptLabel();
+            __result += "\n[<color=yellow><b>" + key + "</b></color>] "
+                + Loc.T("Chest pull filter", "Truhen-Zug Filter");
+        }
+    }
+
+    /// <summary>
+    /// Vanilla picks the first cookable item in conversion order (Wood before Core wood).
+    /// Respect the per-station allow/deny filter so OFF types are never auto-selected.
+    /// </summary>
+    [HarmonyPatch(typeof(Smelter), "FindCookableItem")]
+    internal static class SmelterFindCookablePatch
+    {
+        private static void Postfix(Smelter __instance, Inventory inventory, ref ItemDrop.ItemData __result)
+        {
+            if (__instance == null || inventory == null || !StationFeed.Ready())
+                return;
+            if (!StationPullFilter.CanConfigure(__instance))
+                return;
+
+            HashSet<string> denied = StationPullFilter.ReadDenied(__instance);
+            if (denied.Count == 0)
+                return;
+
+            if (__result?.m_shared != null && !denied.Contains(__result.m_shared.m_name))
+                return;
+
+            __result = null;
+            if (__instance.m_conversion == null)
+                return;
+
+            foreach (Smelter.ItemConversion conv in __instance.m_conversion)
+            {
+                string shared = StationFeed.SharedFrom(conv != null ? conv.m_from : null);
+                if (string.IsNullOrEmpty(shared) || denied.Contains(shared))
+                    continue;
+
+                ItemDrop.ItemData found = inventory.GetItem(shared, -1, false);
+                if (found != null)
+                {
+                    __result = found;
+                    return;
+                }
             }
         }
     }

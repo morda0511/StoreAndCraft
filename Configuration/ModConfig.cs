@@ -5,8 +5,8 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        // Bump when package layout changes. v3 = cfg-only ranges (no YAML).
-        public const int ProtocolVersion = 3;
+        // Bump when package layout changes. v4 = removed PauseSeconds from sync.
+        public const int ProtocolVersion = 4;
 
         public ConfigEntry<bool> LockConfig { get; }
         public ConfigEntry<bool> ModEnabled { get; }
@@ -23,15 +23,13 @@ namespace StoreAndCraft
         public ConfigEntry<bool> AutoStackEnabled { get; }
         public ConfigEntry<float> CraftRange { get; }
         public ConfigEntry<float> IntakeInterval { get; }
-        public ConfigEntry<float> PauseSeconds { get; }
         public ConfigEntry<int> MaxTransfersPerTick { get; }
         public ConfigEntry<KeyboardShortcut> DumpKey { get; }
         public ConfigEntry<KeyboardShortcut> HoverStoreKey { get; }
-        public ConfigEntry<KeyboardShortcut> PauseKey { get; }
         public ConfigEntry<KeyboardShortcut> SearchKey { get; }
-        public ConfigEntry<KeyboardShortcut> PreventPullKey { get; }
         public ConfigEntry<KeyboardShortcut> RenameKey { get; }
         public ConfigEntry<KeyboardShortcut> TakeStackKey { get; }
+        public ConfigEntry<KeyboardShortcut> FavoriteKey { get; }
 
         public ModConfig(ConfigFile file)
         {
@@ -65,24 +63,20 @@ namespace StoreAndCraft
                 "Craft / build / station-[E] pull range in meters (player → chest). Synced from server when LockConfig is on.");
             IntakeInterval = file.Bind("2 - Store", "IntakeInterval", 5f,
                 "Seconds between automatic scans for ground items. Lower = snappier, higher = less CPU.");
-            PauseSeconds = file.Bind("2 - Store", "PauseSeconds", 10f,
-                "How many seconds auto-store stays paused after the pause hotkey.");
             MaxTransfersPerTick = file.Bind("1 - General", "MaxTransfersPerTick", 8,
                 "Maximum item moves per frame. Raise only if storing feels too slow.");
             DumpKey = file.Bind("4 - Keys", "DumpKey", new KeyboardShortcut(KeyCode.Period),
                 "Hotkey: move allowed inventory stacks into nearby chests that already hold those items.");
             HoverStoreKey = file.Bind("4 - Keys", "HoverStoreKey", new KeyboardShortcut(KeyCode.Mouse2),
                 "Hotkey: store only the inventory item under the cursor into a nearby chest that already holds it.");
-            PauseKey = file.Bind("4 - Keys", "PauseKey", new KeyboardShortcut(KeyCode.P, KeyCode.LeftAlt),
-                "Hotkey: pause auto-store for PauseSeconds.");
             SearchKey = file.Bind("4 - Keys", "SearchKey", new KeyboardShortcut(KeyCode.Y),
-                "Hold this key and click an inventory item to ping the nearest chest that contains it.");
-            PreventPullKey = file.Bind("4 - Keys", "PreventPullKey", new KeyboardShortcut(KeyCode.O, KeyCode.LeftAlt),
-                "Hotkey: locally disable pulling from chests for crafting/building.");
+                "While inventory is open: hover an item and press to ping/blink the nearest chest that contains it (blinks 3 times).");
             RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.E, KeyCode.LeftAlt),
-                "Look at a chest and hold this combo instead of opening it. Shift+E (Valheim alt-use) also renames. Prefix the name with [I] to ignore the container. The custom name is shown on hover.");
+                "Look at a chest to rename it, or at a kiln/smelter with multiple inputs to open the chest-pull filter (check which items may be pulled). Shift+E (Valheim alt-use) also renames chests. Prefix a chest name with [I] to ignore it.");
             TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
+            FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),
+                "Hotkey: while inventory is open, hover an item and press to favorite / unfavorite. Favorites are skipped by dump and hover-store (local, not synced).");
         }
 
         public float MaxGameplayRange()
@@ -104,7 +98,6 @@ namespace StoreAndCraft
             pkg.Write(AutoStackEnabled.Value);
             pkg.Write(CraftRange.Value);
             pkg.Write(IntakeInterval.Value);
-            pkg.Write(PauseSeconds.Value);
             pkg.Write(MaxTransfersPerTick.Value);
         }
 
@@ -122,7 +115,6 @@ namespace StoreAndCraft
             AutoStackEnabled.Value = pkg.ReadBool();
             CraftRange.Value = pkg.ReadSingle();
             IntakeInterval.Value = pkg.ReadSingle();
-            PauseSeconds.Value = pkg.ReadSingle();
             MaxTransfersPerTick.Value = pkg.ReadInt();
         }
     }

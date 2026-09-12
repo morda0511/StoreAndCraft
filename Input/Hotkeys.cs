@@ -8,7 +8,8 @@ namespace StoreAndCraft
         {
             if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
                 return;
-            if (Console.IsVisible() || (Chat.instance != null && Chat.instance.HasFocus()) || TextInput.IsVisible() || DisplayTypeMenu.IsOpen)
+            if (Console.IsVisible() || (Chat.instance != null && Chat.instance.HasFocus()) || TextInput.IsVisible()
+                || DisplayTypeMenu.IsOpen || StationFilterMenu.IsOpen)
                 return;
 
             if (KeyUtil.Down(Plugin.Settings.DumpKey.Value))
@@ -16,7 +17,11 @@ namespace StoreAndCraft
 
             if (InventoryGui.IsVisible())
             {
-                if (KeyUtil.Down(Plugin.Settings.TakeStackKey.Value))
+                if (KeyUtil.Down(Plugin.Settings.FavoriteKey.Value))
+                    Favorites.TryToggleHovered();
+                else if (KeyUtil.Down(Plugin.Settings.SearchKey.Value))
+                    SearchPing.PingItem(HoverStore.GetHoveredPlayerItem());
+                else if (KeyUtil.Down(Plugin.Settings.TakeStackKey.Value))
                     TakeStack.TryFillHovered();
                 else if (KeyUtil.Down(Plugin.Settings.HoverStoreKey.Value)
                     && !Input.GetKey(KeyCode.LeftControl)
@@ -24,32 +29,13 @@ namespace StoreAndCraft
                     HoverStore.TryStoreHovered();
             }
 
-            if (KeyUtil.Down(Plugin.Settings.PauseKey.Value))
-                AutoIntake.TogglePause();
-
             if (KeyUtil.Down(Plugin.Settings.RenameKey.Value))
-                ChestRename.TryOpen(null, true);
-
-            if (KeyUtil.Down(Plugin.Settings.PreventPullKey.Value))
             {
-                StagingPull.PullingEnabled = !StagingPull.PullingEnabled;
-                Player player = Player.m_localPlayer;
-                if (player != null)
-                {
-                    string state = StagingPull.PullingEnabled
-                        ? Loc.T("on", "an")
-                        : Loc.T("off", "aus");
-                    player.Message(
-                        MessageHud.MessageType.Center,
-                        Loc.T("Chest pulling " + state + ".", "Truhen-Ziehen " + state + "."),
-                        0, null, false);
-                }
+                // Same key: kiln/smelter pull-filter when looking at a multi-input station,
+                // otherwise chest rename.
+                if (!StationPullFilter.TryOpen(warnIfMissing: false))
+                    ChestRename.TryOpen(null, true);
             }
-        }
-
-        public static bool SearchHeld()
-        {
-            return Plugin.Settings != null && KeyUtil.Held(Plugin.Settings.SearchKey.Value);
         }
     }
 }

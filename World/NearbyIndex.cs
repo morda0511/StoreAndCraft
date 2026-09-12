@@ -94,7 +94,7 @@ namespace StoreAndCraft
             return result;
         }
 
-        public static int CountItem(Vector3 origin, float range, string sharedName, bool leaveOne)
+        public static int CountItem(Vector3 origin, float range, string sharedName, bool leaveOne, int quality = -1)
         {
             if (string.IsNullOrEmpty(sharedName))
                 return 0;
@@ -113,7 +113,7 @@ namespace StoreAndCraft
                 if (inv == null)
                     continue;
 
-                int n = inv.CountItems(sharedName, -1, true);
+                int n = inv.CountItems(sharedName, quality, true);
                 if (leaveOne && n > 0)
                     n -= 1;
                 if (n > 0)

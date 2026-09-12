@@ -5,6 +5,10 @@ namespace StoreAndCraft
 {
     internal static class SearchPing
     {
+        private static Container _blinkChest;
+        private static int _blinkLeft;
+        private static float _nextBlinkAt;
+
         public static void PingItem(ItemDrop.ItemData item)
         {
             if (item == null)
@@ -28,6 +32,20 @@ namespace StoreAndCraft
             Search(query, query);
         }
 
+        public static void Tick()
+        {
+            if (_blinkLeft <= 0 || _blinkChest == null)
+                return;
+            if (Time.time < _nextBlinkAt)
+                return;
+
+            TransferService.Flash(_blinkChest);
+            _blinkLeft--;
+            _nextBlinkAt = Time.time + 0.35f;
+            if (_blinkLeft <= 0)
+                _blinkChest = null;
+        }
+
         public static void Search(string sharedOrToken, string prefabHint)
         {
             Player player = Player.m_localPlayer;
@@ -35,14 +53,15 @@ namespace StoreAndCraft
                 return;
 
             string shared = ItemIds.SharedFromToken(sharedOrToken);
+            float range = Plugin.Settings != null ? Plugin.Settings.StorageRange.Value : NearbyIndex.ScanRange();
             NearbyIndex.Rescan(player.transform.position, NearbyIndex.ScanRange());
-            List<Container> holding = ChestPicker.FindHolding(player.transform.position, NearbyIndex.ScanRange(), shared);
+            List<Container> holding = ChestPicker.FindHolding(player.transform.position, range, shared);
 
             if (holding.Count == 0 && !string.IsNullOrEmpty(prefabHint))
             {
                 string alt = ItemIds.SharedFromToken(prefabHint);
                 if (alt != shared)
-                    holding = ChestPicker.FindHolding(player.transform.position, NearbyIndex.ScanRange(), alt);
+                    holding = ChestPicker.FindHolding(player.transform.position, range, alt);
             }
 
             if (holding.Count == 0)
@@ -60,7 +79,7 @@ namespace StoreAndCraft
                     total += inv.CountItems(shared, -1, true);
             }
 
-            TransferService.Highlight(closest);
+            StartBlink(closest, 3);
             if (Chat.instance != null)
                 Chat.instance.SendPing(closest.transform.position);
 
@@ -71,6 +90,13 @@ namespace StoreAndCraft
             Tell(Loc.T(
                 label + ": " + total + " in " + holding.Count + " chest(s).",
                 label + ": " + total + " in " + holding.Count + " Truhe(n)."));
+        }
+
+        private static void StartBlink(Container chest, int times)
+        {
+            _blinkChest = chest;
+            _blinkLeft = Mathf.Max(1, times);
+            _nextBlinkAt = 0f;
         }
 
         private static void Tell(string msg)

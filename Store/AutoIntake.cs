@@ -7,32 +7,6 @@ namespace StoreAndCraft
     {
         private static float _next;
 
-        public static float PauseUntil { get; set; }
-
-        public static bool Paused
-        {
-            get { return Time.time < PauseUntil; }
-        }
-
-        public static void TogglePause()
-        {
-            if (Plugin.Settings == null)
-                return;
-
-            if (Paused)
-            {
-                PauseUntil = 0f;
-                Tell(Loc.T("Auto-store resumed.", "Auto-Einlagern wieder an."));
-            }
-            else
-            {
-                PauseUntil = Time.time + Plugin.Settings.PauseSeconds.Value;
-                Tell(Loc.T(
-                    "Auto-store paused for " + Plugin.Settings.PauseSeconds.Value + "s.",
-                    "Auto-Einlagern pausiert für " + Plugin.Settings.PauseSeconds.Value + "s."));
-            }
-        }
-
         public static void Tick()
         {
             TickFor(Player.m_localPlayer, true);
@@ -57,11 +31,9 @@ namespace StoreAndCraft
 
         private static bool Ready()
         {
-            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value || !Plugin.Settings.StoreEnabled.Value)
-                return false;
-            if (Paused)
-                return false;
-            return true;
+            return Plugin.Settings != null
+                && Plugin.Settings.ModEnabled.Value
+                && Plugin.Settings.StoreEnabled.Value;
         }
 
         private static void TickFor(Player player, bool respectInterval)
@@ -130,13 +102,6 @@ namespace StoreAndCraft
                 if (TransferService.StoreDrop(chest, drop))
                     moved++;
             }
-        }
-
-        private static void Tell(string msg)
-        {
-            Player player = Player.m_localPlayer;
-            if (player != null)
-                player.Message(MessageHud.MessageType.Center, msg, 0, null, false);
         }
     }
 }

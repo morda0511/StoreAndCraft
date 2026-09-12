@@ -22,19 +22,39 @@ namespace StoreAndCraft
             if (container.GetInventory() == null)
                 return false;
 
-            Piece piece = container.GetComponent<Piece>();
-            if (piece == null)
-                return false;
+            // Normal chests / boxes
+            if (container.GetComponent<Piece>() != null)
+                return true;
 
-            return true;
+            // Carts (class name Vagon) & ships — mining runs / hauling
+            if (container.GetComponentInParent<Vagon>() != null)
+                return true;
+            if (container.GetComponentInParent<Ship>() != null)
+                return true;
+
+            return false;
         }
 
         public static string PiecePrefab(Container container)
         {
-            Piece piece = container != null ? container.GetComponent<Piece>() : null;
-            if (piece == null)
+            if (container == null)
                 return null;
-            return ItemIds.StripClone(piece.gameObject.name);
+
+            Piece piece = container.GetComponent<Piece>();
+            if (piece == null)
+                piece = container.GetComponentInParent<Piece>();
+            if (piece != null)
+                return ItemIds.StripClone(piece.gameObject.name);
+
+            Vagon cart = container.GetComponentInParent<Vagon>();
+            if (cart != null)
+                return ItemIds.StripClone(cart.gameObject.name);
+
+            Ship ship = container.GetComponentInParent<Ship>();
+            if (ship != null)
+                return ItemIds.StripClone(ship.gameObject.name);
+
+            return ItemIds.StripClone(container.gameObject.name);
         }
 
         public static bool PlayerMayUse(Container container, Vector3 from)

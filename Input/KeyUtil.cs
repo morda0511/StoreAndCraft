@@ -35,15 +35,14 @@ namespace StoreAndCraft
 
         public static bool ModifiersHeld(KeyboardShortcut shortcut)
         {
-            bool any = false;
+            // No modifiers configured → key alone is enough (e.g. SearchKey = Y).
             foreach (KeyCode modifier in shortcut.Modifiers)
             {
-                any = true;
                 if (!Held(modifier))
                     return false;
             }
 
-            return any;
+            return true;
         }
 
         public static string Format(KeyboardShortcut shortcut)
