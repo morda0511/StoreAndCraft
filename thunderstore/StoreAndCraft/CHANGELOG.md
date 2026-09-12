@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.7 — Chest discovery fix
+
+- **Fix:** dump, craft-from-chests, and station pull work again after 1.1.6 broke chest discovery (empty nearby index)
+- **Fix:** removed invalid `Container.OnDestroy` Harmony patch that crashed BepInEx on load
+- Inventories refresh on rescan; OverlapSphere only as fallback if registration finds nothing
+- Keeps 1.1.6 FPS improvements (no per-count inventory refresh spam in craft UI)
+
 ## 1.1.6 — FPS Hotfix
 
 - **FPS:** opening inventory / stations near chests no longer tanks frame rate; session no longer degrades over time
