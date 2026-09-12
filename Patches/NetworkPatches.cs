@@ -14,14 +14,7 @@ namespace StoreAndCraft
         }
     }
 
-    [HarmonyPatch(typeof(Container), "OnDestroy")]
-    internal static class ContainerDestroyPatch
-    {
-        private static void Prefix(Container __instance)
-        {
-            NearbyIndex.Unregister(__instance);
-        }
-    }
+    // Container has no OnDestroy in Valheim — dead entries are pruned in NearbyIndex.
 
     [HarmonyPatch(typeof(ZNet), "OnNewConnection")]
     internal static class NewConnectionPatch
@@ -92,6 +85,10 @@ namespace StoreAndCraft
         {
             if (__instance == null || !__instance.IsOwner())
                 return;
+
+            // Chests load with the world, after Game.Start — re-index here.
+            NearbyIndex.BootstrapExisting();
+
             if (AdminUtil.IsServer())
                 return;
             VersionGate.SendHello();

@@ -4,7 +4,8 @@ using UnityEngine;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Nearby chests via Awake registration (no per-tick OverlapSphere).
+    /// Nearby chests via Awake registration, with OverlapSphere fallback.
+    /// Inventories are refreshed on rescan (not on every CountItems call).
     /// </summary>
     internal static class NearbyIndex
     {
@@ -74,6 +75,9 @@ namespace StoreAndCraft
             if (Time.unscaledTime >= _nextPrune)
             {
                 PruneDead();
+                // World loads after Game.Start — keep discovering chests that Awake missed.
+                if (Registered.Count == 0)
+                    BootstrapExisting();
                 _nextPrune = Time.unscaledTime + 5f;
             }
 
@@ -109,14 +113,19 @@ namespace StoreAndCraft
                 return;
 
             float rangeSq = range * range;
+            var seen = new HashSet<int>();
             for (int i = Registered.Count - 1; i >= 0; i--)
             {
                 Container container = Registered[i];
-                if (!IsAlive(container))
+                if (IsDestroyed(container))
                 {
                     RemoveAt(i);
                     continue;
                 }
+
+                // Not networked yet — keep registered, skip until ready.
+                if (!IsReady(container))
+                    continue;
 
                 if (ContainerFilter.SqrDistance(origin, container.transform.position) > rangeSq)
                     continue;
@@ -124,6 +133,51 @@ namespace StoreAndCraft
                 if (!ContainerFilter.PlayerMayUse(container, origin))
                     continue;
 
+                int id = container.GetInstanceID();
+                if (!seen.Add(id))
+                    continue;
+
+                ContainerFilter.RefreshInventory(container);
+                Cached.Add(container);
+            }
+
+            // Registration can miss already-loaded chests (bootstrap timing / prune mistakes).
+            // Fall back to a sphere query and register whatever we find.
+            if (Cached.Count == 0)
+                FillFromOverlap(origin, range, rangeSq, seen);
+        }
+
+        private static void FillFromOverlap(Vector3 origin, float range, float rangeSq, HashSet<int> seen)
+        {
+            Collider[] hits = Physics.OverlapSphere(origin, range, ~0, QueryTriggerInteraction.Collide);
+            if (hits == null)
+                return;
+
+            foreach (Collider hit in hits)
+            {
+                if (hit == null)
+                    continue;
+
+                Container container = hit.GetComponentInParent<Container>();
+                if (container == null || IsDestroyed(container))
+                    continue;
+
+                Register(container);
+
+                if (!IsReady(container))
+                    continue;
+
+                if (ContainerFilter.SqrDistance(origin, container.transform.position) > rangeSq)
+                    continue;
+
+                if (!ContainerFilter.PlayerMayUse(container, origin))
+                    continue;
+
+                int id = container.GetInstanceID();
+                if (!seen.Add(id))
+                    continue;
+
+                ContainerFilter.RefreshInventory(container);
                 Cached.Add(container);
             }
         }
@@ -188,7 +242,7 @@ namespace StoreAndCraft
         {
             for (int i = Registered.Count - 1; i >= 0; i--)
             {
-                if (!IsAlive(Registered[i]))
+                if (IsDestroyed(Registered[i]))
                     RemoveAt(i);
             }
         }
@@ -210,7 +264,13 @@ namespace StoreAndCraft
             }
         }
 
-        private static bool IsAlive(Container container)
+        private static bool IsDestroyed(Container container)
+        {
+            // Unity fake-null for destroyed objects.
+            return container == null;
+        }
+
+        private static bool IsReady(Container container)
         {
             if (container == null)
                 return false;
