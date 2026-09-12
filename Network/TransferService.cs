@@ -437,7 +437,7 @@ namespace StoreAndCraft
             if (inv == null)
                 return;
 
-            if (!TryAddItem(inv, token, amount, quality, variant, crafterId, crafterName, worldLevel))
+            if (!TryAddItem(inv, token, amount, quality, variant, crafterId, crafterName, UsableWorldLevel(worldLevel)))
                 Plugin.Log.LogWarning("Grant failed: " + token + " x" + amount);
             else
                 Refs.NotifyChanged(inv);
@@ -521,8 +521,19 @@ namespace StoreAndCraft
         {
             if (inv == null || amount <= 0)
                 return;
-            TryAddItem(inv, token, amount, 1, 0, 0L, "", Game.m_worldLevel);
+            TryAddItem(inv, token, amount, 1, 0, 0L, "", UsableWorldLevel(0));
             Refs.NotifyChanged(inv);
+        }
+
+        /// <summary>
+        /// Chest stacks often have worldLevel 0. Valheim rejects those for smelt / craft /
+        /// store when Game.m_worldLevel is higher ("false" coal / scrap in the bag).
+        /// Never downgrade below the current world when giving items to a player.
+        /// </summary>
+        private static int UsableWorldLevel(int sourceLevel)
+        {
+            int world = Game.m_worldLevel;
+            return sourceLevel > world ? sourceLevel : world;
         }
 
         private static bool TryAddItem(
@@ -538,7 +549,10 @@ namespace StoreAndCraft
             if (inv == null || amount <= 0 || string.IsNullOrEmpty(token))
                 return false;
 
-            // Prefer the overload that keeps crafter metadata, then force world level.
+            worldLevel = UsableWorldLevel(worldLevel);
+
+            // 8-arg AddItem already stamps Game.m_worldLevel. Do not overwrite with a
+            // lower chest worldLevel (that created unusable coal / scrap).
             ItemDrop.ItemData added = inv.AddItem(
                 token,
                 amount,
@@ -550,7 +564,8 @@ namespace StoreAndCraft
                 false);
             if (added != null)
             {
-                added.m_worldLevel = worldLevel;
+                if (worldLevel > added.m_worldLevel)
+                    added.m_worldLevel = worldLevel;
                 if (added.m_dropPrefab == null)
                 {
                     GameObject prefab = ItemIds.PrefabFromToken(token);
@@ -756,17 +771,18 @@ namespace StoreAndCraft
                 if (src.m_shared.m_name != sharedName)
                     continue;
 
+                ItemDrop.ItemData clone = src.Clone();
+                clone.m_worldLevel = UsableWorldLevel(src.m_worldLevel);
+                if (clone.m_dropPrefab == null)
+                    clone.m_dropPrefab = ItemIds.PrefabFromToken(ItemIds.PrefabName(src) ?? sharedName);
+
                 int move = Mathf.Min(take - taken, src.m_stack);
-                while (move > 0 && !playerInv.CanAddItem(src, move))
+                while (move > 0 && !playerInv.CanAddItem(clone, move))
                     move--;
                 if (move <= 0)
                     break;
 
-                ItemDrop.ItemData clone = src.Clone();
                 clone.m_stack = move;
-                if (clone.m_dropPrefab == null)
-                    clone.m_dropPrefab = ItemIds.PrefabFromToken(ItemIds.PrefabName(src) ?? sharedName);
-
                 if (!playerInv.AddItem(clone))
                     break;
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.11 — Smelter pull world level
+
+- **Fix:** coal / iron scrap pulled from chests into the bag ([E] on smelter) could appear as unusable “false” items (worldLevel 0 vs current world). Player grants now keep at least the current world level
+
 ## 1.1.10 — Auto-store log + LeaveOneItem
 
 - **Fix:** auto-store no longer spams `InvalidOperationException` (collection modified) in the BepInEx log — ground-item list is snapshotted before storing
