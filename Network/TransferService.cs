@@ -393,7 +393,17 @@ namespace StoreAndCraft
             ZNetView dropView = Refs.View(drop);
             if (dropView != null && !dropView.IsOwner())
             {
+                // Buddy standing on eggs / kiln output owns the drop. Chest owner
+                // must take it and retry. Returning here left items on the floor
+                // until the chest owner walked into range.
                 drop.RequestOwn();
+                Enqueue(new PendingMove
+                {
+                    Chest = container,
+                    Drop = drop,
+                    Amount = drop.m_itemData.m_stack,
+                    Deadline = Time.time + 6f
+                });
                 return;
             }
 

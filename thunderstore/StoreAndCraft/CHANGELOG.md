@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.12 — Auto-store while a buddy is in range
+
+- **Fix:** ground pickup only ran for the chest owner. Kiln coal / chicken eggs stayed on the floor when you walked away and a buddy was there. Server now intakes around every player, and chest owners retry after taking drop ownership
+- **Fix:** torch / fireplace `[E]` no longer flashes “out of resin” when the fuel is coming from a chest. Inventory is still used first
+
 ## 1.1.11 — Smelter pull world level
 
 - **Fix:** coal / iron scrap pulled from chests into the bag ([E] on smelter) could appear as unusable “false” items (worldLevel 0 vs current world). Player grants now keep at least the current world level

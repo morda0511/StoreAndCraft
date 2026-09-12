@@ -12,7 +12,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.1.11";
+        public const string ModVersion = "1.1.12";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -76,7 +76,12 @@ namespace StoreAndCraft
                 return;
 
             NearbyIndex.Tick();
-            AutoIntake.Tick();
+            // Listen host: intake around every player, not only the host.
+            // Clients still run local intake so they can RPC drops they own.
+            if (ZNet.instance != null && ZNet.instance.IsServer())
+                AutoIntake.TickDedicated();
+            else
+                AutoIntake.Tick();
             AutoStack.Tick();
             SearchPing.Tick();
             DisplayTypeMenu.Tick();

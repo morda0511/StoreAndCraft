@@ -97,8 +97,18 @@ namespace StoreAndCraft
                         continue;
                     if (drop.IsPiece())
                         continue;
+
+                    // CanPickup(true) is also "do I own this drop?". Eggs next to a
+                    // buddy are owned by that buddy, so the host would skip them.
+                    // Server still tries drops that are in this player's store range.
                     if (!drop.CanPickup(true))
-                        continue;
+                    {
+                        bool server = ZNet.instance != null && ZNet.instance.IsServer();
+                        if (!server)
+                            continue;
+                        if (ContainerFilter.Distance(drop.transform.position, origin) > storeRange)
+                            continue;
+                    }
 
                     Container chest = null;
                     float best = float.MaxValue;
