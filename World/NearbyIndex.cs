@@ -109,6 +109,7 @@ namespace StoreAndCraft
                 if (ContainerFilter.Distance(origin, c.transform.position) > craftRange)
                     continue;
 
+                ContainerFilter.RefreshInventory(c);
                 Inventory inv = c.GetInventory();
                 if (inv == null)
                     continue;

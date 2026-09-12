@@ -104,6 +104,16 @@ namespace StoreAndCraft
             {
                 Plugin.Log.LogWarning("StoreAndCraft config protocol mismatch: " + version
                     + " (want " + ModConfig.ProtocolVersion + ")");
+                Player player = Player.m_localPlayer;
+                if (player != null)
+                {
+                    player.Message(
+                        MessageHud.MessageType.Center,
+                        Loc.T(
+                            "StoreAndCraft version mismatch with server. Update the mod.",
+                            "StoreAndCraft-Version passt nicht zum Server. Mod updaten."),
+                        0, null, false);
+                }
                 return;
             }
 

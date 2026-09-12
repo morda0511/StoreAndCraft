@@ -9,6 +9,7 @@ namespace StoreAndCraft
     internal static class ConfigCommands
     {
         public const string RpcAdminCmd = "KAC_AdminCmd";
+        public const string RpcAdminResult = "KAC_AdminResult";
         private static bool _rpcRegistered;
 
         public static void RegisterRpc()
@@ -16,6 +17,7 @@ namespace StoreAndCraft
             if (_rpcRegistered || ZRoutedRpc.instance == null)
                 return;
             ZRoutedRpc.instance.Register<string>(RpcAdminCmd, RPC_AdminCmd);
+            ZRoutedRpc.instance.Register<string>(RpcAdminResult, RPC_AdminResult);
             _rpcRegistered = true;
         }
 
@@ -126,8 +128,24 @@ namespace StoreAndCraft
                 return;
             }
 
+            // Dump/store ranges are enforced on the CLIENT. Apply locally first so the
+            // change is immediate, then let the server save + sync as source of truth.
+            string localResult;
+            if (TryApply(parts, out localResult))
+            {
+                Tell(localResult);
+                PrintLine(localResult);
+            }
+
             ZRoutedRpc.instance.InvokeRoutedRPC(VersionGate.ServerPeerId(), RpcAdminCmd, text);
-            Tell("Sent to server…");
+        }
+
+        private static void RPC_AdminResult(long sender, string message)
+        {
+            if (string.IsNullOrEmpty(message))
+                return;
+            Tell(message);
+            PrintLine(message);
         }
 
         private static bool IsHelpRequest(string cmd, string[] parts)
@@ -164,10 +182,15 @@ namespace StoreAndCraft
             if (!TryApply(parts, out result))
             {
                 Plugin.Log.LogInfo("Admin cmd failed: " + result);
+                if (ZRoutedRpc.instance != null)
+                    ZRoutedRpc.instance.InvokeRoutedRPC(sender, RpcAdminResult, result);
                 return;
             }
 
             SaveAndSync();
+            ConfigSync.SendToPeer(sender);
+            if (ZRoutedRpc.instance != null)
+                ZRoutedRpc.instance.InvokeRoutedRPC(sender, RpcAdminResult, result + " | " + StatusText());
             Plugin.Log.LogInfo("Admin cmd OK from " + sender + ": " + result);
         }
 
@@ -292,6 +315,7 @@ namespace StoreAndCraft
 
         private static void SaveAndSync()
         {
+            ConfigWatch.SuppressReload(2f);
             try
             {
                 if (Plugin.Instance != null)

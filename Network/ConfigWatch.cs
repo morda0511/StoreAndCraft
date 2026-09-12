@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using BepInEx;
+using UnityEngine;
 
 namespace StoreAndCraft
 {
@@ -36,10 +37,23 @@ namespace StoreAndCraft
             }
         }
 
+        private static float _suppressUntil;
+
+        public static void SuppressReload(float seconds)
+        {
+            _suppressUntil = Time.unscaledTime + Mathf.Max(0.1f, seconds);
+            _pending = false;
+        }
+
         public static void Tick()
         {
-            if (!_pending || UnityEngine.Time.unscaledTime < _reloadAt)
+            if (!_pending || Time.unscaledTime < _reloadAt)
                 return;
+            if (Time.unscaledTime < _suppressUntil)
+            {
+                _pending = false;
+                return;
+            }
 
             _pending = false;
             Reload();

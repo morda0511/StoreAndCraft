@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.5
+
+- **Upgrade button:** chest mats now enable craft/upgrade on **all** stations (workbench, forge, black forge, galdr, artisan, …). 1.1.4 fixed the workbench UI path; forge and other upgraders needed a matching `HaveRequirementItems` check
+- **Config commands:** range changes (`/dumprange`, `/sac …`) apply on the client immediately and get a server confirmation (dump range was updating on the server only before)
+
 ## 1.1.4
 
 - **Craft fix:** materials for craft / upgrade / build are consumed from chests **in place** instead of being moved into the backpack first. Staging filled free inventory slots (worse with EquipmentQuickSlots), so the craft result could not be added; mats appeared, craft “fizzled”; stacking onto an existing arrow stack still worked
