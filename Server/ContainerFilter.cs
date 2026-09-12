@@ -26,5 +26,22 @@ namespace StoreAndCraftServer
                 return null;
             return ItemIds.StripClone(piece.gameObject.name);
         }
+
+        /// <summary>
+        /// Player-placed chests only. World / dungeon / house-spawn chests have no creator.
+        /// </summary>
+        public static bool IsPlayerBuiltStorage(Container container)
+        {
+            if (container == null)
+                return false;
+
+            Piece piece = container.GetComponent<Piece>();
+            if (piece == null)
+                piece = container.GetComponentInParent<Piece>();
+            if (piece == null)
+                return false;
+
+            return piece.IsPlacedByPlayer();
+        }
     }
 }

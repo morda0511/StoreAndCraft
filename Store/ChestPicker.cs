@@ -43,6 +43,10 @@ namespace StoreAndCraft
             if (chest == null || item == null)
                 return false;
 
+            // Never dump / auto-store into crypt / house-spawn / other world chests.
+            if (!ContainerFilter.IsPlayerBuiltStorage(chest))
+                return false;
+
             Inventory inv = chest.GetInventory();
             if (inv == null || !inv.CanAddItem(item, item.m_stack))
                 return false;

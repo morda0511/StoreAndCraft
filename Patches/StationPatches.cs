@@ -264,11 +264,20 @@ namespace StoreAndCraft
     [HarmonyPatch(typeof(CookingStation), "OnInteract")]
     internal static class CookingOnInteractPatch
     {
+        private static readonly System.Reflection.MethodInfo HaveDoneItem =
+            AccessTools.Method(typeof(CookingStation), "HaveDoneItem");
+
         private static void Prefix(CookingStation __instance, Humanoid user)
         {
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null)
                 return;
+
+            // OnInteract first collects finished food. Do not pull raw meat from chests
+            // in that case (was giving cooked + raw boar on the first E).
+            if (HaveDoneItem != null && (bool)HaveDoneItem.Invoke(__instance, null))
+                return;
+
             StationFeed.EnsureAny(player, FoodNames(__instance), 1);
         }
 

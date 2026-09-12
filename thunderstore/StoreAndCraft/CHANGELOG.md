@@ -4,6 +4,8 @@
 
 - **Upgrade button:** chest mats now enable craft/upgrade on **all** stations (workbench, forge, black forge, galdr, artisan, …). 1.1.4 fixed the workbench UI path; forge and other upgraders needed a matching `HaveRequirementItems` check
 - **Config commands:** range changes (`/dumprange`, `/sac …`) apply on the client immediately and get a server confirmation (dump range was updating on the server only before)
+- **World chests:** dump / auto-store / middle-click no longer fill crypts, house spawns, or other non-player chests (carts and ships still allowed)
+- **Cooking station:** taking finished food with **[E]** no longer pulls an extra raw meat from chests (boar was first in the cook list)
 
 ## 1.1.4
 

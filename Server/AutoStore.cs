@@ -97,6 +97,8 @@ namespace StoreAndCraftServer
                 return false;
             if (!WardAccess.PlayersMayUse(chest))
                 return false;
+            if (!ContainerFilter.IsPlayerBuiltStorage(chest))
+                return false;
 
             Inventory inv = chest.GetInventory();
             if (inv == null || !inv.CanAddItem(item, item.m_stack))

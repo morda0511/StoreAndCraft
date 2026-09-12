@@ -71,6 +71,30 @@ namespace StoreAndCraft
             return true;
         }
 
+        /// <summary>
+        /// Dump / auto-store targets only. World chests (crypts, house spawns, …) have
+        /// no creator and must not steal stacks from the player's base sorting.
+        /// Carts and ships are always allowed.
+        /// </summary>
+        public static bool IsPlayerBuiltStorage(Container container)
+        {
+            if (container == null)
+                return false;
+
+            if (container.GetComponentInParent<Vagon>() != null)
+                return true;
+            if (container.GetComponentInParent<Ship>() != null)
+                return true;
+
+            Piece piece = container.GetComponent<Piece>();
+            if (piece == null)
+                piece = container.GetComponentInParent<Piece>();
+            if (piece == null)
+                return false;
+
+            return piece.IsPlacedByPlayer();
+        }
+
         public static void RefreshInventory(Container container)
         {
             if (container == null || LoadInventory == null)

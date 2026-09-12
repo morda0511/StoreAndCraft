@@ -61,6 +61,8 @@ namespace StoreAndCraft
                 return false;
             if (ChestNames.IsIgnored(chest))
                 return false;
+            if (!ContainerFilter.IsPlayerBuiltStorage(chest))
+                return false;
 
             // Already owner: write locally. Otherwise RPC the owner — do NOT ClaimOwnership
             // (stealing ownership closes the chest for whoever has it open).
@@ -75,6 +77,8 @@ namespace StoreAndCraft
             if (chest == null || drop == null || drop.m_itemData == null)
                 return false;
             if (ChestNames.IsIgnored(chest))
+                return false;
+            if (!ContainerFilter.IsPlayerBuiltStorage(chest))
                 return false;
 
             ZNetView dropView = Refs.View(drop);
@@ -379,6 +383,8 @@ namespace StoreAndCraft
 
             ItemDrop drop = go.GetComponent<ItemDrop>();
             if (drop == null || drop.m_itemData == null)
+                return;
+            if (!ContainerFilter.IsPlayerBuiltStorage(container))
                 return;
             if (Vector3.Distance(drop.transform.position, container.transform.position) > MaxStoreRange() + 6f)
                 return;
@@ -691,6 +697,8 @@ namespace StoreAndCraft
         private static bool StoreDropLocal(Container chest, ItemDrop drop)
         {
             if (drop == null || drop.m_itemData == null)
+                return false;
+            if (!ContainerFilter.IsPlayerBuiltStorage(chest))
                 return false;
 
             ZNetView dropView = Refs.View(drop);

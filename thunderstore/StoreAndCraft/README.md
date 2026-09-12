@@ -17,10 +17,11 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - Ground items are pulled into nearby chests automatically.
 - Default: a chest only accepts an item if that type is **already inside** (`MustHaveExisting`).
 - Carts (`Vagon`) and **ships** count as containers too.
+- **Player-built chests only** for dump / auto-store (crypts, house spawns, and other world chests are skipped).
 - Ward / private area rules still apply.
 
 ### Dump & quick store
-- **`.`** — dump allowed inventory stacks into matching nearby chests.
+- **`.`** — dump allowed inventory stacks into matching nearby **player-built** chests.
 - **Middle mouse** (inventory open) — store only the hovered item.
 - Hotbar can be skipped (`IgnoreHotbar`).
 - Favorites are never dumped / hover-stored (see below).
