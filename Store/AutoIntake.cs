@@ -110,10 +110,8 @@ namespace StoreAndCraft
                     if (candidate == null)
                         continue;
 
-                    string piece = ContainerFilter.PiecePrefab(candidate);
-                    float range = RulesFile.StoreRange(piece, storeRange);
                     float distItem = ContainerFilter.Distance(drop.transform.position, candidate.transform.position);
-                    if (distItem > range)
+                    if (distItem > storeRange)
                         continue;
                     if (ContainerFilter.Distance(origin, candidate.transform.position) > NearbyIndex.ScanRange())
                         continue;

@@ -5,7 +5,8 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        public const int ProtocolVersion = 2;
+        // Bump when package layout changes. v3 = cfg-only ranges (no YAML).
+        public const int ProtocolVersion = 3;
 
         public ConfigEntry<bool> LockConfig { get; }
         public ConfigEntry<bool> ModEnabled { get; }
@@ -35,7 +36,7 @@ namespace StoreAndCraft
         public ModConfig(ConfigFile file)
         {
             LockConfig = file.Bind("1 - General", "LockConfig", true,
-                "Server authority: clients receive these gameplay settings from the dedicated/host server. Edit com.morda.storeandcraft.cfg on the SERVER (not StoreAndCraft.cfg). Client edits are overwritten on join when synced.");
+                "If true (recommended on dedicated), gameplay values below are owned by the SERVER. Edit com.morda.storeandcraft.cfg on the server only — clients receive them on join. Hotkeys stay local.");
             ModEnabled = file.Bind("1 - General", "ModEnabled", true,
                 "Turns the whole mod on or off without uninstalling.");
             StoreEnabled = file.Bind("2 - Store", "StoreEnabled", true,
@@ -53,15 +54,15 @@ namespace StoreAndCraft
             PingOnStore = file.Bind("2 - Store", "PingOnStore", false,
                 "If enabled, a map ping is placed on the chest after a store.");
             PlayerDumpRange = file.Bind("2 - Store", "PlayerDumpRange", 8f,
-                "Fallback dump / middle-click range in meters (player to chest). YAML dumpRange overrides this.");
+                "Dump / middle-click store range in meters (player → chest). Synced from server when LockConfig is on.");
             StoreRange = file.Bind("2 - Store", "StoreRange", 10f,
-                "Fallback auto-store range in meters (item on ground to chest). YAML storeRange overrides this.");
+                "Auto-store range in meters (ground item → chest). Synced from server when LockConfig is on.");
             StorageRange = file.Bind("2 - Store", "StorageRange", 10f,
-                "How far (meters) StoreAndCraft can reach containers for dump, hover-store, take-stack, search, and storage displays.");
+                "Extra reach for take-stack, search, and storage displays (meters). Synced from server when LockConfig is on.");
             AutoStackEnabled = file.Bind("2 - Store", "AutoStackEnabled", false,
                 "If enabled, stacks already inside a chest are compacted toward the Valheim max. Never moves items from your inventory; dump and middle-click do that.");
             CraftRange = file.Bind("3 - Craft", "CraftRange", 20f,
-                "Fallback craft/build range in meters (player to chest). YAML craftRange overrides this.");
+                "Craft / build / station-[E] pull range in meters (player → chest). Synced from server when LockConfig is on.");
             IntakeInterval = file.Bind("2 - Store", "IntakeInterval", 5f,
                 "Seconds between automatic scans for ground items. Lower = snappier, higher = less CPU.");
             PauseSeconds = file.Bind("2 - Store", "PauseSeconds", 10f,
@@ -82,6 +83,11 @@ namespace StoreAndCraft
                 "Look at a chest and hold this combo instead of opening it. Shift+E (Valheim alt-use) also renames. Prefix the name with [I] to ignore the container. The custom name is shown on hover.");
             TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
+        }
+
+        public float MaxGameplayRange()
+        {
+            return Mathf.Max(PlayerDumpRange.Value, StoreRange.Value, StorageRange.Value, CraftRange.Value);
         }
 
         public void WriteToPackage(ZPackage pkg)

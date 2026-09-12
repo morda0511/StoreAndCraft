@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.4
+
+- Config simplified: **YAML removed** — ranges and gameplay toggles live only in `com.morda.storeandcraft.cfg`
+- Server sync hardened: server/host `.cfg` is source of truth with `LockConfig` (default on); clients receive Dump/Store/Storage/Craft ranges on join; local client edits ignored while locked
+- Dump range now uses `PlayerDumpRange` from the synced cfg directly (set e.g. `50` on the server)
+
 ## 1.1.3
 
 - Craft-from-chests: pull real item stacks (quality / world level / crafter) instead of spawning blank prefabs — fixes materials stuck in inventory that could not finish crafting, be re-stored, or be used until traded to another player

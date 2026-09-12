@@ -42,12 +42,17 @@ namespace StoreAndCraft
             if (!AdminUtil.IsServer() || ZNet.instance == null || Plugin.Settings == null)
                 return;
 
+            int n = 0;
             foreach (var peer in ZNet.instance.GetPeers())
             {
                 if (peer == null || !peer.IsReady())
                     continue;
                 SendToPeer(peer.m_uid);
+                n++;
             }
+
+            if (n > 0)
+                Plugin.Log.LogInfo("StoreAndCraft synced config to " + n + " peer(s).");
         }
 
         public static void SendToPeer(long peerId)
@@ -56,9 +61,9 @@ namespace StoreAndCraft
                 return;
 
             var peer = ZNet.instance != null ? ZNet.instance.GetPeer(peerId) : null;
-            bool canEdit = PeerIsAdmin(peer);
+            bool canEdit = !Plugin.Settings.LockConfig.Value || PeerIsAdmin(peer);
             var pkg = new ZPackage();
-            pkg.Write(ModConfigProtocol());
+            pkg.Write(ModConfig.ProtocolVersion);
             pkg.Write(canEdit);
             Plugin.Settings.WriteToPackage(pkg);
             ZRoutedRpc.instance.InvokeRoutedRPC(peerId, RpcSyncName, pkg);
@@ -69,11 +74,6 @@ namespace StoreAndCraft
             if (AdminUtil.IsServer() || ZRoutedRpc.instance == null)
                 return;
             ZRoutedRpc.instance.InvokeRoutedRPC(VersionGate.ServerPeerId(), RpcRequestName);
-        }
-
-        private static int ModConfigProtocol()
-        {
-            return ModConfig.ProtocolVersion;
         }
 
         public static bool PeerIsAdmin(ZNetPeer peer)
@@ -102,7 +102,8 @@ namespace StoreAndCraft
             int version = pkg.ReadInt();
             if (version != ModConfig.ProtocolVersion)
             {
-                Plugin.Log.LogWarning("StoreAndCraft config protocol mismatch: " + version);
+                Plugin.Log.LogWarning("StoreAndCraft config protocol mismatch: " + version
+                    + " (want " + ModConfig.ProtocolVersion + ")");
                 return;
             }
 
@@ -112,6 +113,13 @@ namespace StoreAndCraft
             {
                 Plugin.Settings.ReadFromPackage(pkg);
                 HasReceivedConfig = true;
+                Plugin.Log.LogInfo("StoreAndCraft received server config. Lock="
+                    + Plugin.Settings.LockConfig.Value
+                    + " Dump=" + Plugin.Settings.PlayerDumpRange.Value
+                    + " Store=" + Plugin.Settings.StoreRange.Value
+                    + " Storage=" + Plugin.Settings.StorageRange.Value
+                    + " Craft=" + Plugin.Settings.CraftRange.Value
+                    + " canEdit=" + ServerGrantedEdit);
             }
             finally
             {

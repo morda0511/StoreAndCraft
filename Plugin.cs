@@ -1,5 +1,6 @@
 using System.Reflection;
 using BepInEx;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
@@ -11,7 +12,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.1.3";
+        public const string ModVersion = "1.1.4";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -34,7 +35,7 @@ namespace StoreAndCraft
                 Logger.LogWarning("Config save: " + ex.Message);
             }
 
-            RulesFile.LoadOrCreate();
+            Config.SettingChanged += OnSettingChanged;
             ConfigWatch.Start();
 
             _harmony = new Harmony(ModGuid);
@@ -42,7 +43,21 @@ namespace StoreAndCraft
 
             Logger.LogInfo(ModName + " v" + ModVersion + " by " + ModAuthor + " loaded.");
             Logger.LogInfo("Config file: " + Config.ConfigFilePath);
-            Logger.LogInfo("Rules file:  " + RulesFile.Path);
+            Logger.LogInfo("Ranges Dump/Store/Storage/Craft = "
+                + Settings.PlayerDumpRange.Value + "/"
+                + Settings.StoreRange.Value + "/"
+                + Settings.StorageRange.Value + "/"
+                + Settings.CraftRange.Value
+                + " (LockConfig=" + Settings.LockConfig.Value + ")");
+        }
+
+        private static void OnSettingChanged(object sender, SettingChangedEventArgs e)
+        {
+            if (ConfigSync.IsApplyingRemoteConfig)
+                return;
+            if (!AdminUtil.IsServer())
+                return;
+            ConfigSync.BroadcastConfig();
         }
 
         private void Update()
@@ -76,6 +91,7 @@ namespace StoreAndCraft
 
         private void OnDestroy()
         {
+            Config.SettingChanged -= OnSettingChanged;
             _harmony?.UnpatchSelf();
             if (Instance == this)
                 Instance = null;

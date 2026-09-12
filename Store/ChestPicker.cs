@@ -10,7 +10,7 @@ namespace StoreAndCraft
             if (item == null)
                 return null;
 
-            float cfgDump = Plugin.Settings != null
+            float range = Plugin.Settings != null
                 ? Plugin.Settings.PlayerDumpRange.Value
                 : 8f;
             Container best = null;
@@ -21,8 +21,6 @@ namespace StoreAndCraft
                 if (chest == null)
                     continue;
 
-                string prefab = ContainerFilter.PiecePrefab(chest);
-                float range = RulesFile.DumpRange(prefab, cfgDump);
                 float d = ContainerFilter.Distance(origin, chest.transform.position);
                 if (d > range)
                     continue;
@@ -47,10 +45,6 @@ namespace StoreAndCraft
 
             Inventory inv = chest.GetInventory();
             if (inv == null || !inv.CanAddItem(item, item.m_stack))
-                return false;
-
-            string prefab = ContainerFilter.PiecePrefab(chest);
-            if (!RulesFile.AllowsStore(prefab, item))
                 return false;
 
             if (mustExist)

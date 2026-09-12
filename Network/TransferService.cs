@@ -154,11 +154,7 @@ namespace StoreAndCraft
             if (container == null || nv == null || !nv.IsOwner() || amount <= 0)
                 return;
             if (!ValidateRpc(container, sender,
-                    RulesFile.CraftRange(
-                        ContainerFilter.PiecePrefab(container),
-                        Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f)))
-                return;
-            if (!RulesFile.AllowsCraft(ContainerFilter.PiecePrefab(container), sharedName))
+                    Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f))
                 return;
 
             Inventory inv = container.GetInventory();
@@ -257,12 +253,6 @@ namespace StoreAndCraft
             probe.m_crafterID = crafterId;
             probe.m_crafterName = crafterName ?? "";
 
-            if (!RulesFile.AllowsStore(ContainerFilter.PiecePrefab(container), probe))
-            {
-                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
-                return;
-            }
-
             if (!inv.CanAddItem(probe, stack))
             {
                 RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
@@ -353,8 +343,6 @@ namespace StoreAndCraft
 
             ItemDrop drop = go.GetComponent<ItemDrop>();
             if (drop == null || drop.m_itemData == null)
-                return;
-            if (!RulesFile.AllowsStore(ContainerFilter.PiecePrefab(container), drop.m_itemData))
                 return;
             if (Vector3.Distance(drop.transform.position, container.transform.position) > MaxStoreRange() + 6f)
                 return;
@@ -755,10 +743,7 @@ namespace StoreAndCraft
         {
             if (Plugin.Settings == null)
                 return 12f;
-            return RulesFile.MaxScanRange(
-                Plugin.Settings.StoreRange.Value,
-                Plugin.Settings.CraftRange.Value,
-                Plugin.Settings.PlayerDumpRange.Value);
+            return Plugin.Settings.MaxGameplayRange();
         }
 
         private static bool ValidateRpc(Container container, long sender, float range)

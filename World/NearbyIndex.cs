@@ -43,8 +43,6 @@ namespace StoreAndCraft
 
         public static float AccessRange()
         {
-            // Used for dump / take-stack / displays. Must include YAML dump/store defaults,
-            // otherwise StoreAndCraft.rules.yml ranges appear "ignored".
             return ScanRange();
         }
 
@@ -52,12 +50,7 @@ namespace StoreAndCraft
         {
             if (Plugin.Settings == null)
                 return 20f;
-            return Mathf.Max(
-                Plugin.Settings.StorageRange.Value,
-                RulesFile.MaxScanRange(
-                    Plugin.Settings.StoreRange.Value,
-                    Plugin.Settings.CraftRange.Value,
-                    Plugin.Settings.PlayerDumpRange.Value));
+            return Plugin.Settings.MaxGameplayRange();
         }
 
         public static void Rescan(Vector3 origin, float range)
@@ -107,22 +100,17 @@ namespace StoreAndCraft
                 return 0;
 
             int total = 0;
-            float cfgCraft = Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : range;
+            float craftRange = Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : range;
             foreach (Container c in Cached)
             {
                 if (c == null)
                     continue;
 
-                string prefab = ContainerFilter.PiecePrefab(c);
-                float chestRange = RulesFile.CraftRange(prefab, cfgCraft);
-                if (ContainerFilter.Distance(origin, c.transform.position) > chestRange)
+                if (ContainerFilter.Distance(origin, c.transform.position) > craftRange)
                     continue;
 
                 Inventory inv = c.GetInventory();
                 if (inv == null)
-                    continue;
-
-                if (!RulesFile.AllowsCraft(prefab, sharedName))
                     continue;
 
                 int n = inv.CountItems(sharedName, -1, true);

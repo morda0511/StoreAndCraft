@@ -22,14 +22,13 @@ namespace StoreAndCraft
                     ? Path.GetFileName(Plugin.Instance.Config.ConfigFilePath)
                     : "com.morda.storeandcraft.cfg";
 
-                // Watch the whole config folder — BepInEx cfg is GUID-named, rules are StoreAndCraft.rules.yml
                 _watcher = new FileSystemWatcher(Paths.ConfigPath);
+                _watcher.Filter = _cfgFileName;
                 _watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName;
                 _watcher.Changed += OnChanged;
                 _watcher.Created += OnChanged;
                 _watcher.EnableRaisingEvents = true;
-                Plugin.Log.LogInfo("StoreAndCraft config watcher on " + Paths.ConfigPath
-                    + " (cfg=" + _cfgFileName + ", rules=" + Path.GetFileName(RulesFile.Path) + ")");
+                Plugin.Log.LogInfo("StoreAndCraft config watcher: " + Path.Combine(Paths.ConfigPath, _cfgFileName));
             }
             catch (Exception ex)
             {
@@ -48,40 +47,39 @@ namespace StoreAndCraft
 
         private static void OnChanged(object sender, FileSystemEventArgs e)
         {
-            if (!IsOurFile(e.Name))
-                return;
-
             _pending = true;
             _reloadAt = UnityEngine.Time.unscaledTime + 0.4f;
-        }
-
-        private static bool IsOurFile(string name)
-        {
-            if (string.IsNullOrEmpty(name))
-                return false;
-            if (!string.IsNullOrEmpty(_cfgFileName)
-                && name.Equals(_cfgFileName, StringComparison.OrdinalIgnoreCase))
-                return true;
-            if (name.StartsWith("StoreAndCraft.", StringComparison.OrdinalIgnoreCase))
-                return true;
-            if (name.Equals("StoreAndCraft.rules.yml", StringComparison.OrdinalIgnoreCase))
-                return true;
-            return false;
         }
 
         private static void Reload()
         {
             try
             {
+                // Dedicated / listen-server: disk is source of truth → reload + push to clients.
+                if (AdminUtil.IsServer())
+                {
+                    if (Plugin.Instance != null)
+                        Plugin.Instance.Config.Reload();
+                    ConfigSync.BroadcastConfig();
+                    Plugin.Log.LogInfo("StoreAndCraft server config reloaded and synced to clients."
+                        + " Dump=" + Plugin.Settings.PlayerDumpRange.Value
+                        + " Store=" + Plugin.Settings.StoreRange.Value
+                        + " Storage=" + Plugin.Settings.StorageRange.Value
+                        + " Craft=" + Plugin.Settings.CraftRange.Value);
+                    return;
+                }
+
+                // Locked clients: ignore local cfg edits, pull server values again.
+                if (Plugin.Settings != null && Plugin.Settings.LockConfig.Value && ConfigSync.HasReceivedConfig)
+                {
+                    ConfigSync.RequestConfigFromServer();
+                    Plugin.Log.LogInfo("StoreAndCraft LockConfig: ignored local cfg change, re-requested server config.");
+                    return;
+                }
+
                 if (Plugin.Instance != null)
                     Plugin.Instance.Config.Reload();
-
-                RulesFile.LoadOrCreate();
-
-                if (AdminUtil.IsServer())
-                    ConfigSync.BroadcastConfig();
-
-                Plugin.Log.LogInfo("StoreAndCraft config/rules reloaded from disk.");
+                Plugin.Log.LogInfo("StoreAndCraft local config reloaded.");
             }
             catch (Exception ex)
             {

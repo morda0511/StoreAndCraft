@@ -79,13 +79,18 @@ Place more Storage Displays of the **same type** next to each other. They share 
 
 ## Config
 
-**Dedicated server:** edit files on the **server** (clients receive gameplay `.cfg` values via sync).
+**One file only** (no YAML):
 
-| File | Purpose |
+`BepInEx/config/com.morda.storeandcraft.cfg`
+
+| Setting | Meaning |
 |---|---|
-| `BepInEx/config/com.morda.storeandcraft.cfg` | Ranges, toggles, hotkeys (`LockConfig`, `MustHaveExisting`, …) |
-| `BepInEx/config/StoreAndCraft.rules.yml` | Per-chest allow/deny + optional `storeRange` / `dumpRange` / `craftRange` |
+| `LockConfig` | `true` = server owns gameplay values; clients get them on join |
+| `PlayerDumpRange` | Dump / middle-click range (meters) |
+| `StoreRange` | Auto-store ground items → chest |
+| `StorageRange` | Take-stack / search / displays |
+| `CraftRange` | Craft / build / station `[E]` pull |
 
-The log prints both full paths on startup (`Config file:` / `Rules file:`). After saving, the mod reloads automatically; a server restart also works.
+**Dedicated:** edit the `.cfg` on the **server**, save — it reloads and syncs to clients. Client edits are ignored while `LockConfig` is on.
 
-> Note: the file is **not** named `StoreAndCraft.cfg` — BepInEx uses the plugin GUID.
+Hotkeys stay local on each PC.

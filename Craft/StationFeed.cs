@@ -136,12 +136,7 @@ namespace StoreAndCraft
                 if (chest == null || ChestNames.IsIgnored(chest))
                     continue;
 
-                string pieceName = ContainerFilter.PiecePrefab(chest);
-                if (!RulesFile.AllowsCraft(pieceName, shared))
-                    continue;
-
-                float chestRange = RulesFile.CraftRange(pieceName, cfgCraft);
-                if (ContainerFilter.Distance(origin, chest.transform.position) > chestRange)
+                if (ContainerFilter.Distance(origin, chest.transform.position) > cfgCraft)
                     continue;
 
                 int took = TransferService.Withdraw(chest, shared, need, inv, leaveOne);
