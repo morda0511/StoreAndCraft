@@ -16,33 +16,89 @@ namespace StoreAndCraft
             StationHover.Begin();
         }
 
-        private static void Postfix(Transform elementRoot, Piece.Requirement req, Player player, bool craft, int quality, int craftMultiplier, bool __result)
+        private static void Postfix(
+            Transform elementRoot,
+            Piece.Requirement req,
+            Player player,
+            bool craft,
+            int quality,
+            int craftMultiplier,
+            bool __result)
         {
             try
             {
                 if (!__result || !StagingPull.Active || player == null || req == null || req.m_resItem == null || elementRoot == null)
                     return;
 
-                string shared = req.m_resItem.m_itemData != null ? req.m_resItem.m_itemData.m_shared.m_name : null;
+                string shared = req.m_resItem.m_itemData != null
+                    ? req.m_resItem.m_itemData.m_shared.m_name
+                    : null;
                 if (string.IsNullOrEmpty(shared))
                     return;
 
-                int nearby = RequirementBridge.CountNearby(player, shared);
-                if (nearby <= 0)
+                int need = req.GetAmount(quality) * Mathf.Max(1, craftMultiplier);
+                if (need <= 0)
                     return;
 
-                TMP_Text[] texts = elementRoot.GetComponentsInChildren<TMP_Text>(true);
-                foreach (TMP_Text text in texts)
+                // IncludeChests still active here — bag + nearby chests.
+                Inventory inv = player.GetInventory();
+                if (inv == null)
+                    return;
+
+                int have = inv.CountItems(shared, -1, true);
+
+                TMP_Text amount = FindAmountText(elementRoot);
+                if (amount == null)
+                    return;
+
+                amount.text = have + "/" + need;
+
+                // Soft highlight when chests contribute (not bag-only).
+                InventoryCountPatches.Skip++;
+                int bagOnly;
+                try
                 {
-                    if (text == null)
-                        continue;
-                    text.color = Color.Lerp(text.color, Flash, 0.65f);
+                    bagOnly = inv.CountItems(shared, -1, true);
                 }
+                finally
+                {
+                    InventoryCountPatches.Skip--;
+                }
+
+                if (have > bagOnly)
+                    amount.color = Color.Lerp(amount.color, Flash, 0.65f);
             }
             finally
             {
                 StationHover.End();
             }
+        }
+
+        private static TMP_Text FindAmountText(Transform elementRoot)
+        {
+            Transform named = elementRoot.Find("res_amount");
+            if (named != null)
+            {
+                TMP_Text tmp = named.GetComponent<TMP_Text>();
+                if (tmp != null)
+                    return tmp;
+            }
+
+            TMP_Text[] texts = elementRoot.GetComponentsInChildren<TMP_Text>(true);
+            if (texts == null || texts.Length == 0)
+                return null;
+
+            // Prefer the amount field (usually the shortest / numeric-looking child).
+            foreach (TMP_Text text in texts)
+            {
+                if (text == null)
+                    continue;
+                string n = text.gameObject.name;
+                if (n != null && n.IndexOf("amount", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return text;
+            }
+
+            return texts[texts.Length - 1];
         }
     }
 
@@ -194,7 +250,7 @@ namespace StoreAndCraft
         {
             if (__instance == null || string.IsNullOrEmpty(__result) || !Favorites.IsFavorite(__instance))
                 return;
-            __result += "\n<color=#ffd24d>★ Favorite — protected from dump / hover-store (F to toggle)</color>";
+            __result += "\n<color=#ffd24d>★ Favorite — protected from dump / hover-store / sort (F to toggle)</color>";
         }
     }
 }

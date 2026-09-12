@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.9 — Sort + craft counts
+
+- **Sort:** hotkey **R** (config `SortKey`) — inventory only when bag is open; open chest sorts that chest only (not both)
+- **Sort:** favorited items stay in place (also equipped + hotbar when IgnoreHotbar is on)
+- **UI:** craft, upgrade, and build hammer show **have/need** (inventory + nearby chests), e.g. `12/10`; soft yellow when chests contribute
+
 ## 1.1.8 — Client consume + idle lag
 
 - **Fix (multiplayer):** clients no longer craft/build for free from nearby chests — owner loads chest inventory before consuming (host was fine; clients were not charged)

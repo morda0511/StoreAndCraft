@@ -19,6 +19,8 @@ namespace StoreAndCraft
             {
                 if (KeyUtil.Down(Plugin.Settings.FavoriteKey.Value))
                     Favorites.TryToggleHovered();
+                else if (KeyUtil.Down(Plugin.Settings.SortKey.Value))
+                    InventorySort.TrySort();
                 else if (KeyUtil.Down(Plugin.Settings.SearchKey.Value))
                     SearchPing.PingItem(HoverStore.GetHoveredPlayerItem());
                 else if (KeyUtil.Down(Plugin.Settings.TakeStackKey.Value))

@@ -133,7 +133,7 @@ namespace StoreAndCraft
             player.Message(
                 MessageHud.MessageType.Center,
                 nowFav
-                    ? Loc.T("★ Favorite: " + name + " (protected from dump)", "★ Favorit: " + name + " (vor Dump geschützt)")
+                    ? Loc.T("★ Favorite: " + name + " (protected from dump / sort)", "★ Favorit: " + name + " (vor Dump / Sortieren geschützt)")
                     : Loc.T("Favorite removed: " + name, "Favorit entfernt: " + name),
                 0, null, false);
         }

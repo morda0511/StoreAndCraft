@@ -30,6 +30,7 @@ namespace StoreAndCraft
         public ConfigEntry<KeyboardShortcut> RenameKey { get; }
         public ConfigEntry<KeyboardShortcut> TakeStackKey { get; }
         public ConfigEntry<KeyboardShortcut> FavoriteKey { get; }
+        public ConfigEntry<KeyboardShortcut> SortKey { get; }
 
         public ModConfig(ConfigFile file)
         {
@@ -76,7 +77,9 @@ namespace StoreAndCraft
             TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
             FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),
-                "Hotkey: while inventory is open, hover an item and press to favorite / unfavorite. Favorites are skipped by dump and hover-store (local, not synced).");
+                "Hotkey: while inventory is open, hover an item and press to favorite / unfavorite. Favorites are skipped by dump, hover-store, and inventory sort (local, not synced).");
+            SortKey = file.Bind("4 - Keys", "SortKey", new KeyboardShortcut(KeyCode.R),
+                "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, and hotbar stay put).");
         }
 
         public float MaxGameplayRange()
