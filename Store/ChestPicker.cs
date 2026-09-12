@@ -54,6 +54,7 @@ namespace StoreAndCraft
             if (mustExist)
             {
                 string shared = ItemIds.SharedName(item);
+                NearbyIndex.EnsureInventory(chest);
                 if (string.IsNullOrEmpty(shared) || inv.CountItems(shared, -1, true) <= 0)
                     return false;
             }
@@ -72,7 +73,7 @@ namespace StoreAndCraft
                 if (chest == null || ChestNames.IsIgnored(chest))
                     continue;
 
-                ContainerFilter.RefreshInventory(chest);
+                NearbyIndex.EnsureInventory(chest);
                 Inventory inv = chest.GetInventory();
                 if (inv == null)
                     continue;

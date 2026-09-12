@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.8 — Client consume + idle lag
+
+- **Fix (multiplayer):** clients no longer craft/build for free from nearby chests — owner loads chest inventory before consuming (host was fine; clients were not charged)
+- **Fix (FPS):** standing near many chests no longer causes ~1s lag spikes — inventory Load removed from the idle rescan loop (CraftEnabled off still spiked before)
+- Chest inventory Load is throttled and only runs when dump/craft/search actually needs counts
+- Idle nearby-chest rescan slowed down when standing still; OverlapSphere remains fallback only
+
 ## 1.1.7 — Chest discovery fix
 
 - **Fix:** dump, craft-from-chests, and station pull work again after 1.1.6 broke chest discovery (empty nearby index)

@@ -184,6 +184,7 @@ namespace StoreAndCraft
                     Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f))
                 return;
 
+            ContainerFilter.RefreshInventory(container);
             Inventory inv = container.GetInventory();
             if (inv == null)
                 return;
@@ -241,8 +242,8 @@ namespace StoreAndCraft
                     Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f))
                 return;
 
-            if (ConsumeLocal(container, sharedName, amount, leaveOne, quality) > 0)
-                return;
+            // ConsumeLocal loads inventory once — required so client RPCs don't no-op.
+            ConsumeLocal(container, sharedName, amount, leaveOne, quality);
         }
 
         internal static void OnDeposit(Container container, long sender, ZPackage pkg)
@@ -785,8 +786,12 @@ namespace StoreAndCraft
 
         private static int ConsumeLocal(Container chest, string sharedName, int amount, bool leaveOne, int quality)
         {
+            if (chest == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
+                return 0;
+
+            ContainerFilter.RefreshInventory(chest);
             Inventory inv = chest.GetInventory();
-            if (inv == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
+            if (inv == null)
                 return 0;
 
             var items = new List<ItemDrop.ItemData>(inv.GetAllItems());

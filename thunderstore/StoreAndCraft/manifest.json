@@ -1,6 +1,6 @@
 {
     "name":  "StoreAndCraft",
-    "version_number":  "1.1.7",
+    "version_number":  "1.1.8",
     "website_url":  "https://github.com/morda0511/StoreAndCraft",
     "description":  "Base that works with you: auto-store, dump, craft from chests, [E] stations + per-kiln filters, multi-type Storage Displays, favorites, search. Server + all clients.",
     "dependencies":  [

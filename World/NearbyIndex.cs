@@ -5,19 +5,23 @@ namespace StoreAndCraft
 {
     /// <summary>
     /// Nearby chests via Awake registration, with OverlapSphere fallback.
-    /// Inventories are refreshed on rescan (not on every CountItems call).
+    /// Inventory Load is throttled (never every rescan) to avoid base lag spikes.
     /// </summary>
     internal static class NearbyIndex
     {
         private static readonly List<Container> Registered = new List<Container>();
         private static readonly HashSet<int> RegisteredIds = new HashSet<int>();
         private static readonly List<Container> Cached = new List<Container>();
+        private static readonly Dictionary<int, float> LastInventoryLoad = new Dictionary<int, float>();
         private static float _nextScan;
         private static float _nextPrune;
         private static Vector3 _lastOrigin;
         private static int _cacheFrame = -1;
         private static readonly Dictionary<string, int> CountCache = new Dictionary<string, int>();
         private const float RescanMove = 1.5f;
+        private const float IdleRescanSeconds = 2f;
+        private const float MoveRescanSeconds = 0.75f;
+        private const float InventoryLoadCooldown = 4f;
 
         public static IReadOnlyList<Container> Current
         {
@@ -42,6 +46,7 @@ namespace StoreAndCraft
             if (!RegisteredIds.Remove(id))
                 return;
             Registered.Remove(container);
+            LastInventoryLoad.Remove(id);
         }
 
         public static void BootstrapExisting()
@@ -75,7 +80,6 @@ namespace StoreAndCraft
             if (Time.unscaledTime >= _nextPrune)
             {
                 PruneDead();
-                // World loads after Game.Start — keep discovering chests that Awake missed.
                 if (Registered.Count == 0)
                     BootstrapExisting();
                 _nextPrune = Time.unscaledTime + 5f;
@@ -89,7 +93,7 @@ namespace StoreAndCraft
 
             Rescan(origin, range);
             _lastOrigin = origin;
-            _nextScan = Time.time + 0.6f;
+            _nextScan = Time.time + (moved ? MoveRescanSeconds : IdleRescanSeconds);
         }
 
         public static float AccessRange()
@@ -102,6 +106,25 @@ namespace StoreAndCraft
             if (Plugin.Settings == null)
                 return 20f;
             return Plugin.Settings.MaxGameplayRange();
+        }
+
+        /// <summary>
+        /// Load chest inventory from ZDO at most once per cooldown (or force).
+        /// Used by craft counts / dump checks — never from the idle rescan loop.
+        /// </summary>
+        public static void EnsureInventory(Container container, bool force = false)
+        {
+            if (container == null)
+                return;
+
+            int id = container.GetInstanceID();
+            float now = Time.unscaledTime;
+            float last;
+            if (!force && LastInventoryLoad.TryGetValue(id, out last) && now - last < InventoryLoadCooldown)
+                return;
+
+            ContainerFilter.RefreshInventory(container);
+            LastInventoryLoad[id] = now;
         }
 
         public static void Rescan(Vector3 origin, float range)
@@ -123,7 +146,6 @@ namespace StoreAndCraft
                     continue;
                 }
 
-                // Not networked yet — keep registered, skip until ready.
                 if (!IsReady(container))
                     continue;
 
@@ -137,12 +159,9 @@ namespace StoreAndCraft
                 if (!seen.Add(id))
                     continue;
 
-                ContainerFilter.RefreshInventory(container);
                 Cached.Add(container);
             }
 
-            // Registration can miss already-loaded chests (bootstrap timing / prune mistakes).
-            // Fall back to a sphere query and register whatever we find.
             if (Cached.Count == 0)
                 FillFromOverlap(origin, range, rangeSq, seen);
         }
@@ -177,7 +196,6 @@ namespace StoreAndCraft
                 if (!seen.Add(id))
                     continue;
 
-                ContainerFilter.RefreshInventory(container);
                 Cached.Add(container);
             }
         }
@@ -223,6 +241,7 @@ namespace StoreAndCraft
                 if (ContainerFilter.SqrDistance(origin, c.transform.position) > craftSq)
                     continue;
 
+                EnsureInventory(c);
                 Inventory inv = c.GetInventory();
                 if (inv == null)
                     continue;
@@ -252,10 +271,15 @@ namespace StoreAndCraft
             Container c = Registered[index];
             Registered.RemoveAt(index);
             if (c != null)
-                RegisteredIds.Remove(c.GetInstanceID());
+            {
+                int id = c.GetInstanceID();
+                RegisteredIds.Remove(id);
+                LastInventoryLoad.Remove(id);
+            }
             else if (RegisteredIds.Count != Registered.Count)
             {
                 RegisteredIds.Clear();
+                LastInventoryLoad.Clear();
                 foreach (Container x in Registered)
                 {
                     if (x != null)
@@ -266,7 +290,6 @@ namespace StoreAndCraft
 
         private static bool IsDestroyed(Container container)
         {
-            // Unity fake-null for destroyed objects.
             return container == null;
         }
 
