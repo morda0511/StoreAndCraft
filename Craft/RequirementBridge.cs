@@ -5,19 +5,20 @@ namespace StoreAndCraft
     internal static class RequirementBridge
     {
         /// <summary>
-        /// Count craftable mats in nearby chests for UI / HaveRequirements.
-        /// Never applies LeaveOneItem here — that only matters when withdrawing.
+        /// Count spendable mats in nearby chests for UI / HaveRequirements / plant.
+        /// Matches withdraw: LeaveOneItem reserves one per chest for auto-store routing.
         /// </summary>
         public static int CountNearby(Player player, string sharedName, int quality = -1)
         {
             if (player == null || Plugin.Settings == null || string.IsNullOrEmpty(sharedName))
                 return 0;
 
+            bool leaveOne = Plugin.Settings.LeaveOneItem.Value;
             return NearbyIndex.CountItem(
                 player.transform.position,
                 0f,
                 sharedName,
-                leaveOne: false,
+                leaveOne: leaveOne,
                 quality: quality);
         }
 

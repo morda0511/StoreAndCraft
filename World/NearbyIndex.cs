@@ -64,14 +64,20 @@ namespace StoreAndCraft
 
         public static void Tick()
         {
-            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
-            {
-                Cached.Clear();
-                return;
-            }
-
             Player player = Player.m_localPlayer;
             if (player == null)
+                return;
+
+            TickAt(player.transform.position);
+        }
+
+        /// <summary>
+        /// Refresh the nearby-chest cache around an origin. Dedicated auto-store has
+        /// no local player, so Tick() must not wipe this cache.
+        /// </summary>
+        public static void TickAt(Vector3 origin)
+        {
+            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
             {
                 Cached.Clear();
                 return;
@@ -86,7 +92,6 @@ namespace StoreAndCraft
             }
 
             float range = ScanRange();
-            Vector3 origin = player.transform.position;
             bool moved = Vector3.Distance(origin, _lastOrigin) > RescanMove;
             if (Time.time < _nextScan && !moved && Cached.Count > 0)
                 return;

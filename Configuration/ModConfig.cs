@@ -45,7 +45,7 @@ namespace StoreAndCraft
             MustHaveExisting = file.Bind("2 - Store", "MustHaveExisting", true,
                 "If enabled, a chest only accepts an item if that item is already inside it. Empty chests will not vacuum new item types.");
             LeaveOneItem = file.Bind("3 - Craft", "LeaveOneItem", true,
-                "If enabled, every pull from a chest (craft, build, station [E], Ctrl+middle-click fill) leaves 1 item so auto-store can keep filling that stack.");
+                "If enabled, every pull from a chest (craft, build, plant, station [E], Ctrl+middle-click fill) leaves 1 item so auto-store can keep filling that stack. That leftover item cannot be spent (same as smelter [E]).");
             IgnoreHotbar = file.Bind("2 - Store", "IgnoreHotbar", true,
                 "If enabled, dump will not move items from the hotbar (first inventory row).");
             HighlightOnStore = file.Bind("2 - Store", "HighlightOnStore", true,

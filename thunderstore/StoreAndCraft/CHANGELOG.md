@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.10 — Auto-store log + LeaveOneItem
+
+- **Fix:** auto-store no longer spams `InvalidOperationException` (collection modified) in the BepInEx log — ground-item list is snapshotted before storing
+- **Fix:** that crash aborted the rest of the pickup pass, so auto-store looked broken (works when a buddy walks over, then dies), especially around a busy smelter
+- **Fix:** dedicated auto-store could see zero chests (nearby index required a local player and wiped the cache)
+- **Fix:** `LeaveOneItem` now applies to craft / build / plant counts, not only chest pulls. The leftover sapling / ore cannot be spent (smelter [E] already behaved this way)
+
 ## 1.1.9 — Sort + craft counts
 
 - **Sort:** hotkey **R** (config `SortKey`) — inventory only when bag is open; open chest sorts that chest only (not both)

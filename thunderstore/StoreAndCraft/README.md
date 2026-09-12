@@ -31,7 +31,7 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - When you craft / upgrade / build, missing mats are **taken from chests directly** (not dumped into your backpack first — that used to fill free slots and cancel the craft).
 - Craft / upgrade button enables when mats are in **inventory or chests**.
 - Yellow tint on requirement text when part of the count comes from a chest.
-- `LeaveOneItem` (default on): when *pulling / consuming*, one item stays in each chest so auto-store can keep refilling. The “have enough?” check still counts full stacks.
+- `LeaveOneItem` (default on): one item stays in each chest so auto-store can keep refilling. That leftover item cannot be spent (craft, build, plant, or station [E]). Turn the setting off if you want to use the last item.
 
 ### Station refill `[E]`
 Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters, turrets, etc.:
