@@ -39,7 +39,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - **Inventory first:** if you already hold a valid item (e.g. deer meat), that is used before chest contents (e.g. boar meat).
 
 ### Kiln / smelter / torch auto-fill
-- Look at a kiln, smelter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station (saved on the station).
+- Look at a kiln, smelter, blast furnace, cooking / stone oven, fermenter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station (saved on the station).
 - When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from inventory first, then chests within `AutoFillRange`. Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
 - No chest scans and no “it’s full” spam while the station is still running. Filter still applies (Wood OFF stays OFF).
 - **F** with inventory open is still favorites. Manual **[E]** refill is unchanged.

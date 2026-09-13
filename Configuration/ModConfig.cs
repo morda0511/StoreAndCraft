@@ -65,7 +65,7 @@ namespace StoreAndCraft
             CraftRange = file.Bind("3 - Craft", "CraftRange", 20f,
                 "Craft / build / station-[E] pull range in meters (player → chest). Synced from server when LockConfig is on.");
             AutoFillRange = file.Bind("3 - Craft", "AutoFillRange", 20f,
-                "Auto-fill range in meters: player → kiln/smelter/torch, and player → chests for auto-fill materials. Independent from CraftRange. Synced from server when LockConfig is on.");
+                "Auto-fill range in meters: player → station (kiln/smelter/blast furnace/oven/fermenter/torch), and player → chests for auto-fill materials. Independent from CraftRange. Synced from server when LockConfig is on.");
             IntakeInterval = file.Bind("2 - Store", "IntakeInterval", 5f,
                 "Seconds between automatic scans for ground items. Lower = snappier, higher = less CPU.");
             MaxTransfersPerTick = file.Bind("1 - General", "MaxTransfersPerTick", 8,
@@ -83,7 +83,7 @@ namespace StoreAndCraft
             FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),
                 "Hotkey: while inventory is open, hover an item and press to favorite / unfavorite. Favorites are skipped by dump, hover-store, and inventory sort (local, not synced).");
             AutoFillKey = file.Bind("4 - Keys", "AutoFillKey", new KeyboardShortcut(KeyCode.B),
-                "Look at a kiln, smelter, or torch / fire with the inventory closed and press to toggle auto-fill. The station pull filter still applies. Local, not synced.");
+                "Look at a kiln, smelter, blast furnace, cooking / stone oven, fermenter, or torch / fire with the inventory closed and press to toggle auto-fill. The station pull filter still applies. Local, not synced.");
             SortKey = file.Bind("4 - Keys", "SortKey", new KeyboardShortcut(KeyCode.R),
                 "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, and hotbar stay put).");
         }

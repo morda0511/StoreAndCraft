@@ -135,6 +135,39 @@ namespace StoreAndCraft
             return false;
         }
 
+        public static int ConsumeFromChests(Player player, string shared, int amount)
+        {
+            if (player == null || amount <= 0 || string.IsNullOrEmpty(shared))
+                return 0;
+            if (!Ready())
+                return 0;
+
+            NearbyIndex.Tick();
+            bool leaveOne = Plugin.Settings != null && Plugin.Settings.LeaveOneItem.Value;
+            float range = ActivePullRange();
+            Vector3 origin = player.transform.position;
+            int need = amount;
+            int took = 0;
+
+            foreach (Container chest in NearbyIndex.Current)
+            {
+                if (need <= 0)
+                    break;
+                if (chest == null || ChestNames.IsIgnored(chest))
+                    continue;
+                if (ContainerFilter.Distance(origin, chest.transform.position) > range)
+                    continue;
+
+                int n = TransferService.Consume(chest, shared, need, leaveOne);
+                if (n <= 0)
+                    continue;
+                took += n;
+                need -= n;
+            }
+
+            return took;
+        }
+
         public static void PullIntoInventory(Player player, string shared, int amount)
         {
             if (player == null || amount <= 0 || string.IsNullOrEmpty(shared))

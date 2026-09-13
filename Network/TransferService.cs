@@ -82,22 +82,21 @@ namespace StoreAndCraft
                 return false;
 
             ZNetView dropView = Refs.View(drop);
-            if (IsChestOwner(chest) && dropView != null && dropView.IsOwner())
+            bool ownDrop = dropView != null && dropView.IsValid() && dropView.IsOwner();
+            bool ownChest = IsChestOwner(chest);
+
+            if (ownDrop && ownChest)
                 return StoreDropLocal(chest, drop);
 
-            if (dropView != null && dropView.IsValid() && !dropView.IsOwner())
-                drop.RequestOwn();
+            // Kiln / smelter / blast furnace output is owned by whoever last used the
+            // station. Asking the chest owner to steal that drop fails while we stand
+            // on it and only stores after we walk back into range. Send the item
+            // instead; we already own the drop so we can destroy it.
+            if (ownDrop)
+                return StoreDropRemote(chest, drop);
 
-            ZNetView chestView = Refs.View(chest);
-            if (chestView != null && chestView.IsValid() && dropView != null && dropView.GetZDO() != null)
-            {
-                // Ask the current chest owner to pull the drop. Never claim the chest.
-                if (dropView.IsOwner())
-                {
-                    chestView.InvokeRPC(RpcStoreDrop, dropView.GetZDO().m_uid);
-                    return true;
-                }
-            }
+            if (dropView != null && dropView.IsValid())
+                drop.RequestOwn();
 
             Enqueue(new PendingMove
             {
@@ -489,13 +488,7 @@ namespace StoreAndCraft
                 if (IsChestOwner(op.Chest))
                     return StoreDropLocal(op.Chest, op.Drop);
 
-                ZNetView chestView = Refs.View(op.Chest);
-                if (chestView != null && chestView.IsValid() && dropView.GetZDO() != null)
-                {
-                    chestView.InvokeRPC(RpcStoreDrop, dropView.GetZDO().m_uid);
-                    return true;
-                }
-                return false;
+                return StoreDropRemote(op.Chest, op.Drop);
             }
 
             return true;
@@ -747,6 +740,48 @@ namespace StoreAndCraft
             return true;
         }
 
+        private static bool StoreDropRemote(Container chest, ItemDrop drop)
+        {
+            if (drop == null || drop.m_itemData == null)
+                return false;
+            if (!ContainerFilter.IsPlayerBuiltStorage(chest))
+                return false;
+
+            ZNetView dropView = Refs.View(drop);
+            if (dropView == null || !dropView.IsValid() || !dropView.IsOwner())
+                return false;
+
+            ZNetView nv = Refs.View(chest);
+            if (nv == null || !nv.IsValid())
+                return false;
+
+            ItemDrop.ItemData item = drop.m_itemData;
+            int take = item.m_stack;
+            Inventory chestInv = chest.GetInventory();
+            if (chestInv != null)
+            {
+                int fit = ChestPicker.AmountThatFits(chestInv, item);
+                take = Mathf.Min(take, fit);
+                if (take <= 0)
+                    return false;
+            }
+
+            string prefabName = ItemIds.PrefabName(item) ?? ItemIds.SharedName(item) ?? "";
+            if (string.IsNullOrEmpty(prefabName) || take <= 0)
+                return false;
+
+            var pkg = new ZPackage();
+            pkg.Write(prefabName);
+            pkg.Write(take);
+            pkg.Write(item.m_quality);
+            pkg.Write(item.m_variant);
+            pkg.Write(item.m_crafterID);
+            pkg.Write(item.m_crafterName ?? "");
+            nv.InvokeRPC(RpcDeposit, pkg);
+            ConsumeDrop(drop, take);
+            return true;
+        }
+
         private static bool StoreDropLocal(Container chest, ItemDrop drop)
         {
             if (drop == null || drop.m_itemData == null)
@@ -759,21 +794,40 @@ namespace StoreAndCraft
                 return false;
 
             Inventory inv = chest.GetInventory();
-            if (inv == null || !inv.CanAddItem(drop.m_itemData, drop.m_itemData.m_stack))
+            if (inv == null)
+                return false;
+
+            int take = ChestPicker.AmountThatFits(inv, drop.m_itemData);
+            if (take <= 0)
                 return false;
 
             ItemDrop.ItemData clone = drop.m_itemData.Clone();
+            clone.m_stack = take;
             if (!inv.AddItem(clone))
                 return false;
+
+            ConsumeDrop(drop, take);
+            ContainerFilter.SaveInventory(chest);
+            Highlight(chest);
+            return true;
+        }
+
+        private static void ConsumeDrop(ItemDrop drop, int take)
+        {
+            if (drop == null || drop.m_itemData == null || take <= 0)
+                return;
+
+            int left = drop.m_itemData.m_stack - take;
+            if (left > 0)
+            {
+                drop.SetStack(left);
+                return;
+            }
 
             if (ZNetScene.instance != null)
                 ZNetScene.instance.Destroy(drop.gameObject);
             else
                 Object.Destroy(drop.gameObject);
-
-            ContainerFilter.SaveInventory(chest);
-            Highlight(chest);
-            return true;
         }
 
         private static int WithdrawLocal(Container chest, string sharedName, int amount, Inventory playerInv, bool leaveOne)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.19 — Auto-fill from chests, no bag spam
+
+- **Fix:** auto-fill no longer pulls coal / ore / fuel into your inventory 1 at a time (blast furnace “out of coal” flash, then a single piece appearing). Chests are consumed in place and the station is filled directly. Inventory is still used first if you already hold the item
+
+## 1.1.18 — Buddy station store + oven / fermenter auto-fill
+
+- **Fix:** using a buddy’s kiln, smelter, blast furnace, or any other station that spawns ground loot no longer blocks auto-store until you walk back to the chests. Output you own is sent into the chest instead of fighting over drop ownership
+- **Auto-fill:** stone oven / cooking stations and fermenters now have **B** auto-fill. Kiln / smelter / blast furnace also show it on the take-output hover
+
 ## 1.1.17 — Partial dump / hover-store
 
 - **Fix:** dump and middle-click store no longer require the whole stack to fit. Wood 28 into a chest at 26/50 now fills to 50 and leaves the rest in your bag (was “No matching chest”)
