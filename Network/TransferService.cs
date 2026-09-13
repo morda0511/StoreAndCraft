@@ -136,10 +136,30 @@ namespace StoreAndCraft
             if (IsChestOwner(chest))
                 return ConsumeLocal(chest, sharedName, amount, leaveOne, quality);
 
+            int take = PeekConsumeAmount(chest, sharedName, amount, leaveOne, quality);
+            if (take <= 0)
+                return 0;
+
             ZNetView view = Refs.View(chest);
-            if (view != null && view.IsValid())
-                view.InvokeRPC(RpcConsume, sharedName, amount, leaveOne ? 1 : 0, quality);
-            return 0;
+            if (view == null || !view.IsValid())
+                return 0;
+
+            view.InvokeRPC(RpcConsume, sharedName, take, leaveOne ? 1 : 0, quality);
+            PendingChestDebit.Add(chest, sharedName, take);
+            return take;
+        }
+
+        private static int PeekConsumeAmount(Container chest, string sharedName, int amount, bool leaveOne, int quality)
+        {
+            Inventory inv = chest != null ? chest.GetInventory() : null;
+            if (inv == null || amount <= 0)
+                return 0;
+
+            int available = inv.CountItems(sharedName, quality, true);
+            available -= PendingChestDebit.Of(chest, sharedName);
+            if (leaveOne && available > 0)
+                available -= 1;
+            return Mathf.Min(amount, Mathf.Max(0, available));
         }
 
         public static void RegisterOn(Container container)
@@ -181,7 +201,7 @@ namespace StoreAndCraft
             if (container == null || nv == null || !nv.IsOwner() || amount <= 0)
                 return;
             if (!ValidateRpc(container, sender,
-                    Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f))
+                    Plugin.Settings != null ? Plugin.Settings.StationPullRange() : 20f))
                 return;
 
             ContainerFilter.RefreshInventory(container);

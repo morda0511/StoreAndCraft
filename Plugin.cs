@@ -12,7 +12,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.1.12";
+        public const string ModVersion = "1.1.16";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -44,11 +44,12 @@ namespace StoreAndCraft
 
             Logger.LogInfo(ModName + " v" + ModVersion + " by " + ModAuthor + " loaded.");
             Logger.LogInfo("Config file: " + Config.ConfigFilePath);
-            Logger.LogInfo("Ranges Dump/Store/Storage/Craft = "
+            Logger.LogInfo("Ranges Dump/Store/Storage/Craft/AutoFill = "
                 + Settings.PlayerDumpRange.Value + "/"
                 + Settings.StoreRange.Value + "/"
                 + Settings.StorageRange.Value + "/"
-                + Settings.CraftRange.Value
+                + Settings.CraftRange.Value + "/"
+                + Settings.AutoFillRange.Value
                 + " (LockConfig=" + Settings.LockConfig.Value + ")");
         }
 
@@ -76,6 +77,7 @@ namespace StoreAndCraft
                 return;
 
             NearbyIndex.Tick();
+            PendingChestDebit.Tick();
             // Listen host: intake around every player, not only the host.
             // Clients still run local intake so they can RPC drops they own.
             if (ZNet.instance != null && ZNet.instance.IsServer())
@@ -86,6 +88,7 @@ namespace StoreAndCraft
             SearchPing.Tick();
             DisplayTypeMenu.Tick();
             StationFilterMenu.Tick();
+            StationAutoFill.Tick();
         }
 
         private void LateUpdate()

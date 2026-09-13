@@ -75,6 +75,7 @@ namespace StoreAndCraft
                 || lower.StartsWith("/dumprange")
                 || lower.StartsWith("/craftrange")
                 || lower.StartsWith("/storagerange")
+                || lower.StartsWith("/autofillrange")
                 || lower.StartsWith("/sac")
                 || lower == "/storehelp"
                 || lower.StartsWith("/storehelp ");
@@ -265,7 +266,7 @@ namespace StoreAndCraft
 
             string cmd = parts[0].TrimStart('/').ToLowerInvariant();
 
-            if (cmd == "storerange" || cmd == "dumprange" || cmd == "craftrange" || cmd == "storagerange")
+            if (cmd == "storerange" || cmd == "dumprange" || cmd == "craftrange" || cmd == "storagerange" || cmd == "autofillrange")
             {
                 if (parts.Length < 2)
                     return false;
@@ -287,6 +288,8 @@ namespace StoreAndCraft
                     key = "craftrange";
                 else if (sub == "storage" || sub == "storagerange")
                     key = "storagerange";
+                else if (sub == "autofill" || sub == "autofillrange")
+                    key = "autofillrange";
                 else
                     return false;
                 valueToken = parts[2];
@@ -308,6 +311,8 @@ namespace StoreAndCraft
                     return Plugin.Settings.CraftRange;
                 case "storagerange":
                     return Plugin.Settings.StorageRange;
+                case "autofillrange":
+                    return Plugin.Settings.AutoFillRange;
                 default:
                     return null;
             }
@@ -345,12 +350,13 @@ namespace StoreAndCraft
                 "  /dumprange <m>              — dump / middle-click range",
                 "  /storerange <m>             — auto-store range (ground → chest)",
                 "  /storagerange <m>           — take-stack / search / displays",
-                "  /craftrange <m>             — craft / build / station pull",
+                "  /craftrange <m>             — craft / build / station [E] pull",
+                "  /autofillrange <m>          — auto-fill station + chest range",
                 "  /sac status                 — show current ranges",
-                "  /sac dump|store|storage|craft <m>",
+                "  /sac dump|store|storage|craft|autofill <m>",
                 "Console (F5), same ideas:",
                 "  help store   |  sac help  |  sac status",
-                "  dumprange 50 |  storerange 50 |  craftrange 50 |  storagerange 50",
+                "  dumprange 50 |  storerange 50 |  craftrange 50 |  storagerange 50 |  autofillrange 40",
                 "Changes save to com.morda.storeandcraft.cfg and sync to clients.",
                 "==================================="
             };
@@ -364,6 +370,7 @@ namespace StoreAndCraft
                 + " Store=" + Plugin.Settings.StoreRange.Value
                 + " Storage=" + Plugin.Settings.StorageRange.Value
                 + " Craft=" + Plugin.Settings.CraftRange.Value
+                + " AutoFill=" + Plugin.Settings.AutoFillRange.Value
                 + " Lock=" + Plugin.Settings.LockConfig.Value;
         }
 

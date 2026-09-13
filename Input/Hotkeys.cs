@@ -30,6 +30,10 @@ namespace StoreAndCraft
                     && !Input.GetKey(KeyCode.RightControl))
                     HoverStore.TryStoreHovered();
             }
+            else if (KeyUtil.Down(Plugin.Settings.AutoFillKey.Value))
+            {
+                StationAutoFill.TryToggle();
+            }
 
             if (KeyUtil.Down(Plugin.Settings.RenameKey.Value))
             {

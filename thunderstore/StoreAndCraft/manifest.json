@@ -1,8 +1,8 @@
 {
     "name":  "StoreAndCraft",
-    "version_number":  "1.1.12",
+    "version_number":  "1.1.16",
     "website_url":  "https://github.com/morda0511/StoreAndCraft",
-    "description":  "Base that works with you: auto-store, dump, craft from chests, [E] stations + per-kiln filters, multi-type Storage Displays, favorites, search. Server + all clients.",
+    "description":  "Base that works with you: auto-store, dump, craft from chests, [E] + auto-fill kilns/smelters/torches, per-kiln filters, Storage Displays, favorites, search. Server + all clients.",
     "dependencies":  [
                          "denikson-BepInExPack_Valheim-5.4.2350"
                      ]

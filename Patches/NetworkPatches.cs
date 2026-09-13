@@ -37,6 +37,7 @@ namespace StoreAndCraft
             TransferService.RegisterGrant();
             ConfigCommands.RegisterRpc();
             NearbyIndex.BootstrapExisting();
+            StationAutoFill.BootstrapExisting();
             VersionGate.SendHello();
 
             if (__instance != null && __instance.GetComponent<ConfigSyncRetry>() == null)

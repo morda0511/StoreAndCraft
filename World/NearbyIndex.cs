@@ -219,6 +219,11 @@ namespace StoreAndCraft
             return result;
         }
 
+        public static void InvalidateCounts()
+        {
+            CountCache.Clear();
+        }
+
         public static int CountItem(Vector3 origin, float range, string sharedName, bool leaveOne, int quality = -1)
         {
             if (string.IsNullOrEmpty(sharedName))
@@ -230,14 +235,14 @@ namespace StoreAndCraft
                 _cacheFrame = Time.frameCount;
             }
 
-            string key = sharedName + "|" + quality + "|" + (leaveOne ? 1 : 0);
+            float useRange = range > 0f ? range : StationFeed.ActivePullRange();
+            string key = sharedName + "|" + quality + "|" + (leaveOne ? 1 : 0) + "|" + useRange.ToString("0.##");
             int cached;
             if (CountCache.TryGetValue(key, out cached))
                 return cached;
 
             int total = 0;
-            float craftRange = Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : range;
-            float craftSq = craftRange * craftRange;
+            float craftSq = useRange * useRange;
             foreach (Container c in Cached)
             {
                 if (c == null)
@@ -252,6 +257,9 @@ namespace StoreAndCraft
                     continue;
 
                 int n = inv.CountItems(sharedName, quality, true);
+                n -= PendingChestDebit.Of(c, sharedName);
+                if (n < 0)
+                    n = 0;
                 if (leaveOne && n > 0)
                     n -= 1;
                 if (n > 0)

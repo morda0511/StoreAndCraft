@@ -1,7 +1,7 @@
 # StoreAndCraft
 
 **Your base runs with you.**  
-Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]** — and tell each station which wood or ore it’s allowed to take. Storage Displays track your stock by type (pick several at once). Mark favorites with **F**, find a stack with **Y**, skip a chest with **`[I]`**. Carts and ships count too.
+Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]** — or toggle **auto-fill with B** while looking at a kiln / smelter / torch. Tell each station which wood or ore it’s allowed to take. Storage Displays track your stock by type (pick several at once). Mark favorites with **F**, find a stack with **Y**, sort with **R**, skip a chest with **`[I]`**. Carts and ships count too.
 
 **Required on the dedicated / hosted server and every PC client** (same version). Valheim 1.0 · BepInExPack 5.4.2350+. Console players via crossplay cannot load the mod.
 
@@ -31,12 +31,18 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - When you craft / upgrade / build, missing mats are **taken from chests directly** (not dumped into your backpack first — that used to fill free slots and cancel the craft).
 - Craft / upgrade button enables when mats are in **inventory or chests**.
 - Yellow tint on requirement text when part of the count comes from a chest.
-- `LeaveOneItem` (default on): when *pulling / consuming*, one item stays in each chest so auto-store can keep refilling. The “have enough?” check still counts full stacks.
+- `LeaveOneItem` (default on): one item stays in each chest so auto-store can keep refilling. That leftover item cannot be spent (craft, build, plant, or station [E]). Turn the setting off if you want to use the last item.
 
 ### Station refill `[E]`
 Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters, turrets, etc.:
 - Pulls fuel / ore / food from nearby chests when you don’t have it.
 - **Inventory first:** if you already hold a valid item (e.g. deer meat), that is used before chest contents (e.g. boar meat).
+
+### Kiln / smelter / torch auto-fill
+- Look at a kiln, smelter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station (saved on the station).
+- When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from inventory first, then chests within `AutoFillRange`. Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
+- No chest scans and no “it’s full” spam while the station is still running. Filter still applies (Wood OFF stays OFF).
+- **F** with inventory open is still favorites. Manual **[E]** refill is unchanged.
 
 ### Kiln / smelter pull filter
 - Look at a kiln or multi-input smelter → **Alt+E**.
@@ -66,6 +72,11 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - Inventory open → hover an item → press **Y**.
 - Nearest chest that holds it **blinks 3 times** and gets a map ping.
 
+### Sort
+- Inventory open → **R**.
+- Bag only: sorts your inventory. Open chest: sorts **that chest only** (not both).
+- Favorites stay put (equipped + hotbar too when `IgnoreHotbar` is on).
+
 ### Multiplayer
 - Install on **server + all clients**, same version.
 - Server config sync (`LockConfig` default on).
@@ -82,7 +93,9 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 | **Ctrl + Middle mouse** | Fill hovered stack from nearby chests |
 | **Alt + E** | Rename looked-at chest **or** open kiln/smelter pull filter |
 | **F** | Favorite / unfavorite hovered inventory item |
+| **B** | Toggle auto-fill on the kiln / smelter / torch you are looking at (inventory closed) |
 | **Y** | Hover an inventory item and press — nearest chest with that item blinks **3×** + map ping |
+| **R** | Sort: bag open = inventory only; chest open = that chest only |
 
 All hotkeys are configurable in the `.cfg` and stay **local** (not overwritten by server sync).
 
@@ -102,25 +115,28 @@ Changing ranges: **host / server admin only**. Anyone can view status / help.
 | `/help store` | Everyone | Print help to console (F5) |
 | `/help storeandcraft` | Everyone | Same as above |
 | `/storehelp` | Everyone | Same as above |
-| `/sac status` | Everyone | Show current Dump / Store / Storage / Craft ranges + LockConfig |
+| `/sac status` | Everyone | Show current Dump / Store / Storage / Craft / AutoFill ranges + LockConfig |
 | `/dumprange <n>` | Host / admin | Set dump / middle-click range (meters) |
 | `/storerange <n>` | Host / admin | Set auto-store ground→chest range |
 | `/storagerange <n>` | Host / admin | Set take-stack / search / display range |
 | `/craftrange <n>` | Host / admin | Set craft / build / station-pull range |
+| `/autofillrange <n>` | Host / admin | Set auto-fill station + chest range |
 | `/sac dump <n>` | Host / admin | Alias for `/dumprange` |
 | `/sac store <n>` | Host / admin | Alias for `/storerange` |
 | `/sac storage <n>` | Host / admin | Alias for `/storagerange` |
 | `/sac craft <n>` | Host / admin | Alias for `/craftrange` |
+| `/sac autofill <n>` | Host / admin | Alias for `/autofillrange` |
 
 **Examples**
 
 ```
 /sac status
 /craftrange 25
+/autofillrange 40
 /sac dump 10
 ```
 
-Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `LockConfig` is on. Valid range: **0–500**.
+Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `LockConfig` is on. Valid range: **0–500**. Edit the `.cfg` on the host / server and save, or use the commands: **no restart**.
 
 </details>
 
@@ -152,8 +168,9 @@ Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `Lo
 | `StoreRange` | Auto-store ground items (m) |
 | `StorageRange` | Take-stack / search / displays (m) |
 | `CraftRange` | Craft / build / station `[E]` (m) |
+| `AutoFillRange` | Auto-fill: player → station and player → chests (m). Default 20 |
 | `IntakeInterval` | Seconds between ground-item scans |
-| Hotkeys (`DumpKey`, `FavoriteKey`, …) | Local only |
+| Hotkeys (`DumpKey`, `FavoriteKey`, `AutoFillKey`, `SortKey`, …) | Local only |
 
 **Dedicated:** edit the `.cfg` on the **server**, save — it reloads and syncs. Client gameplay edits are ignored while `LockConfig` is on.
 

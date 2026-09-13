@@ -48,8 +48,19 @@ namespace StoreAndCraft
             if (player == null || string.IsNullOrEmpty(shared))
                 return false;
 
-            NearbyIndex.Tick();
             return RequirementBridge.CountNearby(player, shared) > 0;
+        }
+
+        /// <summary>
+        /// While &gt; 0, chest count / pull uses this range instead of CraftRange (auto-fill).
+        /// </summary>
+        public static float PullRangeOverride;
+
+        public static float ActivePullRange()
+        {
+            if (PullRangeOverride > 0f)
+                return PullRangeOverride;
+            return Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f;
         }
 
         public static bool HasOrChests(Player player, string shared)
@@ -135,7 +146,7 @@ namespace StoreAndCraft
 
             NearbyIndex.Tick();
             bool leaveOne = Plugin.Settings != null && Plugin.Settings.LeaveOneItem.Value;
-            float cfgCraft = Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f;
+            float cfgCraft = ActivePullRange();
             Vector3 origin = player.transform.position;
             int need = amount;
 

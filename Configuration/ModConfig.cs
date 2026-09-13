@@ -6,7 +6,7 @@ namespace StoreAndCraft
     public class ModConfig
     {
         // Bump when package layout changes. v4 = removed PauseSeconds from sync.
-        public const int ProtocolVersion = 4;
+        public const int ProtocolVersion = 5;
 
         public ConfigEntry<bool> LockConfig { get; }
         public ConfigEntry<bool> ModEnabled { get; }
@@ -22,6 +22,7 @@ namespace StoreAndCraft
         public ConfigEntry<float> StorageRange { get; }
         public ConfigEntry<bool> AutoStackEnabled { get; }
         public ConfigEntry<float> CraftRange { get; }
+        public ConfigEntry<float> AutoFillRange { get; }
         public ConfigEntry<float> IntakeInterval { get; }
         public ConfigEntry<int> MaxTransfersPerTick { get; }
         public ConfigEntry<KeyboardShortcut> DumpKey { get; }
@@ -30,6 +31,7 @@ namespace StoreAndCraft
         public ConfigEntry<KeyboardShortcut> RenameKey { get; }
         public ConfigEntry<KeyboardShortcut> TakeStackKey { get; }
         public ConfigEntry<KeyboardShortcut> FavoriteKey { get; }
+        public ConfigEntry<KeyboardShortcut> AutoFillKey { get; }
         public ConfigEntry<KeyboardShortcut> SortKey { get; }
 
         public ModConfig(ConfigFile file)
@@ -41,7 +43,7 @@ namespace StoreAndCraft
             StoreEnabled = file.Bind("2 - Store", "StoreEnabled", true,
                 "If enabled, ground items can be auto-stored and dump / middle-click store works.");
             CraftEnabled = file.Bind("3 - Craft", "CraftEnabled", true,
-                "If enabled, crafting, building, and station refill ([E] on smelters, kilns, ovens, torches, fires, fermenters, turrets) can use items stored in nearby chests.");
+                "If enabled, crafting, building, station refill ([E] on smelters, kilns, ovens, torches, fires, fermenters, turrets), and kiln/smelter/torch auto-fill can use items stored in nearby chests.");
             MustHaveExisting = file.Bind("2 - Store", "MustHaveExisting", true,
                 "If enabled, a chest only accepts an item if that item is already inside it. Empty chests will not vacuum new item types.");
             LeaveOneItem = file.Bind("3 - Craft", "LeaveOneItem", true,
@@ -62,6 +64,8 @@ namespace StoreAndCraft
                 "If enabled, stacks already inside a chest are compacted toward the Valheim max. Never moves items from your inventory; dump and middle-click do that.");
             CraftRange = file.Bind("3 - Craft", "CraftRange", 20f,
                 "Craft / build / station-[E] pull range in meters (player → chest). Synced from server when LockConfig is on.");
+            AutoFillRange = file.Bind("3 - Craft", "AutoFillRange", 20f,
+                "Auto-fill range in meters: player → kiln/smelter/torch, and player → chests for auto-fill materials. Independent from CraftRange. Synced from server when LockConfig is on.");
             IntakeInterval = file.Bind("2 - Store", "IntakeInterval", 5f,
                 "Seconds between automatic scans for ground items. Lower = snappier, higher = less CPU.");
             MaxTransfersPerTick = file.Bind("1 - General", "MaxTransfersPerTick", 8,
@@ -78,13 +82,20 @@ namespace StoreAndCraft
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
             FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),
                 "Hotkey: while inventory is open, hover an item and press to favorite / unfavorite. Favorites are skipped by dump, hover-store, and inventory sort (local, not synced).");
+            AutoFillKey = file.Bind("4 - Keys", "AutoFillKey", new KeyboardShortcut(KeyCode.B),
+                "Look at a kiln, smelter, or torch / fire with the inventory closed and press to toggle auto-fill. The station pull filter still applies. Local, not synced.");
             SortKey = file.Bind("4 - Keys", "SortKey", new KeyboardShortcut(KeyCode.R),
                 "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, and hotbar stay put).");
         }
 
+        public float StationPullRange()
+        {
+            return Mathf.Max(CraftRange.Value, AutoFillRange.Value);
+        }
+
         public float MaxGameplayRange()
         {
-            return Mathf.Max(PlayerDumpRange.Value, StoreRange.Value, StorageRange.Value, CraftRange.Value);
+            return Mathf.Max(PlayerDumpRange.Value, StoreRange.Value, StorageRange.Value, CraftRange.Value, AutoFillRange.Value);
         }
 
         public void WriteToPackage(ZPackage pkg)
@@ -100,6 +111,7 @@ namespace StoreAndCraft
             pkg.Write(StorageRange.Value);
             pkg.Write(AutoStackEnabled.Value);
             pkg.Write(CraftRange.Value);
+            pkg.Write(AutoFillRange.Value);
             pkg.Write(IntakeInterval.Value);
             pkg.Write(MaxTransfersPerTick.Value);
         }
@@ -117,6 +129,7 @@ namespace StoreAndCraft
             StorageRange.Value = pkg.ReadSingle();
             AutoStackEnabled.Value = pkg.ReadBool();
             CraftRange.Value = pkg.ReadSingle();
+            AutoFillRange.Value = pkg.ReadSingle();
             IntakeInterval.Value = pkg.ReadSingle();
             MaxTransfersPerTick.Value = pkg.ReadInt();
         }

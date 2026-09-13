@@ -128,11 +128,15 @@ namespace StoreAndCraft
     {
         private static void Postfix(Smelter __instance, ref string __result)
         {
-            if (__instance == null || !StationPullFilter.CanConfigure(__instance) || !StationFeed.Ready())
+            if (__instance == null || !StationFeed.Ready())
                 return;
-            string key = StationPullFilter.PromptLabel();
-            __result += "\n[<color=yellow><b>" + key + "</b></color>] "
-                + Loc.T("Chest pull filter", "Truhen-Zug Filter");
+            if (StationPullFilter.CanConfigure(__instance))
+            {
+                string key = StationPullFilter.PromptLabel();
+                __result += "\n[<color=yellow><b>" + key + "</b></color>] "
+                    + Loc.T("Chest pull filter", "Truhen-Zug Filter");
+            }
+            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
         }
     }
 

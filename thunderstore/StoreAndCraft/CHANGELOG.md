@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.1.16 — Kiln / smelter / torch auto-fill
+
+- **Auto-fill:** look at a kiln, smelter, or torch / fire (inventory **closed**) and press **B** to toggle per station. Filter still applies. Inventory first, then chests. A buddy in `AutoFillRange` can fill it; you do not have to stand there yourself
+- Fills when that slot hits **0**, dumps a full load (smelter max, e.g. 10), then waits until empty again. No chest scans while it is running. If chests are empty too, the next chest check is after **20 seconds**
+- **Hotkey:** `AutoFillKey` default **B** (local). Inventory-open **F** is still favorites. Manual **[E]** is unchanged
+- **Range:** `AutoFillRange` (default 20m) is player → station and player → chests for auto-fill only. Independent from `CraftRange` / `[E]`
+- Chat: `/autofillrange 40` or `/sac autofill 40` (host / admin). `/sac status` shows it. Edit the `.cfg` and save: ranges apply **without a server restart**
+- **Fix:** listen-server clients no longer craft many items while the chest only lost materials for one
+- **Fix:** start crash `Undefined target method` on auto-fill message silence
+- Server + all clients need **1.1.16** (config protocol 5)
+
+## 1.1.15 — Auto-fill Harmony crash
+
+- **Fix:** game start no longer errors `Undefined target method` on `AutoFillSilencePatch` (Message lives on Character, not Humanoid). Auto-fill load + silent fill toasts work again
+
+## 1.1.14 — Auto-fill B, fill when empty, no spam
+
+- **Auto-fill hotkey is B** (inventory closed, looking at kiln / smelter / torch). F stays favorites. Valheim already uses F
+- **Fill when empty:** when fuel or ore hits 0, dump a full load (e.g. 10 into a smelter) in one go, then wait until it is empty again. Chests are not scanned while the station is still running. If the station is empty and chests have nothing, the next chest check is after **20 seconds**
+- **Fix:** no yellow “added” toasts and no repeating “it’s full” from auto-fill. Toggle on/off still shows a message. Manual [E] is unchanged
+
+## 1.1.13 — Station auto-fill + client craft consume
+
+- **Feature:** look at a kiln, smelter, or torch / fire (inventory closed) and press **F** to toggle auto-fill. It uses inventory first, then chests, and still respects that station’s pull filter. Inventory-open **F** is still favorites. `[E]` refill is unchanged
+- **Fix (listen server / friends host):** clients could craft many items while the chest only lost materials for one. Consume RPCs now reserve those mats locally so the next craft cannot run on a stale chest count
+- **Note:** auto-store range is `StoreRange` in `com.morda.storeandcraft.cfg` (default 10m). YAML rules files are not used since 1.1.4
+
 ## 1.1.12 — Auto-store while a buddy is in range
 
 - **Fix:** ground pickup only ran for the chest owner. Kiln coal / chicken eggs stayed on the floor when you walked away and a buddy was there. Server now intakes around every player, and chest owners retry after taking drop ownership

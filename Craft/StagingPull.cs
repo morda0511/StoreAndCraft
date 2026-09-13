@@ -85,23 +85,15 @@ namespace StoreAndCraft
                             continue;
 
                         int avail = chestInv.CountItems(shared, itemQuality, true);
+                        avail -= PendingChestDebit.Of(chest, shared);
                         if (leaveOne && avail > 0)
                             avail -= 1;
                         if (avail <= 0)
                             continue;
 
                         int ask = Mathf.Min(deficit, avail);
-                        if (IsChestOwner(chest))
-                        {
-                            int took = TransferService.Consume(chest, shared, ask, leaveOne, itemQuality);
-                            deficit -= took;
-                        }
-                        else
-                        {
-                            // Owner must Load before remove (see TransferService.OnConsume).
-                            TransferService.Consume(chest, shared, ask, leaveOne, itemQuality);
-                            deficit -= ask;
-                        }
+                        int took = TransferService.Consume(chest, shared, ask, leaveOne, itemQuality);
+                        deficit -= took;
                     }
                 }
             }
@@ -109,12 +101,6 @@ namespace StoreAndCraft
             {
                 InventoryCountPatches.Skip--;
             }
-        }
-
-        private static bool IsChestOwner(Container chest)
-        {
-            ZNetView nv = Refs.View(chest);
-            return nv != null && nv.IsValid() && nv.IsOwner();
         }
     }
 }
