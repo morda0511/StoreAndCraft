@@ -36,7 +36,11 @@ namespace StoreAndCraft
                 if (chest == null)
                     continue;
 
-                if (TransferService.StoreItem(chest, inv, item, item.m_stack))
+                int fit = ChestPicker.AmountThatFits(chest.GetInventory(), item);
+                if (fit <= 0)
+                    continue;
+
+                if (TransferService.StoreItem(chest, inv, item, fit))
                     stored++;
             }
 
@@ -79,7 +83,14 @@ namespace StoreAndCraft
                 return false;
             }
 
-            return TransferService.StoreItem(chest, inv, item, item.m_stack);
+            int fit = ChestPicker.AmountThatFits(chest.GetInventory(), item);
+            if (fit <= 0)
+            {
+                player.Message(MessageHud.MessageType.Center, Loc.T("No matching chest.", "Keine passende Truhe."), 0, null, false);
+                return false;
+            }
+
+            return TransferService.StoreItem(chest, inv, item, fit);
         }
 
         public static bool ShouldDump(ItemDrop.ItemData item, Inventory inv)

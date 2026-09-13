@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.17 — Partial dump / hover-store
+
+- **Fix:** dump and middle-click store no longer require the whole stack to fit. Wood 28 into a chest at 26/50 now fills to 50 and leaves the rest in your bag (was “No matching chest”)
+
 ## 1.1.16 — Kiln / smelter / torch auto-fill
 
 - **Auto-fill:** look at a kiln, smelter, or torch / fire (inventory **closed**) and press **B** to toggle per station. Filter still applies. Inventory first, then chests. A buddy in `AutoFillRange` can fill it; you do not have to stand there yourself

@@ -512,8 +512,13 @@ namespace StoreAndCraft
 
             // Best-effort room check on our view of the chest. Owner re-checks and refunds.
             Inventory chestInv = chest.GetInventory();
-            if (chestInv != null && !chestInv.CanAddItem(item, take))
-                return false;
+            if (chestInv != null)
+            {
+                int fit = ChestPicker.AmountThatFits(chestInv, item);
+                take = Mathf.Min(take, fit);
+                if (take <= 0)
+                    return false;
+            }
 
             string prefabName = ItemIds.PrefabName(item) ?? ItemIds.SharedName(item) ?? "";
             if (string.IsNullOrEmpty(prefabName))
@@ -630,7 +635,9 @@ namespace StoreAndCraft
                 return false;
 
             int take = Mathf.Min(amount, item.m_stack);
-            if (take <= 0 || !inv.CanAddItem(item, take))
+            int fit = ChestPicker.AmountThatFits(inv, item);
+            take = Mathf.Min(take, fit);
+            if (take <= 0)
                 return false;
 
             string shared = item.m_shared.m_name;

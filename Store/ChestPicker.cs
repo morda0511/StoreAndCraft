@@ -47,19 +47,52 @@ namespace StoreAndCraft
             if (!ContainerFilter.IsPlayerBuiltStorage(chest))
                 return false;
 
+            NearbyIndex.EnsureInventory(chest);
             Inventory inv = chest.GetInventory();
-            if (inv == null || !inv.CanAddItem(item, item.m_stack))
+            if (inv == null)
                 return false;
 
             if (mustExist)
             {
                 string shared = ItemIds.SharedName(item);
-                NearbyIndex.EnsureInventory(chest);
                 if (string.IsNullOrEmpty(shared) || inv.CountItems(shared, -1, true) <= 0)
                     return false;
             }
 
-            return true;
+            return AmountThatFits(inv, item) > 0;
+        }
+
+        /// <summary>
+        /// How many of this stack the chest can take (fill existing stacks, then empty slots).
+        /// Partial is OK: 28 wood into a 26/50 stack stores 24 and leaves 4.
+        /// </summary>
+        public static int AmountThatFits(Inventory inv, ItemDrop.ItemData item)
+        {
+            if (inv == null || item == null || item.m_stack <= 0)
+                return 0;
+
+            int want = item.m_stack;
+            if (inv.CanAddItem(item, want))
+                return want;
+
+            int lo = 1;
+            int hi = want - 1;
+            int best = 0;
+            while (lo <= hi)
+            {
+                int mid = (lo + hi) / 2;
+                if (inv.CanAddItem(item, mid))
+                {
+                    best = mid;
+                    lo = mid + 1;
+                }
+                else
+                {
+                    hi = mid - 1;
+                }
+            }
+
+            return best;
         }
 
         public static List<Container> FindHolding(Vector3 origin, float range, string sharedName)

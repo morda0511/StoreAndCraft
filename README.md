@@ -21,7 +21,7 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - Ward / private area rules still apply.
 
 ### Dump & quick store
-- **`.`** — dump allowed inventory stacks into matching nearby **player-built** chests.
+- **`.`** — dump allowed inventory stacks into matching nearby **player-built** chests. If the chest cannot take the whole stack, it fills what fits and leaves the rest.
 - **Middle mouse** (inventory open) — store only the hovered item.
 - Hotbar can be skipped (`IgnoreHotbar`).
 - Favorites are never dumped / hover-stored (see below).
