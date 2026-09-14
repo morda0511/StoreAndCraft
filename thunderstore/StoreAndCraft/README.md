@@ -1,7 +1,7 @@
 # StoreAndCraft
 
 **Your base runs with you.**  
-Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]** — or toggle **auto-fill with B** while looking at a kiln / smelter / torch. Tell each station which wood or ore it’s allowed to take. Storage Displays track your stock by type (pick several at once). Mark favorites with **F**, find a stack with **Y**, sort with **R**, skip a chest with **`[I]`**. Carts and ships count too.
+Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]** — or toggle **auto-fill with B**. Cooking stations can **auto-drop finished food with N** so chests pick it up. Tell each station which wood or ore it’s allowed to take. Storage Displays track your stock by type (pick several at once). Mark favorites with **F**, find a stack with **Y**, sort with **R**, skip a chest with **`[I]`**. Carts and ships count too.
 
 **Required on the dedicated / hosted server and every PC client** (same version). Valheim 1.0 · BepInExPack 5.4.2350+. Console players via crossplay cannot load the mod.
 
@@ -38,11 +38,17 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - Pulls fuel / ore / food from nearby chests when you don’t have it.
 - **Inventory first:** if you already hold a valid item (e.g. deer meat), that is used before chest contents (e.g. boar meat).
 
-### Kiln / smelter / torch auto-fill
-- Look at a kiln, smelter, blast furnace, cooking / stone oven, fermenter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station (saved on the station).
+### Kiln / smelter / cooking auto-fill
+- Look at a kiln, smelter, blast furnace, cooking spit, iron cooking station, stone oven, fermenter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station (saved on the station).
 - When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from inventory first, then chests within `AutoFillRange`. Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
+- Cooking / ovens top up **free slots** (not only when fully empty). Stone oven door hover shows the toggle; food is added even if the under-fire is out (baking still needs fire to cook).
 - No chest scans and no “it’s full” spam while the station is still running. Filter still applies (Wood OFF stays OFF).
 - **F** with inventory open is still favorites. Manual **[E]** refill is unchanged.
+
+### Cooking auto-drop
+- Look at a cooking spit, iron cooking station, or stone oven (inventory **closed**) → **N** toggles auto-drop for that station (saved on the station).
+- Finished food falls off as a ground drop so auto-store can put it in a matching chest.
+- Pair with **B** auto-fill for hands-off cooking / baking (fire under the stone oven still required to cook).
 
 ### Kiln / smelter pull filter
 - Look at a kiln or multi-input smelter → **Alt+E**.
@@ -93,7 +99,8 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 | **Ctrl + Middle mouse** | Fill hovered stack from nearby chests |
 | **Alt + E** | Rename looked-at chest **or** open kiln/smelter pull filter |
 | **F** | Favorite / unfavorite hovered inventory item |
-| **B** | Toggle auto-fill on the kiln / smelter / torch you are looking at (inventory closed) |
+| **B** | Toggle auto-fill on the station you are looking at (inventory closed) |
+| **N** | Toggle auto-drop on a cooking spit / iron station / stone oven (inventory closed) |
 | **Y** | Hover an inventory item and press — nearest chest with that item blinks **3×** + map ping |
 | **R** | Sort: bag open = inventory only; chest open = that chest only |
 

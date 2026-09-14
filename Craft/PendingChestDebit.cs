@@ -7,12 +7,19 @@ namespace StoreAndCraft
     /// Client-side reservation after a consume RPC. Remote chest inventories do not
     /// drop until the owner applies the RPC, so HaveRequirements would stay true and
     /// listen-server clients could craft many items for one pull.
+    ///
+    /// Once the ZDO sync updates the local chest inventory, the debit must be cleared.
+    /// Otherwise counts subtract twice (debit + synced removal) and look like a double
+    /// consume that "refunds" when the debit expires — common with a second player nearby
+    /// who owns the chests.
     /// </summary>
     internal static class PendingChestDebit
     {
         private const float Lifetime = 8f;
         private static readonly Dictionary<string, int> Amounts = new Dictionary<string, int>();
         private static readonly Dictionary<string, float> ExpireAt = new Dictionary<string, float>();
+        /// <summary>Raw chest count we expect after the owner applies all pending debit.</summary>
+        private static readonly Dictionary<string, int> ExpectedMax = new Dictionary<string, int>();
 
         public static void Add(Container chest, string shared, int amount)
         {
@@ -22,8 +29,14 @@ namespace StoreAndCraft
             string key = Key(chest, shared);
             int have;
             Amounts.TryGetValue(key, out have);
-            Amounts[key] = have + amount;
+            int total = have + amount;
+            Amounts[key] = total;
             ExpireAt[key] = Time.unscaledTime + Lifetime;
+
+            Inventory inv = chest.GetInventory();
+            int raw = inv != null ? inv.CountItems(shared, -1, true) : 0;
+            ExpectedMax[key] = raw - total;
+
             NearbyIndex.InvalidateCounts();
         }
 
@@ -33,8 +46,43 @@ namespace StoreAndCraft
                 return 0;
 
             Prune();
+            string key = Key(chest, shared);
             int n;
-            return Amounts.TryGetValue(Key(chest, shared), out n) ? n : 0;
+            if (!Amounts.TryGetValue(key, out n) || n <= 0)
+                return 0;
+
+            // ZDO sync already removed the items locally — drop the reservation or
+            // UI/craft math counts the take twice until Lifetime expires.
+            if (SyncApplied(chest, shared, key))
+                return 0;
+
+            return n;
+        }
+
+        public static void OnInventoryLoaded(Container chest)
+        {
+            if (chest == null || Amounts.Count == 0)
+                return;
+
+            string prefix = chest.GetInstanceID() + "|";
+            var keys = new List<string>();
+            foreach (string key in Amounts.Keys)
+            {
+                if (key.StartsWith(prefix))
+                    keys.Add(key);
+            }
+
+            bool changed = false;
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string key = keys[i];
+                string shared = key.Substring(prefix.Length);
+                if (SyncApplied(chest, shared, key))
+                    changed = true;
+            }
+
+            if (changed)
+                NearbyIndex.InvalidateCounts();
         }
 
         public static void Tick()
@@ -42,6 +90,26 @@ namespace StoreAndCraft
             if (Amounts.Count == 0)
                 return;
             Prune();
+        }
+
+        private static bool SyncApplied(Container chest, string shared, string key)
+        {
+            int expectedMax;
+            if (!ExpectedMax.TryGetValue(key, out expectedMax))
+                return false;
+
+            Inventory inv = chest.GetInventory();
+            if (inv == null)
+                return false;
+
+            int current = inv.CountItems(shared, -1, true);
+            if (current > expectedMax)
+                return false;
+
+            Amounts.Remove(key);
+            ExpireAt.Remove(key);
+            ExpectedMax.Remove(key);
+            return true;
         }
 
         private static void Prune()
@@ -62,8 +130,10 @@ namespace StoreAndCraft
 
             for (int i = 0; i < dead.Count; i++)
             {
-                Amounts.Remove(dead[i]);
-                ExpireAt.Remove(dead[i]);
+                string key = dead[i];
+                Amounts.Remove(key);
+                ExpireAt.Remove(key);
+                ExpectedMax.Remove(key);
             }
 
             NearbyIndex.InvalidateCounts();

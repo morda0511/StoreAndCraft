@@ -34,6 +34,10 @@ namespace StoreAndCraft
             {
                 StationAutoFill.TryToggle();
             }
+            else if (KeyUtil.Down(Plugin.Settings.AutoDropKey.Value))
+            {
+                CookingAutoDrop.TryToggle();
+            }
 
             if (KeyUtil.Down(Plugin.Settings.RenameKey.Value))
             {

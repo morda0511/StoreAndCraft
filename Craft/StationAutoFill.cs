@@ -153,7 +153,7 @@ namespace StoreAndCraft
 
         public static void AppendHover(ref string text, ZNetView nv)
         {
-            if (string.IsNullOrEmpty(text) || !StationFeed.Ready())
+            if (!StationFeed.Ready())
                 return;
             if (nv == null || !nv.IsValid())
                 return;
@@ -161,6 +161,9 @@ namespace StoreAndCraft
             string key = KeyUtil.Format(Plugin.Settings.AutoFillKey.Value);
             if (string.IsNullOrEmpty(key))
                 key = "B";
+
+            if (string.IsNullOrEmpty(text))
+                text = "";
 
             text += "\n[<color=yellow><b>" + key + "</b></color>] "
                 + Loc.T("Auto-fill", "Auto-Fill")
@@ -485,7 +488,10 @@ namespace StoreAndCraft
             if (oven.m_useFuel && oven.m_fuelItem != null && oven.m_maxFuel > 0
                 && !IsQuiet(oven, "fuel") && ReadNumber(CookGetFuel, oven) <= 0.01f)
                 did |= FillOvenFuel(oven, player);
-            if (!IsQuiet(oven, "food") && IsTrue(CookIsEmpty, oven))
+            // Free slots, not only fully empty: stone oven / spit can top up after
+            // auto-drop clears done food. OnUseItem needs a lit fire under stone ovens;
+            // FillOvenFood uses RPC_AddItem so baking can queue without that block.
+            if (!IsQuiet(oven, "food") && !IsTrue(CookIsFull, oven))
                 did |= FillOvenFood(oven, player);
             return did;
         }
@@ -540,30 +546,57 @@ namespace StoreAndCraft
                 return false;
 
             ZNetView nv = oven.GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid())
+                return false;
+
+            Inventory inv = player.GetInventory();
             int added = 0;
             int guard = oven.m_slots != null ? oven.m_slots.Length : 5;
             while (guard-- > 0 && !IsTrue(CookIsFull, oven))
             {
+                string shared = null;
+                string prefab = null;
+
                 if (HasLocalAny(player, foods))
                 {
                     ItemDrop.ItemData item = FirstLocal(player, foods);
-                    if (item == null || CookUseItem == null || !InvokeWith(CookUseItem, oven, player, item))
+                    if (item == null || item.m_shared == null)
                         break;
-                    added++;
-                    continue;
-                }
+                    shared = item.m_shared.m_name;
+                    prefab = PrefabName(shared);
+                    if (string.IsNullOrEmpty(prefab))
+                        break;
 
-                if (added == 0 && !ChestsHaveAny(player, foods))
+                    // Do not call OnUseItem: stone oven m_requireFire blocks adds when
+                    // the under-fire is out. RPC_AddItem matches vanilla network add.
+                    InventoryCountPatches.Skip++;
+                    try
+                    {
+                        if (!inv.RemoveOneItem(item))
+                            break;
+                    }
+                    finally
+                    {
+                        InventoryCountPatches.Skip--;
+                    }
+                }
+                else
                 {
-                    Quiet(oven, "food", QuietEmptySeconds);
-                    return added > 0;
+                    if (added == 0 && !ChestsHaveAny(player, foods))
+                    {
+                        Quiet(oven, "food", QuietEmptySeconds);
+                        return added > 0;
+                    }
+
+                    shared = FirstChestItem(player, foods);
+                    prefab = PrefabName(shared);
+                    if (string.IsNullOrEmpty(prefab)
+                        || StationFeed.ConsumeFromChests(player, shared, 1) < 1)
+                        break;
                 }
 
-                string shared = FirstChestItem(player, foods);
-                string prefab = PrefabName(shared);
-                if (nv == null || !nv.IsValid() || string.IsNullOrEmpty(prefab)
-                    || StationFeed.ConsumeFromChests(player, shared, 1) < 1)
-                    break;
+                if (!nv.IsOwner())
+                    nv.ClaimOwnership();
 
                 BeginSilence();
                 try
@@ -1129,6 +1162,26 @@ namespace StoreAndCraft
             if (__instance == null)
                 return;
             StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
+        }
+    }
+
+    /// <summary>
+    /// Stone oven food door uses Switch.m_hoverText, and CookingStation.GetHoverText
+    /// returns "" when m_addFoodSwitch is set — so spit hover patches never ran there.
+    /// Fuel switch already goes through OnHoverFuelSwitch (do not append twice).
+    /// </summary>
+    [HarmonyPatch(typeof(Switch), nameof(Switch.GetHoverText))]
+    internal static class CookingSwitchHoverAutoFillPatch
+    {
+        private static void Postfix(Switch __instance, ref string __result)
+        {
+            if (__instance == null || string.IsNullOrEmpty(__result))
+                return;
+            CookingStation oven = __instance.GetComponentInParent<CookingStation>();
+            if (oven == null || __instance != oven.m_addFoodSwitch)
+                return;
+            StationAutoFill.AppendHover(ref __result, oven.GetComponent<ZNetView>());
+            CookingAutoDrop.AppendHover(ref __result, oven);
         }
     }
 

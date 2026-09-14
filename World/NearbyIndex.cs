@@ -130,6 +130,7 @@ namespace StoreAndCraft
 
             ContainerFilter.RefreshInventory(container);
             LastInventoryLoad[id] = now;
+            PendingChestDebit.OnInventoryLoaded(container);
         }
 
         public static void Rescan(Vector3 origin, float range)

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 — Cooking auto-drop + stone oven auto-fill
+
+- **Feature:** look at a cooking spit, iron cooking station, or stone oven (inventory **closed**) and press **N** to toggle **auto-drop**. Finished food falls off as a ground drop so auto-store can put it in a chest. Per-station, saved on the piece. Hotkey `AutoDropKey` (default **N**)
+- **Fix:** stone oven **B** auto-fill — hover on the oven door now shows the toggle; food is added via the station RPC (no longer blocked when the under-fire is out); free slots are topped up (not only when the oven is fully empty)
+- **Fix:** workbench craft UI no longer looks like it spent mats twice when another player is nearby (PendingChestDebit cleared once the chest ZDO syncs). Real chest take was already 1×
+- Server + all clients need **1.2.1**
+
 ## 1.2.0 — Auto-store if any player is in range
 
 - **Fix:** ground loot stores when **one** player is in `StoreRange` of the pile, not only the person who owns it. Walk off a kiln / smelter / blast furnace and a buddy can stay; your coal still goes in the chest

@@ -32,6 +32,7 @@ namespace StoreAndCraft
         public ConfigEntry<KeyboardShortcut> TakeStackKey { get; }
         public ConfigEntry<KeyboardShortcut> FavoriteKey { get; }
         public ConfigEntry<KeyboardShortcut> AutoFillKey { get; }
+        public ConfigEntry<KeyboardShortcut> AutoDropKey { get; }
         public ConfigEntry<KeyboardShortcut> SortKey { get; }
 
         public ModConfig(ConfigFile file)
@@ -84,6 +85,8 @@ namespace StoreAndCraft
                 "Hotkey: while inventory is open, hover an item and press to favorite / unfavorite. Favorites are skipped by dump, hover-store, and inventory sort (local, not synced).");
             AutoFillKey = file.Bind("4 - Keys", "AutoFillKey", new KeyboardShortcut(KeyCode.B),
                 "Look at a kiln, smelter, blast furnace, cooking / stone oven, fermenter, or torch / fire with the inventory closed and press to toggle auto-fill. The station pull filter still applies. Local, not synced.");
+            AutoDropKey = file.Bind("4 - Keys", "AutoDropKey", new KeyboardShortcut(KeyCode.N),
+                "Look at a cooking spit or stone oven with the inventory closed and press to toggle auto-drop. Finished food falls off as a ground drop so auto-store can pick it up. Per-station, stored on the piece.");
             SortKey = file.Bind("4 - Keys", "SortKey", new KeyboardShortcut(KeyCode.R),
                 "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, and hotbar stay put).");
         }
