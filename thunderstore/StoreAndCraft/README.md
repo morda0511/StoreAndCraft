@@ -14,7 +14,7 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 ## Features
 
 ### Auto-store
-- Ground items are pulled into nearby chests automatically.
+- Ground items are pulled into nearby chests automatically if **any one player** is in `StoreRange` of the pile. You can walk off; a buddy standing there is enough.
 - Default: a chest only accepts an item if that type is **already inside** (`MustHaveExisting`).
 - Carts (`Vagon`) and **ships** count as containers too.
 - **Player-built chests only** for dump / auto-store (crypts, house spawns, and other world chests are skipped).

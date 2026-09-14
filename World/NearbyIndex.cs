@@ -205,6 +205,36 @@ namespace StoreAndCraft
             }
         }
 
+        public static void CollectNear(Vector3 origin, float range, List<Container> dest)
+        {
+            if (dest == null)
+                return;
+            dest.Clear();
+            if (range <= 0f)
+                return;
+
+            if (Time.unscaledTime >= _nextPrune)
+            {
+                PruneDead();
+                if (Registered.Count == 0)
+                    BootstrapExisting();
+                _nextPrune = Time.unscaledTime + 5f;
+            }
+
+            float rangeSq = range * range;
+            for (int i = 0; i < Registered.Count; i++)
+            {
+                Container container = Registered[i];
+                if (IsDestroyed(container) || !IsReady(container))
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, container.transform.position) > rangeSq)
+                    continue;
+                if (!ContainerFilter.PlayerMayUse(container, origin))
+                    continue;
+                dest.Add(container);
+            }
+        }
+
         public static List<Container> Within(Vector3 origin, float range)
         {
             var result = new List<Container>();

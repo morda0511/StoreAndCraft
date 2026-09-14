@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 — Auto-store if any player is in range
+
+- **Fix:** ground loot stores when **one** player is in `StoreRange` of the pile, not only the person who owns it. Walk off a kiln / smelter / blast furnace and a buddy can stay; your coal still goes in the chest
+- Server + all clients need **1.2.0**
+
 ## 1.1.19 — Auto-fill from chests, no bag spam
 
 - **Fix:** auto-fill no longer pulls coal / ore / fuel into your inventory 1 at a time (blast furnace “out of coal” flash, then a single piece appearing). Chests are consumed in place and the station is filled directly. Inventory is still used first if you already hold the item
