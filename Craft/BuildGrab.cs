@@ -6,6 +6,8 @@ namespace StoreAndCraft
 {
     /// <summary>
     /// Shift + place: never build — pull the ghost piece's costs from nearby chests into the bag.
+    /// Must cancel at TryPlacePiece (not PlacePiece): UpdatePlacement calls ConsumeResources
+    /// after a successful TryPlacePiece, which would eat the stacks we just withdrew.
     /// </summary>
     internal static class BuildGrab
     {
@@ -80,12 +82,9 @@ namespace StoreAndCraft
                         continue;
 
                     string shared = req.m_resItem.m_itemData.m_shared.m_name;
-                    int have = inv.CountItems(shared, -1, true);
-                    int deficit = need - have;
-                    if (deficit <= 0)
-                        continue;
-
-                    int still = deficit;
+                    // Always pull one full piece-cost set per Shift-click, even if the bag
+                    // already has enough (so you can stockpile for several builds).
+                    int still = need;
                     for (int i = 0; i < Scratch.Count; i++)
                     {
                         Container chest = Scratch[i];
@@ -101,7 +100,7 @@ namespace StoreAndCraft
                             continue;
 
                         NearbyIndex.EnsureInventory(chest);
-                        int took = TransferService.Withdraw(chest, shared, still, inv, leaveOne);
+                        int took = TransferService.WithdrawForGrab(chest, shared, still, player, leaveOne);
                         still -= took;
                         pulled += took;
                     }
@@ -115,6 +114,9 @@ namespace StoreAndCraft
                 InventoryCountPatches.Skip--;
             }
 
+            if (pulled > 0)
+                Refs.NotifyChanged(inv);
+
             if (pulled <= 0 && missing > 0)
                 MaybeMsg(player, Loc.T("No materials in nearby chests", "Keine Materialien in nahen Truhen"));
             else if (missing > 0)
@@ -122,7 +124,7 @@ namespace StoreAndCraft
             else if (pulled > 0)
                 MaybeMsg(player, Loc.T("Grabbed build materials from chests", "Baumaterial aus Truhen geholt"));
             else
-                MaybeMsg(player, Loc.T("You already have the materials", "Material schon im Inventar"));
+                MaybeMsg(player, Loc.T("Could not grab materials (bag full?)", "Kein Material geholt (Tasche voll?)"));
         }
 
         private static void MaybeMsg(Player player, string text)
@@ -136,13 +138,30 @@ namespace StoreAndCraft
         }
     }
 
+    [HarmonyPatch(typeof(Player), nameof(Player.TryPlacePiece))]
+    [HarmonyPriority(Priority.First)]
+    internal static class TryPlacePieceGrabPatch
+    {
+        // UpdatePlacement only calls ConsumeResources when TryPlacePiece returns true.
+        // Returning false here keeps grabbed mats in the bag (inventory UI can stay closed).
+        private static bool Prefix(Player __instance, Piece piece, ref bool __result)
+        {
+            if (!BuildGrab.TryInterceptPlace(__instance, piece))
+                return true;
+
+            __result = false;
+            return false;
+        }
+    }
+
     [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece))]
+    [HarmonyPriority(Priority.First)]
     internal static class PlacePieceGrabPatch
     {
-        // PlacePiece is void — Prefix returning false skips place entirely while Shift is held.
+        // Backup: if something calls PlacePiece directly while Shift is held, still skip spawn.
         private static bool Prefix(Player __instance, Piece piece)
         {
-            if (BuildGrab.TryInterceptPlace(__instance, piece))
+            if (BuildGrab.ShiftHeld() && __instance == Player.m_localPlayer)
                 return false;
             return true;
         }

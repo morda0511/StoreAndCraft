@@ -83,20 +83,19 @@ namespace StoreAndCraft
                     _flowSections = false;
                     break;
                 case DisplayKind.Large:
-                    // Fixed row table: label strip + dense items (wrap stays in item columns).
+                    // Fixed 12-row table (label | items). Do not rebuild when filter count changes.
                     _headerColumns = 0;
                     _itemsPerGroup = 1;
-                    _columns = 8;
-                    _rows = 12;
+                    _columns = 10;
+                    _rows = DisplayFilters.MaxCategories; // 12
                     _slotCount = _columns * _rows;
-                    // Prefab ~3× medium; keep labels/icons readable (was far too small).
-                    _fontFactor = 0.32f / 3f;
-                    _titleFactor = 0.14f / 3f;
+                    _fontFactor = 0.18f / 3f;
+                    _titleFactor = 0.10f / 3f;
                     _columnMajor = false;
                     _columnHeaders = false;
                     _tightSlots = true;
                     _flowSections = true;
-                    _labelWidth = 0.18f;
+                    _labelWidth = 0.12f;
                     break;
                 default:
                     // Category title strip + denser item cells; sort grouped by category.
@@ -573,16 +572,11 @@ namespace StoreAndCraft
             // Large switched from fixed 3-column headers to flowing sections.
             if (_slots != null && _kind == DisplayKind.Large && (_headers != null || !_flowSections || _columnMajor))
                 _slots = null;
-            // Large band count changed (1–12) → rebuild anchors.
-            if (_slots != null && _kind == DisplayKind.Large && _flowSections)
-            {
-                int want = Mathf.Clamp(
-                    BuildSectionOrder(FilterIds(), ItemTokens()).Count,
-                    1,
-                    DisplayFilters.MaxCategories);
-                if (_builtBandCount != want)
-                    _slots = null;
-            }
+            // Large must keep a full 12-row slot grid (never shrink with filter count).
+            if (_slots != null && _kind == DisplayKind.Large && _flowSections
+                && (_bandLabels == null || _bandLabels.Length < DisplayFilters.MaxCategories
+                    || _slots.Length != _columns * DisplayFilters.MaxCategories))
+                _slots = null;
             if (_slots != null && _kind == DisplayKind.Small && _slots.Length == 1
                 && _slots[0].Amount != null && _slots[0].Amount.fontSize < 1f)
                 _slots = null;
@@ -686,8 +680,7 @@ namespace StoreAndCraft
             rt.sizeDelta = board.sizeDelta;
             rt.offsetMin = board.offsetMin;
             rt.offsetMax = board.offsetMax;
-            // Parent already carries piece scale — do not multiply again.
-            rt.localScale = Vector3.one;
+            rt.localScale = board.localScale;
             rt.localRotation = board.localRotation;
 
             float font = template.fontSize * _fontFactor;
@@ -769,32 +762,31 @@ namespace StoreAndCraft
         {
             _headers = null;
             _gridRoot = root.GetComponent<RectTransform>();
-            int cats = BuildSectionOrder(FilterIds(), ItemTokens()).Count;
-            int bands = Mathf.Clamp(cats, 1, DisplayFilters.MaxCategories);
-            _builtBandCount = bands;
-
-            // Share vertical space: few cats → more item lines each; 12 cats → one line each.
-            int linesPerBand = Mathf.Max(1, _rows / bands);
+            // Always build the full 12-row chassis once. Paint decides how many rows are used.
+            int rows = DisplayFilters.MaxCategories;
             int itemCols = _columns;
-            float labelW = Mathf.Clamp(_labelWidth, 0.14f, 0.24f);
-            float padX = 0.003f;
-            float padY = 0.006f;
-            float iconMax = 0.42f;
-            float textMin = 0.38f;
+            _rows = rows;
+            _slotCount = rows * itemCols;
+            _builtBandCount = rows;
 
-            _bandLabels = new TextMeshProUGUI[DisplayFilters.MaxCategories];
-            for (int b = 0; b < DisplayFilters.MaxCategories; b++)
+            float labelW = Mathf.Clamp(_labelWidth, 0.10f, 0.16f);
+            float padX = 0.0025f;
+            float padY = 0.006f;
+            // Icon + room for 4-digit counts (e.g. 9999) without eating the next cell.
+            float iconMax = 0.34f;
+            float textMin = 0.30f;
+
+            _bandLabels = new TextMeshProUGUI[rows];
+            for (int r = 0; r < rows; r++)
             {
                 GameObject labelGo = Object.Instantiate(template.gameObject, root.transform);
-                labelGo.name = "BandLabel" + b;
-                bool on = b < bands;
-                labelGo.SetActive(on);
+                labelGo.name = "BandLabel" + r;
+                labelGo.SetActive(false);
                 RectTransform labelRt = labelGo.GetComponent<RectTransform>();
-                float y0 = 1f - (b + 1) / (float)bands;
-                float y1 = 1f - b / (float)bands;
-                // Label only in left strip — flush to left edge.
-                labelRt.anchorMin = new Vector2(0.002f, y0 + padY);
-                labelRt.anchorMax = new Vector2(labelW - 0.008f, y1 - padY);
+                float y0 = 1f - (r + 1) / (float)rows;
+                float y1 = 1f - r / (float)rows;
+                labelRt.anchorMin = new Vector2(0.004f, y0 + padY);
+                labelRt.anchorMax = new Vector2(labelW - 0.006f, y1 - padY);
                 labelRt.offsetMin = Vector2.zero;
                 labelRt.offsetMax = Vector2.zero;
                 labelRt.localScale = Vector3.one;
@@ -807,48 +799,34 @@ namespace StoreAndCraft
                 if (template.font != null)
                     label.font = template.font;
                 label.enabled = true;
-                label.alignment = TextAlignmentOptions.Left;
+                label.alignment = TextAlignmentOptions.MidlineLeft;
                 label.textWrappingMode = TextWrappingModes.NoWrap;
                 label.overflowMode = TextOverflowModes.Ellipsis;
-                label.enableAutoSizing = true;
-                label.fontSizeMin = font * 0.55f;
-                label.fontSizeMax = font * 1.15f;
+                label.enableAutoSizing = false;
+                label.fontSize = font;
                 label.color = new Color(1f, 0.92f, 0.55f, 1f);
                 label.faceColor = new Color32(255, 235, 140, 255);
                 label.outlineWidth = 0f;
                 label.raycastTarget = false;
                 label.text = "";
-                _bandLabels[b] = label;
+                _bandLabels[r] = label;
             }
 
-            int needSlots = bands * linesPerBand * itemCols;
-            _slots = new SlotUi[Mathf.Max(_slotCount, needSlots)];
-            for (int i = 0; i < _slots.Length; i++)
-                _slots[i] = default(SlotUi);
-
+            _slots = new SlotUi[_slotCount];
             int slot = 0;
-            for (int b = 0; b < bands; b++)
+            for (int r = 0; r < rows; r++)
             {
-                float bandY0 = 1f - (b + 1) / (float)bands;
-                float bandY1 = 1f - b / (float)bands;
-                float bandH = bandY1 - bandY0;
-                for (int line = 0; line < linesPerBand; line++)
+                float y0 = 1f - (r + 1) / (float)rows;
+                float y1 = 1f - r / (float)rows;
+                for (int col = 0; col < itemCols; col++)
                 {
-                    float ly0 = bandY0 + bandH * (1f - (line + 1) / (float)linesPerBand) + padY * 0.5f;
-                    float ly1 = bandY0 + bandH * (1f - line / (float)linesPerBand) - padY * 0.5f;
-                    for (int col = 0; col < itemCols; col++)
-                    {
-                        // Items only to the RIGHT of the label column (wrap stays indented).
-                        float x0 = labelW + (1f - labelW) * (col / (float)itemCols);
-                        float x1 = labelW + (1f - labelW) * ((col + 1) / (float)itemCols);
-                        CreateSlotCell(root.transform, template, font, iconMax, textMin, padX, padY, 1f,
-                            x0, x1, ly0, ly1, slot);
-                        slot++;
-                    }
+                    float x0 = labelW + (1f - labelW) * (col / (float)itemCols);
+                    float x1 = labelW + (1f - labelW) * ((col + 1) / (float)itemCols);
+                    CreateSlotCell(root.transform, template, font, iconMax, textMin, padX, padY, 1f,
+                        x0, x1, y0, y1, slot);
+                    slot++;
                 }
             }
-
-            _slotCount = slot;
         }
 
         private void CreateSlotCell(
@@ -1261,9 +1239,10 @@ namespace StoreAndCraft
         {
             ClearHeaders();
             List<int> sections = BuildSectionOrder(filters, itemTokens);
+
             for (int i = 0; i < _slotCount; i++)
             {
-                if (_slots[i].Icon != null)
+                if (_slots != null && i < _slots.Length && _slots[i].Icon != null)
                     ClearSlot(i);
             }
 
@@ -1281,18 +1260,23 @@ namespace StoreAndCraft
             if (sections.Count == 0)
                 return;
 
-            int bands = Mathf.Clamp(sections.Count, 1, DisplayFilters.MaxCategories);
-            int linesPerBand = Mathf.Max(1, _rows / bands);
+            int cats = Mathf.Clamp(sections.Count, 1, DisplayFilters.MaxCategories);
+            int rows = DisplayFilters.MaxCategories;
             int itemCols = _columns;
-            int perBand = linesPerBand * itemCols;
+            // Few categories → more rows each; 12 cats → one row each.
+            int linesPerCat = Mathf.Max(1, rows / cats);
 
-            for (int b = 0; b < bands; b++)
+            for (int c = 0; c < cats; c++)
             {
-                int catId = sections[b];
-                if (_bandLabels != null && b < _bandLabels.Length && _bandLabels[b] != null)
+                int catId = sections[c];
+                int row0 = c * linesPerCat;
+                if (row0 >= rows)
+                    break;
+
+                if (_bandLabels != null && row0 < _bandLabels.Length && _bandLabels[row0] != null)
                 {
-                    _bandLabels[b].gameObject.SetActive(true);
-                    _bandLabels[b].text = ShortCategoryLabel(catId);
+                    _bandLabels[row0].gameObject.SetActive(true);
+                    _bandLabels[row0].text = ShortCategoryLabel(catId);
                 }
 
                 List<int> oneFilter;
@@ -1300,30 +1284,30 @@ namespace StoreAndCraft
                 SplitSelectionForSection(catId, filters, itemTokens, out oneFilter, out oneTokens);
                 var ranked = RankItems(cluster, oneFilter, oneTokens, false);
 
-                int baseSlot = b * perBand;
+                int capacity = linesPerCat * itemCols;
+                int baseSlot = row0 * itemCols;
+
                 if (ranked.Count == 0)
                 {
-                    int emptySlot = baseSlot;
-                    if (emptySlot < _slotCount && _slots[emptySlot].Amount != null)
-                        SetAmount(emptySlot, "0", new Color(0.75f, 0.7f, 0.55f, 1f));
+                    if (baseSlot < _slotCount)
+                        SetAmount(baseSlot, "0", new Color(0.75f, 0.7f, 0.55f, 1f));
                     continue;
                 }
 
-                int capacity = perBand;
                 int extra = Mathf.Max(0, ranked.Count - capacity);
                 int show = extra > 0 ? capacity - 1 : Mathf.Min(capacity, ranked.Count);
-                for (int r = 0; r < show; r++)
+                for (int i = 0; i < show; i++)
                 {
-                    int slot = baseSlot + r;
+                    int slot = baseSlot + i;
                     if (slot >= _slotCount || _slots[slot].Icon == null)
                         break;
-                    PaintSlot(slot, ranked[r]);
+                    PaintSlot(slot, ranked[i]);
                 }
 
                 if (extra > 0)
                 {
                     int overflowSlot = baseSlot + capacity - 1;
-                    if (overflowSlot < _slotCount && _slots[overflowSlot].Amount != null)
+                    if (overflowSlot < _slotCount)
                     {
                         ClearSlot(overflowSlot);
                         SetAmount(overflowSlot, "+" + (ranked.Count - show),

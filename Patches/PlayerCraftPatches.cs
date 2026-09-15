@@ -17,6 +17,10 @@ namespace StoreAndCraft
             if (__instance == null || !__instance.IsOwner() || !StagingPull.Active)
                 return;
 
+            // Shift+build grab: never destroy chest stacks; PlacePiece is cancelled separately.
+            if (BuildGrab.ShiftHeld())
+                return;
+
             // Pay chest deficit here. Do not stage mats into the backpack first — that
             // fills free slots and Valheim then fails to add the crafted item.
             StagingPull.ConsumeRequirements(__instance, requirements, qualityLevel, itemQuality, multiplier);

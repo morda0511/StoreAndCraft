@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.8 — Pre-release hotfix
+
+- **Fix:** Shift+build grab — mats no longer vanish (cancel at `TryPlacePiece` so `ConsumeResources` does not eat the bag right after withdraw)
+- **Fix:** Shift+build can pull another full piece-cost set each click, even if you already have those mats in the bag
+
 ## 1.2.7 — Pre-release hotfix
 
 - **Fix:** Large display with many categories was unreadable (tiny icons / empty board) — bigger fonts, correct grid scale, label column + indented wrap

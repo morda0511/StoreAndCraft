@@ -124,6 +124,36 @@ namespace StoreAndCraft
         }
 
         /// <summary>
+        /// Shift+build grab: always land stacks in the player bag (inventory UI may be closed).
+        /// Claims ownership when safe so we never fire RpcRemove without a verified local add.
+        /// </summary>
+        public static int WithdrawForGrab(Container chest, string sharedName, int amount, Player player, bool leaveOne)
+        {
+            if (chest == null || player == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
+                return 0;
+
+            Inventory playerInv = player.GetInventory();
+            if (playerInv == null)
+                return 0;
+
+            ZNetView nv = Refs.View(chest);
+            if (nv != null && nv.IsValid() && !nv.IsOwner())
+            {
+                // Someone else has the chest open — async grant path only.
+                if (chest.IsInUse())
+                {
+                    Withdraw(chest, sharedName, amount, playerInv, leaveOne);
+                    return 0;
+                }
+
+                nv.ClaimOwnership();
+            }
+
+            ContainerFilter.RefreshInventory(chest);
+            return WithdrawLocal(chest, sharedName, amount, playerInv, leaveOne);
+        }
+
+        /// <summary>
         /// Destroy items in a chest for craft/build cost. Does NOT move them into the player
         /// inventory (avoids filling free slots so the crafted item cannot be added).
         /// </summary>
@@ -968,6 +998,7 @@ namespace StoreAndCraft
             if (take <= 0)
                 return 0;
 
+            Player player = Player.m_localPlayer;
             int taken = 0;
             foreach (ItemDrop.ItemData src in items)
             {
@@ -978,19 +1009,44 @@ namespace StoreAndCraft
                 if (src.m_shared.m_name != sharedName)
                     continue;
 
-                ItemDrop.ItemData clone = src.Clone();
-                clone.m_worldLevel = UsableWorldLevel(src.m_worldLevel);
-                if (clone.m_dropPrefab == null)
-                    clone.m_dropPrefab = ItemIds.PrefabFromToken(ItemIds.PrefabName(src) ?? sharedName);
-
                 int move = Mathf.Min(take - taken, src.m_stack);
-                while (move > 0 && !playerInv.CanAddItem(clone, move))
-                    move--;
+                if (player != null)
+                    move = StackLimits.FitByWeight(player, src, move);
                 if (move <= 0)
                     break;
 
+                ItemDrop.ItemData clone = src.Clone();
                 clone.m_stack = move;
-                if (!playerInv.AddItem(clone))
+                clone.m_worldLevel = UsableWorldLevel(src.m_worldLevel);
+                clone.m_gridPos = new Vector2i(-1, -1);
+                if (clone.m_dropPrefab == null)
+                    clone.m_dropPrefab = ItemIds.PrefabFromToken(ItemIds.PrefabName(src) ?? sharedName);
+
+                while (move > 0 && !playerInv.CanAddItem(clone, move))
+                {
+                    move--;
+                    clone.m_stack = move;
+                }
+                if (move <= 0)
+                    break;
+
+                // Prefer real-stack clone; fall back to prefab AddItem if clone path fails
+                // (can happen while InventoryGui is closed in hammer mode).
+                bool added = playerInv.AddItem(clone);
+                if (!added)
+                {
+                    string prefab = ItemIds.PrefabName(src) ?? sharedName;
+                    added = TryAddItem(
+                        playerInv,
+                        prefab,
+                        move,
+                        src.m_quality,
+                        src.m_variant,
+                        src.m_crafterID,
+                        src.m_crafterName ?? "",
+                        UsableWorldLevel(src.m_worldLevel));
+                }
+                if (!added)
                     break;
 
                 src.m_stack -= move;
