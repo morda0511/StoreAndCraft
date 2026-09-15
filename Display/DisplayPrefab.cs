@@ -104,7 +104,7 @@ namespace StoreAndCraft
 
             BuildVariant(scene, sign, LargeName, DisplayKind.Large,
                 "Large Storage Display",
-                "Wide board with three columns of nearby chest totals. Press [E] and click types.",
+                "Wide board with flowing category sections from nearby chests. Press [E] and click types.",
                 new Vector3(7.5f, 6.3f, 1f));
 
             Plugin.Log.LogInfo("StoreAndCraft storage displays registered (small / medium / large).");
@@ -136,21 +136,12 @@ namespace StoreAndCraft
             }
 
             znv.m_persistent = true;
-            clone.transform.localScale = Vector3.Scale(clone.transform.localScale, scaleMul);
+            // Keep distant sync closer to normal furniture — scaled signs otherwise stay visible too far.
+            znv.m_distant = false;
 
-            Piece piece = clone.GetComponent<Piece>();
-            Piece source = sign.GetComponent<Piece>();
-            if (piece != null)
-            {
-                piece.m_name = pieceName;
-                piece.m_description = pieceDesc;
-                if (piece.m_placeEffect == null && source != null)
-                    piece.m_placeEffect = source.m_placeEffect;
-                if (piece.m_placeEffect == null)
-                    piece.m_placeEffect = new EffectList { m_effectPrefabs = new EffectList.EffectData[0] };
-                if (piece.m_resources == null && source != null)
-                    piece.m_resources = source.m_resources;
-            }
+            clone.transform.localScale = Vector3.Scale(clone.transform.localScale, scaleMul);
+            HardenColliders(clone, kind);
+            SetupPiece(clone, sign, pieceName, pieceDesc);
 
             StorageDisplayBoard board = clone.GetComponent<StorageDisplayBoard>();
             if (board == null)
@@ -161,6 +152,72 @@ namespace StoreAndCraft
             ByHash[hash] = clone;
             AllPrefabs.Add(clone);
             EnsureNamed(scene, clone);
+        }
+
+        /// <summary>
+        /// Signs scaled up become solid walls/traps. Replace mesh colliders with a thin
+        /// trigger box so players walk through but hover / [E] still works.
+        /// </summary>
+        private static void HardenColliders(GameObject clone, DisplayKind kind)
+        {
+            if (clone == null)
+                return;
+
+            Collider[] old = clone.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < old.Length; i++)
+            {
+                if (old[i] != null)
+                    Object.Destroy(old[i]);
+            }
+
+            // Local sizes before root scale: Medium ~2.5x, Large ~7.5x on X/Y.
+            float depth = kind == DisplayKind.Large ? 0.012f
+                : kind == DisplayKind.Medium ? 0.03f
+                : 0.08f;
+            float faceX = kind == DisplayKind.Large ? 0.95f
+                : kind == DisplayKind.Medium ? 0.95f
+                : 0.9f;
+            float faceY = kind == DisplayKind.Large ? 0.95f
+                : kind == DisplayKind.Medium ? 0.95f
+                : 0.9f;
+
+            BoxCollider box = clone.AddComponent<BoxCollider>();
+            box.isTrigger = true;
+            box.center = Vector3.zero;
+            box.size = new Vector3(faceX, faceY, depth);
+        }
+
+        private static void SetupPiece(GameObject clone, GameObject sign, string pieceName, string pieceDesc)
+        {
+            Piece piece = clone.GetComponent<Piece>();
+            Piece source = sign != null ? sign.GetComponent<Piece>() : null;
+            if (piece == null)
+                return;
+
+            piece.m_name = pieceName;
+            piece.m_description = pieceDesc;
+            if (piece.m_placeEffect == null && source != null)
+                piece.m_placeEffect = source.m_placeEffect;
+            if (piece.m_placeEffect == null)
+                piece.m_placeEffect = new EffectList { m_effectPrefabs = new EffectList.EffectData[0] };
+            if (piece.m_resources == null && source != null)
+                piece.m_resources = source.m_resources;
+
+            // Require a workbench like normal furniture (signs alone do not).
+            if (piece.m_craftingStation == null && ZNetScene.instance != null)
+            {
+                GameObject bench = ZNetScene.instance.GetPrefab("piece_workbench");
+                if (bench != null)
+                    piece.m_craftingStation = bench.GetComponent<CraftingStation>();
+            }
+
+            // Allow targeting / wear like wood pieces when WearNTear exists.
+            WearNTear wear = clone.GetComponent<WearNTear>();
+            if (wear != null)
+            {
+                wear.m_noRoofWear = false;
+                wear.m_noSupportWear = false;
+            }
         }
 
         private static void RegisterHammer()

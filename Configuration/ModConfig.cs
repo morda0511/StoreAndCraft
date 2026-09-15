@@ -5,8 +5,8 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        // Bump when package layout changes. v7 = DisplayRange.
-        public const int ProtocolVersion = 7;
+        // Bump when package layout changes. v8 = display layout + Alt+B filter key.
+        public const int ProtocolVersion = 8;
 
         public ConfigEntry<bool> LockConfig { get; }
         public ConfigEntry<bool> ModEnabled { get; }
@@ -94,8 +94,8 @@ namespace StoreAndCraft
                 "Hotkey: store only the inventory item under the cursor into a nearby chest that already holds it.");
             SearchKey = file.Bind("4 - Keys", "SearchKey", new KeyboardShortcut(KeyCode.Y),
                 "While inventory is open: hover an item and press to ping/blink the nearest chest that contains it (blinks 3 times).");
-            RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.E, KeyCode.LeftAlt),
-                "Look at a chest to rename it, or at a kiln/smelter with multiple inputs to open the chest-pull filter (check which items may be pulled). Shift+E (Valheim alt-use) also renames chests. Prefix a chest name with [I] to ignore it.");
+            RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.B, KeyCode.LeftAlt),
+                "Look at a chest to rename it, or at a kiln/smelter/grill with multiple inputs to open the chest-pull filter. Default Alt+B (avoids Alt+E cooking and F skills). Shift+E (Valheim alt-use) also renames chests. Prefix a chest name with [I] to ignore it.");
             TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
             FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),

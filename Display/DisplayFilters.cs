@@ -26,6 +26,7 @@ namespace StoreAndCraft
 
         public const int FoodFilterId = 2;
         public const int IngredientsFilterId = 22;
+        public const int OtherMaterialsFilterId = 23;
 
         public static bool IsExpandable(int filterId)
         {
@@ -132,7 +133,10 @@ namespace StoreAndCraft
                 ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Consumable),
             Named(20, "Gems & Coins", "Edelsteine & Münzen", GemNames, ItemDrop.ItemData.ItemType.Material),
             Named(21, "Boss / Rare", "Boss / Selten", BossNames, ItemDrop.ItemData.ItemType.Material),
-            Typed(2, "Food", "Essen", true,
+            // Catch-all for mod materials (Epic Loot reagents, etc.) not in named lists.
+            Other(23, "Other materials", "Andere Materialien"),
+            // All Food = every consumable (no ExcludeNamed) so Medium/Large show meals + meads.
+            Typed(2, "Food", "Essen", false,
                 ItemDrop.ItemData.ItemType.Consumable),
             Typed(3, "Fish", "Fisch", false,
                 ItemDrop.ItemData.ItemType.Fish),
@@ -187,6 +191,23 @@ namespace StoreAndCraft
                 Types = types,
                 Names = null,
                 ExcludeNamed = excludeNamed
+            };
+        }
+
+        private static DisplayFilter Other(int id, string en, string de)
+        {
+            return new DisplayFilter
+            {
+                Id = id,
+                En = en,
+                De = de,
+                Types = new[]
+                {
+                    ItemDrop.ItemData.ItemType.Material,
+                    ItemDrop.ItemData.ItemType.Misc
+                },
+                Names = null,
+                ExcludeNamed = false
             };
         }
 
@@ -394,6 +415,9 @@ namespace StoreAndCraft
             if (item?.m_shared == null || filterId <= 0 || !TryGet(filterId, out found))
                 return false;
 
+            if (filterId == OtherMaterialsFilterId)
+                return MatchesOtherMaterials(item);
+
             if (!TypeAllowed(item.m_shared.m_itemType, found.Types))
                 return false;
 
@@ -404,6 +428,29 @@ namespace StoreAndCraft
             if (found.ExcludeNamed)
                 return !IsClaimedByNamedFilter(key, item.m_shared.m_itemType);
 
+            return true;
+        }
+
+        /// <summary>Materials/misc not claimed by any other display category (mod reagents etc.).</summary>
+        private static bool MatchesOtherMaterials(ItemDrop.ItemData item)
+        {
+            if (item?.m_shared == null)
+                return false;
+            ItemDrop.ItemData.ItemType type = item.m_shared.m_itemType;
+            if (type != ItemDrop.ItemData.ItemType.Material && type != ItemDrop.ItemData.ItemType.Misc)
+                return false;
+
+            for (int i = 0; i < Choices.Length; i++)
+            {
+                int id = Choices[i].Id;
+                if (id == OtherMaterialsFilterId)
+                    continue;
+                // Skip broad typed buckets that would swallow everything.
+                if (id == 5 || id == FoodFilterId)
+                    continue;
+                if (Matches(item, id))
+                    return false;
+            }
             return true;
         }
 
@@ -537,11 +584,21 @@ namespace StoreAndCraft
                 ItemDrop drop = go.GetComponent<ItemDrop>();
                 if (drop?.m_itemData?.m_shared == null)
                     continue;
+                // Only cooked-style consumables that localize cleanly (skip obscure mod junk labels).
+                if (drop.m_itemData.m_shared.m_itemType != ItemDrop.ItemData.ItemType.Consumable)
+                    continue;
                 if (!Matches(drop.m_itemData, FoodFilterId))
                     continue;
+                // Skip items already listed under Ingredients / Raw Food expand parents.
+                if (Matches(drop.m_itemData, IngredientsFilterId) || Matches(drop.m_itemData, 19))
+                    continue;
                 string shared = drop.m_itemData.m_shared.m_name;
-                if (!string.IsNullOrEmpty(shared) && !list.Contains(shared))
-                    list.Add(shared);
+                if (string.IsNullOrEmpty(shared) || list.Contains(shared))
+                    continue;
+                string label = ItemLabel(shared);
+                if (IsBadLabel(label))
+                    continue;
+                list.Add(shared);
             }
             list.Sort(CompareLocalized);
             // Only cache once ObjectDB actually returned entries.

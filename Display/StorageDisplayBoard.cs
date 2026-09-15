@@ -23,6 +23,7 @@ namespace StoreAndCraft
         private bool _columnMajor;
         private bool _columnHeaders;
         private bool _tightSlots;
+        private bool _flowSections;
 
         private readonly List<Container> _watched = new List<Container>();
         private readonly List<int> _watchIds = new List<int>();
@@ -75,20 +76,22 @@ namespace StoreAndCraft
                     _columnMajor = false;
                     _columnHeaders = false;
                     _tightSlots = false;
+                    _flowSections = false;
                     break;
                 case DisplayKind.Large:
-                    // 3 category headers, 2 items per row in each category.
-                    _headerColumns = 3;
-                    _itemsPerGroup = 2;
-                    _columns = _headerColumns * _itemsPerGroup;
-                    _rows = 8;
+                    // Dense row-major grid; categories flow as sections (empty cats still shown).
+                    _headerColumns = 0;
+                    _itemsPerGroup = 1;
+                    _columns = 8;
+                    _rows = 12;
                     _slotCount = _columns * _rows;
                     // Prefab is 3x medium scale; keep world text size like medium.
-                    _fontFactor = 0.22f / 3f;
-                    _titleFactor = 0.12f / 3f;
-                    _columnMajor = true;
-                    _columnHeaders = true;
+                    _fontFactor = 0.16f / 3f;
+                    _titleFactor = 0.10f / 3f;
+                    _columnMajor = false;
+                    _columnHeaders = false;
                     _tightSlots = true;
+                    _flowSections = true;
                     break;
                 default:
                     // Category title strip + denser item cells; sort grouped by category.
@@ -102,6 +105,7 @@ namespace StoreAndCraft
                     _columnMajor = false;
                     _columnHeaders = true;
                     _tightSlots = true;
+                    _flowSections = false;
                     _kind = DisplayKind.Medium;
                     break;
             }
@@ -517,6 +521,9 @@ namespace StoreAndCraft
                 _slots = null;
             // Medium layout gained a category header strip — rebuild old grids.
             if (_slots != null && _kind == DisplayKind.Medium && _columnHeaders && _headers == null)
+                _slots = null;
+            // Large switched from fixed 3-column headers to flowing sections.
+            if (_slots != null && _kind == DisplayKind.Large && (_headers != null || !_flowSections || _columnMajor))
                 _slots = null;
             if (_slots != null && _kind == DisplayKind.Small && _slots.Length == 1
                 && _slots[0].Amount != null && _slots[0].Amount.fontSize < 1f)
@@ -976,9 +983,9 @@ namespace StoreAndCraft
             _pages = Mathf.Max(1, cluster.Count);
             _page = Mathf.Max(0, cluster.IndexOf(this));
 
-            if (_kind == DisplayKind.Large && filters.Count >= 2 && itemTokens.Count == 0)
+            if (_kind == DisplayKind.Large && _flowSections)
             {
-                PaintLargeByFilter(cluster, filters);
+                PaintLargeSections(cluster, filters, itemTokens);
                 return;
             }
 
@@ -1075,37 +1082,195 @@ namespace StoreAndCraft
             return drop != null ? drop.m_itemData : null;
         }
 
-        private void PaintLargeByFilter(List<StorageDisplayBoard> cluster, List<int> filters)
+        private void PaintLargeSections(
+            List<StorageDisplayBoard> cluster,
+            List<int> filters,
+            List<string> itemTokens)
         {
-            int groups = Mathf.Min(_headerColumns, filters.Count);
-            int pair = Mathf.Max(1, _itemsPerGroup);
-            int perPage = _rows * pair;
-
-            for (int group = 0; group < _headerColumns; group++)
+            ClearHeaders();
+            List<int> sections = BuildSectionOrder(filters, itemTokens);
+            if (sections.Count == 0)
             {
-                if (group < groups)
-                    SetHeader(group, DisplayFilters.Label(filters[group]));
-                else
-                    SetHeader(group, "");
+                for (int i = 0; i < _slotCount; i++)
+                    ClearSlot(i);
+                return;
+            }
 
-                var ranked = RankItems(cluster, group < groups ? new List<int> { filters[group] } : null, null);
-                int start = _page * perPage;
-                for (int row = 0; row < _rows; row++)
+            // Flatten to paint ops so cluster pages share one continuous flow.
+            var ops = new List<SectionOp>(64);
+            int cursor = 0;
+            for (int s = 0; s < sections.Count; s++)
+            {
+                int catId = sections[s];
+
+                // Start each category on a new row (keeps headers readable).
+                if (cursor % _columns != 0)
                 {
-                    for (int sub = 0; sub < pair; sub++)
+                    int pad = _columns - (cursor % _columns);
+                    for (int p = 0; p < pad; p++)
                     {
-                        int slotCol = group * pair + sub;
-                        int slot = SlotIndex(slotCol, row);
-                        int index = start + row * pair + sub;
-                        if (group >= groups || index >= ranked.Count)
-                        {
-                            ClearSlot(slot);
-                            continue;
-                        }
-                        PaintSlot(slot, ranked[index]);
+                        ops.Add(new SectionOp { Kind = OpKind.Pad });
+                        cursor++;
+                    }
+                }
+
+                ops.Add(new SectionOp { Kind = OpKind.Header, CategoryId = catId });
+                cursor++;
+
+                List<int> oneFilter = null;
+                List<string> oneTokens = null;
+                SplitSelectionForSection(catId, filters, itemTokens, out oneFilter, out oneTokens);
+                var ranked = RankItems(cluster, oneFilter, oneTokens, false);
+                if (ranked.Count == 0)
+                {
+                    // Keep empty selected categories visible (e.g. Fish = 0 in storage).
+                    ops.Add(new SectionOp { Kind = OpKind.Empty, CategoryId = catId });
+                    cursor++;
+                }
+                else
+                {
+                    for (int r = 0; r < ranked.Count; r++)
+                    {
+                        ops.Add(new SectionOp { Kind = OpKind.Item, CategoryId = catId, Item = ranked[r] });
+                        cursor++;
                     }
                 }
             }
+
+            int start = _page * _slotCount;
+            bool lastBoard = _page >= _pages - 1;
+            int remaining = Mathf.Max(0, ops.Count - start);
+            int extraAfterThis = Mathf.Max(0, remaining - _slotCount);
+            int shown = remaining;
+            if (lastBoard && extraAfterThis > 0)
+                shown = _slotCount - 1;
+            else
+                shown = Mathf.Min(_slotCount, remaining);
+
+            for (int i = 0; i < _slotCount; i++)
+            {
+                if (lastBoard && extraAfterThis > 0 && i == _slotCount - 1)
+                {
+                    ClearSlot(i);
+                    SetAmount(i, "+" + extraAfterThis, new Color(1f, 0.85f, 0.45f, 1f));
+                    continue;
+                }
+
+                int index = start + i;
+                if (i >= shown || index >= ops.Count)
+                {
+                    ClearSlot(i);
+                    continue;
+                }
+
+                SectionOp op = ops[index];
+                if (op.Kind == OpKind.Header)
+                {
+                    ClearSlot(i);
+                    SetAmount(i, DisplayFilters.Label(op.CategoryId).ToUpperInvariant(),
+                        new Color(1f, 0.92f, 0.55f, 1f));
+                }
+                else if (op.Kind == OpKind.Empty)
+                {
+                    ClearSlot(i);
+                    SetAmount(i, "0", new Color(0.75f, 0.7f, 0.55f, 1f));
+                }
+                else if (op.Kind == OpKind.Item)
+                {
+                    PaintSlot(i, op.Item);
+                }
+                else
+                {
+                    ClearSlot(i);
+                }
+            }
+        }
+
+        private enum OpKind
+        {
+            Header,
+            Item,
+            Empty,
+            Pad
+        }
+
+        private struct SectionOp
+        {
+            public OpKind Kind;
+            public int CategoryId;
+            public RankedItem Item;
+        }
+
+        /// <summary>
+        /// Ordered category sections from selected filters + parents of item tokens.
+        /// Empty selected categories stay in the list so the board shows 0 stock.
+        /// </summary>
+        private static List<int> BuildSectionOrder(List<int> filters, List<string> itemTokens)
+        {
+            var sections = new List<int>();
+            var seen = new HashSet<int>();
+
+            if (filters != null)
+            {
+                for (int i = 0; i < filters.Count; i++)
+                {
+                    int id = filters[i];
+                    if (id <= 0 || !seen.Add(id))
+                        continue;
+                    DisplayFilter unused;
+                    if (DisplayFilters.TryGet(id, out unused))
+                        sections.Add(id);
+                }
+            }
+
+            if (itemTokens != null)
+            {
+                for (int i = 0; i < itemTokens.Count; i++)
+                {
+                    int parent = DisplayFilters.ParentFilterIdFromToken(itemTokens[i]);
+                    if (parent <= 0 || !seen.Add(parent))
+                        continue;
+                    sections.Add(parent);
+                }
+            }
+
+            sections.Sort((a, b) =>
+                DisplayFilters.CategorySortOrder(a).CompareTo(DisplayFilters.CategorySortOrder(b)));
+            return sections;
+        }
+
+        private static void SplitSelectionForSection(
+            int catId,
+            List<int> filters,
+            List<string> itemTokens,
+            out List<int> oneFilter,
+            out List<string> oneTokens)
+        {
+            oneFilter = null;
+            oneTokens = null;
+            bool whole = filters != null && filters.Contains(catId);
+            if (whole)
+            {
+                oneFilter = new List<int> { catId };
+                return;
+            }
+
+            // Only specific items under this category.
+            oneTokens = new List<string>();
+            if (itemTokens == null)
+                return;
+            for (int i = 0; i < itemTokens.Count; i++)
+            {
+                string token = itemTokens[i];
+                if (DisplayFilters.ParentFilterIdFromToken(token) == catId)
+                    oneTokens.Add(token);
+            }
+        }
+
+        private void PaintLargeByFilter(List<StorageDisplayBoard> cluster, List<int> filters)
+        {
+            // Legacy path kept unused; flowing sections replaced fixed 3-column layout.
+            PaintLargeSections(cluster, filters, null);
         }
 
         private void PaintRanked(
@@ -1184,6 +1349,7 @@ namespace StoreAndCraft
                 {
                     if (container == null || !seenChest.Add(container.GetInstanceID()))
                         continue;
+                    NearbyIndex.EnsureInventory(container);
                     Inventory inv = container.GetInventory();
                     if (inv == null)
                         continue;
@@ -1319,16 +1485,24 @@ namespace StoreAndCraft
 
         private void SetAmount(int i, string text)
         {
+            SetAmount(i, text, new Color(1f, 0.95f, 0.75f, 1f));
+        }
+
+        private void SetAmount(int i, string text, Color color)
+        {
             TextMeshProUGUI amount = _slots[i].Amount;
             if (amount == null)
                 return;
             string next = text ?? "";
-            if (amount.text == next)
-                return;
             amount.enabled = true;
-            amount.color = new Color(1f, 0.95f, 0.75f, 1f);
-            amount.faceColor = new Color32(255, 242, 191, 255);
-            amount.text = next;
+            amount.color = color;
+            amount.faceColor = new Color32(
+                (byte)Mathf.Clamp(Mathf.RoundToInt(color.r * 255f), 0, 255),
+                (byte)Mathf.Clamp(Mathf.RoundToInt(color.g * 255f), 0, 255),
+                (byte)Mathf.Clamp(Mathf.RoundToInt(color.b * 255f), 0, 255),
+                (byte)Mathf.Clamp(Mathf.RoundToInt(color.a * 255f), 0, 255));
+            if (amount.text != next)
+                amount.text = next;
         }
 
         private static string FormatCount(int count)

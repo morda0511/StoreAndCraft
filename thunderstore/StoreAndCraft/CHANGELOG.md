@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.3 — Pre-release Test
+
+- **Large displays:** flowing category sections (any number of categories); empty selected categories still show with **0**
+- **Hitbox:** displays are thin triggers (walk-through), need a workbench, shorter distant sync
+- **Filters:** Food = all consumables; **Other materials** catch-all (Epic Loot reagents etc.); shorter Food expand list
+- **Keys:** chest rename / station pull filter default **Alt+B** (was Alt+E; avoids cooking + F skills)
+- Pre-release for testing — server + all clients need the **same** build
+
 ## 1.2.2 — Pre-release Test
 
 - **Feature:** Small / Medium / Large Storage Displays (hotbar item on Small, category grid on Medium, 3-column Large)

@@ -67,7 +67,7 @@ namespace StoreAndCraft
         public static string PromptLabel()
         {
             if (Plugin.Settings == null)
-                return "Alt+E";
+                return "Alt+B";
             string label = KeyUtil.Format(Plugin.Settings.RenameKey.Value);
             return string.IsNullOrEmpty(label) ? "Shift+E" : label;
         }

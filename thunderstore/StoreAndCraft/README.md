@@ -51,7 +51,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - Pair with **B** auto-fill for hands-off cooking / baking (fire under the stone oven still required to cook).
 
 ### Kiln / smelter pull filter
-- Look at a kiln or multi-input smelter → **Alt+E**.
+- Look at a kiln, multi-input smelter, or grill → **Alt+B**.
 - Skills-style list with **[+]** / **[-]** toggles.
 - Choose which wood / ore types may be auto-pulled (e.g. turn **Wood** OFF, leave **Core wood** ON).
 - Saved per station (ZDO). Manual use from inventory is not blocked for types you hold yourself; auto-select / chest pull respects the filter.
@@ -72,7 +72,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 ### Ignore chests
 - Prefix the chest name with **`[I]`** → no auto-store, no craft pull, not counted on displays.
 - Hover text turns **red** so ignored chests are easy to spot.
-- Rename with **Alt+E** (or Shift+E alt-use).
+- Rename with **Alt+B** (or Shift+E alt-use).
 
 ### Search
 - Inventory open → hover an item → press **Y**.
