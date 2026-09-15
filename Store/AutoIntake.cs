@@ -10,6 +10,7 @@ namespace StoreAndCraft
         private static readonly List<ItemDrop> DropScratch = new List<ItemDrop>(64);
         private static readonly List<Player> PlayerScratch = new List<Player>(8);
         private static readonly List<Container> ChestScratch = new List<Container>(32);
+        private static readonly List<Container> ProbeOrder = new List<Container>(32);
 
         public static void Tick()
         {
@@ -49,6 +50,7 @@ namespace StoreAndCraft
             float storeRange = Plugin.Settings.StoreRange.Value;
             int cap = Plugin.Settings.MaxTransfersPerTick.Value;
             int moved = 0;
+            NearbyIndex.BeginStorePass();
 
             try
             {
@@ -116,17 +118,59 @@ namespace StoreAndCraft
         private static Container BestChest(ItemDrop drop, float storeRange)
         {
             NearbyIndex.CollectNear(drop.transform.position, storeRange, ChestScratch);
-            Container best = null;
-            float bestDist = float.MaxValue;
             bool mustExist = Plugin.Settings.MustHaveExisting.Value;
             Vector3 pos = drop.transform.position;
 
-            for (int i = 0; i < ChestScratch.Count; i++)
+            Container best = PickAccepting(ChestScratch, drop.m_itemData, pos, mustExist);
+            if (best != null || !mustExist)
+                return best;
+
+            // Store miss with MustHaveExisting: ZDO Load may have been empty/stale.
+            // Force-probe nearest chests (budgeted) then retry CanAccept.
+            ProbeOrder.Clear();
+            ProbeOrder.AddRange(ChestScratch);
+            ProbeOrder.Sort((a, b) =>
             {
-                Container candidate = ChestScratch[i];
+                float da = a == null ? float.MaxValue : ContainerFilter.Distance(pos, a.transform.position);
+                float db = b == null ? float.MaxValue : ContainerFilter.Distance(pos, b.transform.position);
+                return da.CompareTo(db);
+            });
+
+            for (int i = 0; i < ProbeOrder.Count; i++)
+            {
+                Container candidate = ProbeOrder[i];
                 if (candidate == null)
                     continue;
-                if (!ChestPicker.CanAccept(candidate, drop.m_itemData, pos, mustExist))
+                if (!NearbyIndex.TryForceProbeForStore(candidate))
+                    continue;
+
+                Inventory inv = candidate.GetInventory();
+                bool empty = inv == null || inv.NrOfItems() <= 0;
+                NearbyIndex.NoteStoreProbeResult(candidate, empty);
+                if (empty)
+                    continue;
+
+                if (ChestPicker.CanAccept(candidate, drop.m_itemData, pos, mustExist))
+                    return candidate;
+            }
+
+            return null;
+        }
+
+        private static Container PickAccepting(
+            List<Container> chests,
+            ItemDrop.ItemData item,
+            Vector3 pos,
+            bool mustExist)
+        {
+            Container best = null;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < chests.Count; i++)
+            {
+                Container candidate = chests[i];
+                if (candidate == null)
+                    continue;
+                if (!ChestPicker.CanAccept(candidate, item, pos, mustExist))
                     continue;
                 float dist = ContainerFilter.Distance(pos, candidate.transform.position);
                 if (dist < bestDist)

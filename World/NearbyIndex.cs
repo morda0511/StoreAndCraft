@@ -13,15 +13,20 @@ namespace StoreAndCraft
         private static readonly HashSet<int> RegisteredIds = new HashSet<int>();
         private static readonly List<Container> Cached = new List<Container>();
         private static readonly Dictionary<int, float> LastInventoryLoad = new Dictionary<int, float>();
+        /// <summary>Skip force-probes on chests that still looked empty after a forced Load.</summary>
+        private static readonly Dictionary<int, float> EmptyProbeUntil = new Dictionary<int, float>();
         private static float _nextScan;
         private static float _nextPrune;
         private static Vector3 _lastOrigin;
         private static int _cacheFrame = -1;
+        private static int _storeForceBudget;
         private static readonly Dictionary<string, int> CountCache = new Dictionary<string, int>();
         private const float RescanMove = 1.5f;
         private const float IdleRescanSeconds = 2f;
         private const float MoveRescanSeconds = 0.75f;
         private const float InventoryLoadCooldown = 4f;
+        private const float EmptyProbeBackoff = 20f;
+        private const int MaxForceLoadsPerStorePass = 5;
 
         public static IReadOnlyList<Container> Current
         {
@@ -47,6 +52,7 @@ namespace StoreAndCraft
                 return;
             Registered.Remove(container);
             LastInventoryLoad.Remove(id);
+            EmptyProbeUntil.Remove(id);
         }
 
         public static void BootstrapExisting()
@@ -131,6 +137,60 @@ namespace StoreAndCraft
             ContainerFilter.RefreshInventory(container);
             LastInventoryLoad[id] = now;
             PendingChestDebit.OnInventoryLoaded(container);
+
+            Inventory inv = container.GetInventory();
+            if (inv != null && inv.NrOfItems() > 0)
+                EmptyProbeUntil.Remove(id);
+        }
+
+        /// <summary>
+        /// Reset the per-pass force-Load budget used by AutoIntake on store misses.
+        /// </summary>
+        public static void BeginStorePass()
+        {
+            _storeForceBudget = MaxForceLoadsPerStorePass;
+        }
+
+        /// <summary>
+        /// Force-Load when a store pass found no target. Budget + empty backoff keep cost bounded.
+        /// </summary>
+        public static bool TryForceProbeForStore(Container container)
+        {
+            if (container == null || _storeForceBudget <= 0)
+                return false;
+
+            int id = container.GetInstanceID();
+            float until;
+            if (EmptyProbeUntil.TryGetValue(id, out until) && Time.unscaledTime < until)
+                return false;
+
+            _storeForceBudget--;
+            EnsureInventory(container, force: true);
+            return true;
+        }
+
+        /// <summary>
+        /// After a force probe: backoff empty chests so we do not burn budget every intake tick.
+        /// </summary>
+        public static void NoteStoreProbeResult(Container container, bool inventoryEmpty)
+        {
+            if (container == null)
+                return;
+
+            int id = container.GetInstanceID();
+            if (inventoryEmpty)
+                EmptyProbeUntil[id] = Time.unscaledTime + EmptyProbeBackoff;
+            else
+                EmptyProbeUntil.Remove(id);
+        }
+
+        /// <summary>Clear empty backoff (e.g. player opened the chest).</summary>
+        public static void MarkInventorySeen(Container container)
+        {
+            if (container == null)
+                return;
+            EmptyProbeUntil.Remove(container.GetInstanceID());
+            EnsureInventory(container, force: true);
         }
 
         public static void Rescan(Vector3 origin, float range)
@@ -319,11 +379,13 @@ namespace StoreAndCraft
                 int id = c.GetInstanceID();
                 RegisteredIds.Remove(id);
                 LastInventoryLoad.Remove(id);
+                EmptyProbeUntil.Remove(id);
             }
             else if (RegisteredIds.Count != Registered.Count)
             {
                 RegisteredIds.Clear();
                 LastInventoryLoad.Clear();
+                EmptyProbeUntil.Clear();
                 foreach (Container x in Registered)
                 {
                     if (x != null)

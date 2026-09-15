@@ -7,21 +7,35 @@ namespace StoreAndCraft
 {
     internal class StorageDisplayBoard : MonoBehaviour
     {
-        public const int Slots = 12;
-        public const int Columns = 4;
-        public const int Rows = 3;
+        public const string ZdoItemKey = "sac_item";
+        public const string ZdoRangeKey = "sac_display_range";
 
         private static readonly List<StorageDisplayBoard> All = new List<StorageDisplayBoard>();
 
+        private DisplayKind _kind = DisplayKind.Medium;
+        private int _slotCount = 12;
+        private int _columns = 4;
+        private int _rows = 3;
+        private int _headerColumns;
+        private int _itemsPerGroup = 1;
+        private float _fontFactor = 0.22f;
+        private float _titleFactor = 0.12f;
+        private bool _columnMajor;
+        private bool _columnHeaders;
+        private bool _tightSlots;
+
         private readonly List<Container> _watched = new List<Container>();
         private readonly List<int> _watchIds = new List<int>();
+        private static readonly List<Container> _watchScratch = new List<Container>(64);
         private SlotUi[] _slots;
+        private TextMeshProUGUI[] _headers;
         private TextMeshProUGUI _signText;
         private float _titleFont;
         private float _born;
         private float _nextScan;
         private float _nextPaint;
         private bool _dirty = true;
+        private bool _configured;
         private int _page;
         private int _pages = 1;
         private List<StorageDisplayBoard> _cluster;
@@ -31,6 +45,96 @@ namespace StoreAndCraft
         {
             public Image Icon;
             public TextMeshProUGUI Amount;
+        }
+
+        public DisplayKind Kind
+        {
+            get { return _kind; }
+        }
+
+        public int SlotCount
+        {
+            get { return _slotCount; }
+        }
+
+        public void Configure(DisplayKind kind)
+        {
+            _kind = kind;
+            _configured = true;
+            switch (kind)
+            {
+                case DisplayKind.Small:
+                    _slotCount = 1;
+                    _columns = 1;
+                    _rows = 1;
+                    _headerColumns = 0;
+                    _itemsPerGroup = 1;
+                    // Original sign scale: keep count readable next to the icon.
+                    _fontFactor = 0.28f;
+                    _titleFactor = 0.16f;
+                    _columnMajor = false;
+                    _columnHeaders = false;
+                    _tightSlots = false;
+                    break;
+                case DisplayKind.Large:
+                    // 3 category headers, 2 items per row in each category.
+                    _headerColumns = 3;
+                    _itemsPerGroup = 2;
+                    _columns = _headerColumns * _itemsPerGroup;
+                    _rows = 8;
+                    _slotCount = _columns * _rows;
+                    // Prefab is 3x medium scale; keep world text size like medium.
+                    _fontFactor = 0.22f / 3f;
+                    _titleFactor = 0.12f / 3f;
+                    _columnMajor = true;
+                    _columnHeaders = true;
+                    _tightSlots = true;
+                    break;
+                default:
+                    // Category title strip + denser item cells; sort grouped by category.
+                    _slotCount = 12;
+                    _columns = 4;
+                    _rows = 3;
+                    _headerColumns = 1;
+                    _itemsPerGroup = 4;
+                    _fontFactor = 0.15f;
+                    _titleFactor = 0.10f;
+                    _columnMajor = false;
+                    _columnHeaders = true;
+                    _tightSlots = true;
+                    _kind = DisplayKind.Medium;
+                    break;
+            }
+        }
+
+        private void Awake()
+        {
+            if (!_configured)
+                DetectKindFromName();
+        }
+
+        private void DetectKindFromName()
+        {
+            string n = gameObject.name.Replace("(Clone)", "").Trim();
+            if (n.IndexOf("small", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                Configure(DisplayKind.Small);
+            else if (n.IndexOf("large", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                Configure(DisplayKind.Large);
+            else
+                Configure(DisplayKind.Medium);
+        }
+
+        private string BoardTitle()
+        {
+            switch (_kind)
+            {
+                case DisplayKind.Small:
+                    return "Small Storage Display";
+                case DisplayKind.Large:
+                    return "Large Storage Display";
+                default:
+                    return "Medium Storage Display";
+            }
         }
 
         private void OnEnable()
@@ -45,6 +149,8 @@ namespace StoreAndCraft
 
         private void Start()
         {
+            if (!_configured)
+                DetectKindFromName();
             if (!All.Contains(this))
                 All.Add(this);
             TryBuild();
@@ -53,6 +159,7 @@ namespace StoreAndCraft
         private void OnDestroy()
         {
             DisplayTypeMenu.CloseIf(this);
+            DisplayRangeMenu.CloseIf(this);
             All.Remove(this);
             Unwatch();
             InvalidateClusters();
@@ -70,17 +177,196 @@ namespace StoreAndCraft
 
         public string HoverLabel()
         {
+            string rangeKey = KeyUtil.Format(Plugin.Settings != null
+                ? Plugin.Settings.DisplayRangeKey.Value
+                : new BepInEx.Configuration.KeyboardShortcut(KeyCode.R, KeyCode.LeftAlt));
+            if (string.IsNullOrEmpty(rangeKey))
+                rangeKey = "Alt+R";
+            string rangeLine = "[<color=yellow><b>" + rangeKey + "</b></color>] "
+                + Loc.T("Range", "Reichweite")
+                + " (" + Mathf.RoundToInt(EffectiveDisplayRange()) + " m)";
+
+            if (_kind == DisplayKind.Small)
+            {
+                string hotbar = "[<color=yellow><b>1-8</b></color>] "
+                    + Loc.T("Set item from hotbar", "Item aus Hotbar setzen");
+                string token = ItemToken();
+                if (string.IsNullOrEmpty(token))
+                    return BoardTitle() + "\n" + hotbar + "\n" + rangeLine;
+                return BoardTitle() + " (" + ItemLabel(token) + ")\n" + hotbar + "\n" + rangeLine;
+            }
+
             List<int> filters = FilterIds();
-            string name = DisplayFilters.Label(filters);
+            List<string> items = ItemTokens();
+            string name = DisplayFilters.Label(filters, items);
             string use = "[<color=yellow><b>E</b></color>] " + Loc.T("Select type", "Typ wählen");
-            if (filters.Count == 0)
-                return "Storage Display\n" + use;
+            if (filters.Count == 0 && items.Count == 0)
+                return BoardTitle() + "\n" + use + "\n" + rangeLine;
 
             RefreshClusterPages();
-            string title = "Storage Display (" + name + ")";
+            string title = BoardTitle() + " (" + name + ")";
             if (_pages > 1)
                 title += " (" + (_page + 1) + "/" + _pages + ")";
-            return title + "\n" + use;
+            return title + "\n" + use + "\n" + rangeLine;
+        }
+
+        public string ItemToken()
+        {
+            ZNetView nv = GetComponent<ZNetView>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return "";
+            return zdo.GetString(ZdoItemKey, "") ?? "";
+        }
+
+        /// <summary>Per-display override in meters (5–50). 0 = use config DisplayRange.</summary>
+        public int DisplayRangeMeters()
+        {
+            ZNetView nv = GetComponent<ZNetView>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return 0;
+            return Mathf.Clamp(zdo.GetInt(ZdoRangeKey, 0), 0, 50);
+        }
+
+        public float EffectiveDisplayRange()
+        {
+            int custom = DisplayRangeMeters();
+            if (custom > 0)
+                return custom;
+            float cfg = Plugin.Settings != null ? Plugin.Settings.DisplayRange.Value : 10f;
+            return Mathf.Max(1f, cfg);
+        }
+
+        /// <summary>
+        /// Anyone with ward access may set this (no admin). Stored on the piece ZDO.
+        /// </summary>
+        public void SetDisplayRangeMeters(int meters)
+        {
+            meters = Mathf.Clamp(meters, 5, 50);
+            // Snap to 5 m steps.
+            meters = Mathf.RoundToInt(meters / 5f) * 5;
+            if (meters < 5)
+                meters = 5;
+
+            ZNetView nv = GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
+                return;
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+
+            nv.GetZDO().Set(ZdoRangeKey, meters);
+            _dirty = true;
+            _nextScan = 0f;
+            _cluster = null;
+            InvalidateClusters();
+        }
+
+        public void SetItemFromHotbar(ItemDrop.ItemData item)
+        {
+            ZNetView nv = GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
+                return;
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+
+            ZDO zdo = nv.GetZDO();
+            if (item?.m_shared == null)
+            {
+                zdo.Set(ZdoItemKey, "");
+            }
+            else
+            {
+                // Prefer shared name ($item_…) so chest CountItems matches reliably.
+                string token = ItemIds.SharedName(item);
+                if (string.IsNullOrEmpty(token))
+                    token = ItemIds.PrefabName(item) ?? "";
+                // Ensure drop prefab is known for later SampleFromToken / Matches.
+                if (item.m_dropPrefab == null)
+                    ItemIds.PrefabName(item);
+                zdo.Set(ZdoItemKey, token ?? "");
+            }
+
+            // Small boards do not use category filters.
+            zdo.Set(DisplayFilters.ZdoKeyMulti, "");
+            zdo.Set(DisplayFilters.ZdoKey, 0);
+            _dirty = true;
+            _cluster = null;
+            InvalidateClusters();
+        }
+
+        /// <summary>
+        /// While looking at a small display, hotbar 1-8 assigns that item (empty slot clears).
+        /// UseHotbarItem passes 1-8 (same as vanilla); inventory columns are 0-7.
+        /// </summary>
+        public static bool TryAssignFromHotbar(Player player, int hotbarIndex)
+        {
+            if (player == null || player != Player.m_localPlayer)
+                return false;
+            if (InventoryGui.IsVisible() || DisplayTypeMenu.IsOpen || StationFilterMenu.IsOpen || DisplayRangeMenu.IsOpen)
+                return false;
+            // Vanilla Player.UseHotbarItem(index) uses 1..8, then GetItemAt(index - 1, 0).
+            if (hotbarIndex < 1 || hotbarIndex > 8)
+                return false;
+
+            StorageDisplayBoard board = HoveredSmall();
+            if (board == null)
+                return false;
+            if (!PrivateArea.CheckAccess(board.transform.position, 0f, false, true))
+            {
+                player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                return true;
+            }
+
+            Inventory inv = player.GetInventory();
+            if (inv == null)
+                return true;
+
+            ItemDrop.ItemData item = inv.GetItemAt(hotbarIndex - 1, 0);
+            board.SetItemFromHotbar(item);
+            if (item?.m_shared != null)
+            {
+                string shown = ItemLabel(ItemIds.SharedName(item));
+                player.Message(MessageHud.MessageType.TopLeft,
+                    Loc.T("Display set: ", "Anzeige gesetzt: ") + shown, 0, null, false);
+            }
+            else
+            {
+                player.Message(MessageHud.MessageType.TopLeft,
+                    Loc.T("Display cleared", "Anzeige geleert"), 0, null, false);
+            }
+            return true;
+        }
+
+        private static StorageDisplayBoard HoveredSmall()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return null;
+
+            GameObject hover = player.GetHoverObject();
+            StorageDisplayBoard fromHover = hover != null
+                ? hover.GetComponentInParent<StorageDisplayBoard>()
+                : null;
+            if (fromHover != null && fromHover.Kind == DisplayKind.Small)
+                return fromHover;
+
+            Piece piece = player.GetHoveringPiece();
+            StorageDisplayBoard fromPiece = piece != null
+                ? piece.GetComponent<StorageDisplayBoard>()
+                : null;
+            if (fromPiece != null && fromPiece.Kind == DisplayKind.Small)
+                return fromPiece;
+            return null;
+        }
+
+        private static string ItemLabel(string token)
+        {
+            if (string.IsNullOrEmpty(token))
+                return Loc.T("Select item", "Item wählen");
+            if (Localization.instance != null)
+                return Localization.instance.Localize(token);
+            return token;
         }
 
         public List<int> FilterIds()
@@ -90,39 +376,25 @@ namespace StoreAndCraft
             return DisplayFilters.ReadIds(zdo);
         }
 
-        /// <summary>Legacy single-id helper (first selected, or 0).</summary>
         public int FilterId()
         {
             List<int> ids = FilterIds();
             return ids.Count > 0 ? ids[0] : 0;
         }
 
-        public void SetFilter(int id)
+        public List<string> ItemTokens()
         {
-            // Replaced by multi-select ToggleFilter; keep for callers that set one type.
-            var ids = new List<int>();
-            if (id > 0)
-                ids.Add(id);
-            WriteFilters(ids);
-        }
-
-        public void ToggleFilter(int id)
-        {
-            if (id <= 0)
-            {
-                WriteFilters(new List<int>());
-                return;
-            }
-
-            List<int> ids = FilterIds();
-            if (ids.Contains(id))
-                ids.Remove(id);
-            else
-                ids.Add(id);
-            WriteFilters(ids);
+            ZNetView nv = GetComponent<ZNetView>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            return DisplayFilters.ReadItemTokens(zdo);
         }
 
         public void WriteFilters(List<int> ids)
+        {
+            WriteSelection(ids, ItemTokens());
+        }
+
+        public void WriteSelection(List<int> ids, List<string> itemTokens)
         {
             ZNetView nv = GetComponent<ZNetView>();
             if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
@@ -130,10 +402,9 @@ namespace StoreAndCraft
             if (!nv.IsOwner())
                 nv.ClaimOwnership();
 
-            string encoded = DisplayFilters.EncodeIds(ids);
             ZDO zdo = nv.GetZDO();
-            zdo.Set(DisplayFilters.ZdoKeyMulti, encoded);
-            // Keep legacy key in sync for older clients (first id or 0).
+            zdo.Set(DisplayFilters.ZdoKeyMulti, DisplayFilters.EncodeIds(ids));
+            zdo.Set(DisplayFilters.ZdoKeyItems, DisplayFilters.EncodeItemTokens(itemTokens));
             int legacy = 0;
             if (ids != null)
             {
@@ -152,6 +423,69 @@ namespace StoreAndCraft
             InvalidateClusters();
         }
 
+        public void ToggleFilter(int id)
+        {
+            if (id <= 0)
+            {
+                WriteSelection(new List<int>(), new List<string>());
+                return;
+            }
+
+            List<int> ids = FilterIds();
+            List<string> items = ItemTokens();
+            if (ids.Contains(id))
+            {
+                ids.Remove(id);
+            }
+            else
+            {
+                ids.Add(id);
+                // Whole category selected: drop fine-grained picks under it.
+                if (DisplayFilters.IsExpandable(id))
+                    items = RemoveCategoryItems(items, id);
+            }
+            WriteSelection(ids, items);
+        }
+
+        public void ToggleItemToken(string shared, int parentFilterId)
+        {
+            if (string.IsNullOrEmpty(shared))
+                return;
+
+            List<int> ids = FilterIds();
+            List<string> items = ItemTokens();
+            if (items.Contains(shared))
+                items.Remove(shared);
+            else
+            {
+                items.Add(shared);
+                if (parentFilterId > 0)
+                    ids.Remove(parentFilterId);
+            }
+            WriteSelection(ids, items);
+        }
+
+        private static List<string> RemoveCategoryItems(List<string> items, int filterId)
+        {
+            if (items == null || items.Count == 0)
+                return new List<string>();
+            var next = new List<string>();
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (!DisplayFilters.TokenBelongsToCategory(items[i], filterId))
+                    next.Add(items[i]);
+            }
+            return next;
+        }
+
+        public void SetFilter(int id)
+        {
+            var ids = new List<int>();
+            if (id > 0)
+                ids.Add(id);
+            WriteSelection(ids, new List<string>());
+        }
+
         public bool TryOpenMenu(Humanoid user)
         {
             Player player = user as Player;
@@ -162,12 +496,31 @@ namespace StoreAndCraft
                 player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
                 return true;
             }
+
+            // Small: no category menu — assign with hotbar 1-8 while looking at it.
+            if (_kind == DisplayKind.Small)
+            {
+                player.Message(MessageHud.MessageType.Center,
+                    Loc.T("Press 1-8 to set item from hotbar", "1-8 drücken: Item aus Hotbar setzen"),
+                    0, null, false);
+                return true;
+            }
+
             DisplayTypeMenu.Open(this);
             return true;
         }
 
         private void Update()
         {
+            // Force UI rebuild when switching to small layout tweaks / slot count changes.
+            if (_slots != null && _slots.Length != _slotCount)
+                _slots = null;
+            // Medium layout gained a category header strip — rebuild old grids.
+            if (_slots != null && _kind == DisplayKind.Medium && _columnHeaders && _headers == null)
+                _slots = null;
+            if (_slots != null && _kind == DisplayKind.Small && _slots.Length == 1
+                && _slots[0].Amount != null && _slots[0].Amount.fontSize < 1f)
+                _slots = null;
             if (_slots == null)
                 TryBuild();
             if (_slots == null)
@@ -213,7 +566,13 @@ namespace StoreAndCraft
         {
             if (_signText == null)
                 return;
-            if (FilterIds().Count > 0)
+            if (FilterIds().Count > 0 || ItemTokens().Count > 0)
+            {
+                SilenceSignText();
+                return;
+            }
+
+            if (_kind == DisplayKind.Small && !string.IsNullOrEmpty(ItemToken()))
             {
                 SilenceSignText();
                 return;
@@ -226,7 +585,9 @@ namespace StoreAndCraft
             _signText.enableAutoSizing = false;
             if (_titleFont > 0f)
                 _signText.fontSize = _titleFont;
-            string title = Loc.T("Select type", "Typ wählen");
+            string title = _kind == DisplayKind.Small
+                ? Loc.T("Press 1-8", "1-8 drücken")
+                : Loc.T("Select type", "Typ wählen");
             if (_signText.text != title)
                 _signText.text = title;
         }
@@ -243,7 +604,7 @@ namespace StoreAndCraft
                 return;
 
             _signText = template;
-            _titleFont = template.fontSize * 0.12f;
+            _titleFont = template.fontSize * _titleFactor;
             SilenceSignText();
 
             Transform existing = board.parent.Find("SacDisplayGrid");
@@ -263,21 +624,71 @@ namespace StoreAndCraft
             rt.localScale = board.localScale;
             rt.localRotation = board.localRotation;
 
-            float font = template.fontSize * 0.22f;
-
-            _slots = new SlotUi[Slots];
-            for (int i = 0; i < Slots; i++)
+            float font = template.fontSize * _fontFactor;
+            float contentTop = 1f;
+            if (_columnHeaders && _headerColumns > 0)
             {
-                int col = i % Columns;
-                int row = i / Columns;
+                contentTop = 0.88f;
+                _headers = new TextMeshProUGUI[_headerColumns];
+                for (int col = 0; col < _headerColumns; col++)
+                {
+                    GameObject headerGo = Object.Instantiate(template.gameObject, root.transform);
+                    headerGo.name = "Header" + col;
+                    headerGo.SetActive(true);
+                    RectTransform headerRt = headerGo.GetComponent<RectTransform>();
+                    float h0 = (col * _itemsPerGroup) / (float)_columns;
+                    float h1 = ((col + 1) * _itemsPerGroup) / (float)_columns;
+                    headerRt.anchorMin = new Vector2(h0 + 0.01f, contentTop);
+                    headerRt.anchorMax = new Vector2(h1 - 0.01f, 1f);
+                    headerRt.offsetMin = Vector2.zero;
+                    headerRt.offsetMax = Vector2.zero;
+                    headerRt.localScale = Vector3.one;
+                    headerRt.localRotation = Quaternion.identity;
+
+                    TextMeshProUGUI header = headerGo.GetComponent<TextMeshProUGUI>();
+                    var localize = headerGo.GetComponent("Localize") as MonoBehaviour;
+                    if (localize != null)
+                        Object.Destroy(localize);
+                    if (template.font != null)
+                        header.font = template.font;
+                    header.enabled = true;
+                    header.alignment = TextAlignmentOptions.Center;
+                    header.textWrappingMode = TextWrappingModes.NoWrap;
+                    header.overflowMode = TextOverflowModes.Overflow;
+                    header.enableAutoSizing = false;
+                    header.fontSize = font * 0.85f;
+                    header.color = new Color(1f, 0.95f, 0.75f, 1f);
+                    header.faceColor = new Color32(255, 242, 191, 255);
+                    header.outlineWidth = 0f;
+                    header.raycastTarget = false;
+                    header.text = "";
+                    _headers[col] = header;
+                }
+            }
+            else
+            {
+                _headers = null;
+            }
+
+            float iconMax = _tightSlots ? 0.40f : (_kind == DisplayKind.Small ? 0.42f : 0.46f);
+            float textMin = _tightSlots ? 0.36f : (_kind == DisplayKind.Small ? 0.40f : 0.46f);
+            float padX = _tightSlots ? 0.006f : 0.012f;
+            float padY = _tightSlots ? 0.012f : 0.018f;
+
+            _slots = new SlotUi[_slotCount];
+            for (int i = 0; i < _slotCount; i++)
+            {
+                int col;
+                int row;
+                SlotCoord(i, out col, out row);
 
                 var cell = new GameObject("Slot" + i, typeof(RectTransform));
                 cell.transform.SetParent(root.transform, false);
                 RectTransform cellRt = cell.GetComponent<RectTransform>();
-                const float padX = 0.012f;
-                const float padY = 0.018f;
-                cellRt.anchorMin = new Vector2(col / (float)Columns + padX, 1f - (row + 1) / (float)Rows + padY);
-                cellRt.anchorMax = new Vector2((col + 1) / (float)Columns - padX, 1f - row / (float)Rows - padY);
+                float y0 = contentTop * (1f - (row + 1) / (float)_rows) + padY * contentTop;
+                float y1 = contentTop * (1f - row / (float)_rows) - padY * contentTop;
+                cellRt.anchorMin = new Vector2(col / (float)_columns + padX, y0);
+                cellRt.anchorMax = new Vector2((col + 1) / (float)_columns - padX, y1);
                 cellRt.offsetMin = Vector2.zero;
                 cellRt.offsetMax = Vector2.zero;
                 cellRt.localScale = Vector3.one;
@@ -286,7 +697,7 @@ namespace StoreAndCraft
                 iconGo.transform.SetParent(cell.transform, false);
                 RectTransform iconRt = iconGo.GetComponent<RectTransform>();
                 iconRt.anchorMin = new Vector2(0.00f, 0.10f);
-                iconRt.anchorMax = new Vector2(0.46f, 0.92f);
+                iconRt.anchorMax = new Vector2(iconMax, 0.92f);
                 iconRt.offsetMin = Vector2.zero;
                 iconRt.offsetMax = Vector2.zero;
                 Image icon = iconGo.GetComponent<Image>();
@@ -300,9 +711,9 @@ namespace StoreAndCraft
                 textGo.SetActive(true);
                 textGo.transform.SetAsLastSibling();
                 RectTransform textRt = textGo.GetComponent<RectTransform>();
-                textRt.anchorMin = new Vector2(0.46f, 0.08f);
+                textRt.anchorMin = new Vector2(textMin, 0.08f);
                 textRt.anchorMax = new Vector2(1.00f, 0.92f);
-                textRt.pivot = new Vector2(0.5f, 0.5f);
+                textRt.pivot = new Vector2(0f, 0.5f);
                 textRt.offsetMin = Vector2.zero;
                 textRt.offsetMax = Vector2.zero;
                 textRt.anchoredPosition = Vector2.zero;
@@ -312,16 +723,20 @@ namespace StoreAndCraft
 
                 TextMeshProUGUI amount = textGo.GetComponent<TextMeshProUGUI>();
                 amount.enabled = true;
-                var localize = textGo.GetComponent("Localize") as MonoBehaviour;
-                if (localize != null)
-                    Object.Destroy(localize);
+                var localizeAmt = textGo.GetComponent("Localize") as MonoBehaviour;
+                if (localizeAmt != null)
+                    Object.Destroy(localizeAmt);
                 if (template.font != null)
                     amount.font = template.font;
-                amount.alignment = TextAlignmentOptions.MidlineLeft;
+                amount.alignment = _kind == DisplayKind.Small
+                    ? TextAlignmentOptions.MidlineLeft
+                    : TextAlignmentOptions.MidlineLeft;
                 amount.textWrappingMode = TextWrappingModes.NoWrap;
                 amount.overflowMode = TextOverflowModes.Overflow;
                 amount.enableAutoSizing = false;
                 amount.fontSize = font;
+                if (_kind == DisplayKind.Small)
+                    amount.fontSize = Mathf.Max(font, template.fontSize * 0.22f);
                 amount.color = new Color(1f, 0.95f, 0.75f, 1f);
                 amount.faceColor = new Color32(255, 242, 191, 255);
                 amount.outlineWidth = 0f;
@@ -333,22 +748,55 @@ namespace StoreAndCraft
             }
         }
 
+        private void SlotCoord(int index, out int col, out int row)
+        {
+            if (_columnMajor)
+            {
+                col = index / _rows;
+                row = index % _rows;
+            }
+            else
+            {
+                col = index % _columns;
+                row = index / _columns;
+            }
+        }
+
+        private int SlotIndex(int col, int row)
+        {
+            if (_columnMajor)
+                return col * _rows + row;
+            return row * _columns + col;
+        }
+
         private void Resubscribe()
         {
             NearbyIndex.Tick();
-            float range = Plugin.Settings != null ? Plugin.Settings.StorageRange.Value : NearbyIndex.AccessRange();
+            float range = EffectiveDisplayRange();
             Vector3 origin = transform.position;
             var next = new List<Container>();
             var ids = new List<int>();
-            foreach (Container container in NearbyIndex.Within(origin, range))
+
+            // Prefer registered chests around the board (not only the player scan cache).
+            NearbyIndex.CollectNear(origin, range, _watchScratch);
+            for (int i = 0; i < _watchScratch.Count; i++)
             {
+                Container container = _watchScratch[i];
                 if (container == null)
+                    continue;
+                if (!ContainerFilter.IsPlayerBuiltStorage(container))
                     continue;
                 if (!ContainerFilter.PlayerMayUse(container, origin))
                     continue;
+                if (ChestNames.IsIgnored(container))
+                    continue;
+
+                // Unopened chests often have null/empty inv until Load — required for displays.
+                NearbyIndex.EnsureInventory(container);
                 Inventory inv = container.GetInventory();
                 if (inv == null)
                     continue;
+
                 next.Add(container);
                 ids.Add(container.GetInstanceID());
             }
@@ -368,7 +816,12 @@ namespace StoreAndCraft
             }
 
             if (same)
+            {
+                // Still refresh inventories so counts stay current without reopening chests.
+                for (int i = 0; i < _watched.Count; i++)
+                    NearbyIndex.EnsureInventory(_watched[i]);
                 return;
+            }
 
             Unwatch();
             foreach (Container container in next)
@@ -411,6 +864,9 @@ namespace StoreAndCraft
             var seen = new HashSet<int>();
             float link = NearbyIndex.AccessRange();
             List<int> myFilters = FilterIds();
+            List<string> myItems = ItemTokens();
+            string myItem = _kind == DisplayKind.Small ? ItemToken() : "";
+            float myRange = EffectiveDisplayRange();
 
             queue.Enqueue(this);
             seen.Add(GetInstanceID());
@@ -432,8 +888,25 @@ namespace StoreAndCraft
                     }
                     if (!seen.Add(other.GetInstanceID()))
                         continue;
-                    if (myFilters.Count == 0 || !DisplayFilters.SameIds(other.FilterIds(), myFilters))
+                    if (other._kind != _kind)
                         continue;
+                    if (Mathf.Abs(other.EffectiveDisplayRange() - myRange) > 0.1f)
+                        continue;
+                    if (_kind == DisplayKind.Small)
+                    {
+                        if (string.IsNullOrEmpty(myItem)
+                            || !string.Equals(other.ItemToken(), myItem, System.StringComparison.Ordinal))
+                            continue;
+                    }
+                    else if (!DisplayFilters.SameIds(other.FilterIds(), myFilters)
+                        || !DisplayFilters.SameItemTokens(other.ItemTokens(), myItems))
+                    {
+                        continue;
+                    }
+                    else if (myFilters.Count == 0 && myItems.Count == 0)
+                    {
+                        continue;
+                    }
                     if (Vector3.Distance(pos, other.transform.position) <= link)
                         queue.Enqueue(other);
                 }
@@ -482,10 +955,19 @@ namespace StoreAndCraft
                 return;
 
             ApplyTitle();
-            List<int> filters = FilterIds();
-            if (filters.Count == 0)
+            ClearHeaders();
+
+            if (_kind == DisplayKind.Small)
             {
-                for (int i = 0; i < Slots; i++)
+                PaintExactItem();
+                return;
+            }
+
+            List<int> filters = FilterIds();
+            List<string> itemTokens = ItemTokens();
+            if (filters.Count == 0 && itemTokens.Count == 0)
+            {
+                for (int i = 0; i < _slotCount; i++)
                     ClearSlot(i);
                 return;
             }
@@ -494,9 +976,206 @@ namespace StoreAndCraft
             _pages = Mathf.Max(1, cluster.Count);
             _page = Mathf.Max(0, cluster.IndexOf(this));
 
+            if (_kind == DisplayKind.Large && filters.Count >= 2 && itemTokens.Count == 0)
+            {
+                PaintLargeByFilter(cluster, filters);
+                return;
+            }
+
+            PaintRanked(cluster, filters, itemTokens);
+        }
+
+        private void PaintExactItem()
+        {
+            string token = ItemToken();
+            if (string.IsNullOrEmpty(token))
+            {
+                for (int i = 0; i < _slotCount; i++)
+                    ClearSlot(i);
+                return;
+            }
+
+            string shared = ItemIds.SharedFromToken(token);
+            List<StorageDisplayBoard> cluster = Cluster();
+            int total = 0;
+            var seenChest = new HashSet<int>();
+            ItemDrop.ItemData sample = null;
+            foreach (StorageDisplayBoard board in cluster)
+            {
+                if (board == null)
+                    continue;
+                foreach (Container container in board._watched)
+                {
+                    if (container == null || !seenChest.Add(container.GetInstanceID()))
+                        continue;
+                    NearbyIndex.EnsureInventory(container);
+                    Inventory inv = container.GetInventory();
+                    if (inv == null)
+                        continue;
+
+                    int n = 0;
+                    if (!string.IsNullOrEmpty(shared))
+                        n = inv.CountItems(shared, -1, true);
+                    if (n <= 0)
+                    {
+                        foreach (ItemDrop.ItemData item in inv.GetAllItems())
+                        {
+                            if (item?.m_shared == null || item.m_stack <= 0)
+                                continue;
+                            if (!ItemIds.Matches(item, token) && !ItemIds.Matches(item, shared))
+                                continue;
+                            n += item.m_stack;
+                            if (sample == null)
+                                sample = item;
+                        }
+                    }
+                    else if (sample == null)
+                    {
+                        foreach (ItemDrop.ItemData item in inv.GetAllItems())
+                        {
+                            if (item?.m_shared == null || item.m_stack <= 0)
+                                continue;
+                            if (ItemIds.Matches(item, token) || ItemIds.Matches(item, shared))
+                            {
+                                sample = item;
+                                break;
+                            }
+                        }
+                    }
+
+                    total += n;
+                }
+            }
+
+            if (sample == null)
+                sample = SampleFromToken(token);
+
+            for (int i = 0; i < _slotCount; i++)
+            {
+                if (i == 0 && sample != null)
+                {
+                    _slots[i].Icon.sprite = StackLimits.Icon(sample);
+                    _slots[i].Icon.enabled = _slots[i].Icon.sprite != null;
+                    _slots[i].Icon.color = Color.white;
+                    SetAmount(i, FormatCount(total));
+                }
+                else
+                {
+                    ClearSlot(i);
+                }
+            }
+        }
+
+        private static ItemDrop.ItemData SampleFromToken(string token)
+        {
+            GameObject prefab = ItemIds.PrefabFromToken(token);
+            if (prefab == null)
+                return null;
+            ItemDrop drop = prefab.GetComponent<ItemDrop>();
+            return drop != null ? drop.m_itemData : null;
+        }
+
+        private void PaintLargeByFilter(List<StorageDisplayBoard> cluster, List<int> filters)
+        {
+            int groups = Mathf.Min(_headerColumns, filters.Count);
+            int pair = Mathf.Max(1, _itemsPerGroup);
+            int perPage = _rows * pair;
+
+            for (int group = 0; group < _headerColumns; group++)
+            {
+                if (group < groups)
+                    SetHeader(group, DisplayFilters.Label(filters[group]));
+                else
+                    SetHeader(group, "");
+
+                var ranked = RankItems(cluster, group < groups ? new List<int> { filters[group] } : null, null);
+                int start = _page * perPage;
+                for (int row = 0; row < _rows; row++)
+                {
+                    for (int sub = 0; sub < pair; sub++)
+                    {
+                        int slotCol = group * pair + sub;
+                        int slot = SlotIndex(slotCol, row);
+                        int index = start + row * pair + sub;
+                        if (group >= groups || index >= ranked.Count)
+                        {
+                            ClearSlot(slot);
+                            continue;
+                        }
+                        PaintSlot(slot, ranked[index]);
+                    }
+                }
+            }
+        }
+
+        private void PaintRanked(
+            List<StorageDisplayBoard> cluster,
+            List<int> filters,
+            List<string> itemTokens)
+        {
+            bool groupByCategory = _kind == DisplayKind.Medium;
+            var ranked = RankItems(cluster, filters, itemTokens, groupByCategory);
+            int start = _page * _slotCount;
+            bool lastBoard = _page >= _pages - 1;
+            int remaining = Mathf.Max(0, ranked.Count - start);
+            int extraAfterThis = Mathf.Max(0, remaining - _slotCount);
+            int shown = remaining;
+            if (lastBoard && extraAfterThis > 0)
+                shown = _slotCount - 1;
+            else
+                shown = Mathf.Min(_slotCount, remaining);
+
+            if (_columnHeaders)
+            {
+                string cats = DisplayFilters.Label(filters, itemTokens);
+                if (_headerColumns >= 1)
+                    SetHeader(0, cats);
+                for (int h = 1; h < _headerColumns; h++)
+                    SetHeader(h, "");
+            }
+
+            for (int i = 0; i < _slotCount; i++)
+            {
+                if (lastBoard && extraAfterThis > 0 && i == _slotCount - 1)
+                {
+                    ClearSlot(i);
+                    SetAmount(i, "+" + extraAfterThis);
+                    continue;
+                }
+
+                int index = start + i;
+                if (i >= shown || index >= ranked.Count)
+                {
+                    ClearSlot(i);
+                    continue;
+                }
+
+                PaintSlot(i, ranked[index]);
+            }
+        }
+
+        private struct RankedItem
+        {
+            public ItemDrop.ItemData Sample;
+            public int Count;
+            public int CategoryId;
+            public int CategoryOrder;
+        }
+
+        private List<RankedItem> RankItems(
+            List<StorageDisplayBoard> cluster,
+            List<int> filters,
+            List<string> itemTokens,
+            bool groupByCategory = false)
+        {
             var totals = new Dictionary<string, int>();
             var sample = new Dictionary<string, ItemDrop.ItemData>();
             var seenChest = new HashSet<int>();
+            bool hasFilters = filters != null && filters.Count > 0;
+            bool hasItems = itemTokens != null && itemTokens.Count > 0;
+            if (!hasFilters && !hasItems)
+                return new List<RankedItem>();
+
             foreach (StorageDisplayBoard board in cluster)
             {
                 if (board == null)
@@ -512,7 +1191,7 @@ namespace StoreAndCraft
                     {
                         if (item?.m_shared == null || item.m_stack <= 0)
                             continue;
-                        if (!DisplayFilters.MatchesAny(item, filters))
+                        if (!DisplayFilters.MatchesSelection(item, filters, itemTokens))
                             continue;
                         string key = item.m_shared.m_name;
                         int n;
@@ -524,51 +1203,111 @@ namespace StoreAndCraft
                 }
             }
 
-            var ranked = new List<KeyValuePair<string, int>>(totals);
-            ranked.Sort((a, b) =>
+            var ranked = new List<RankedItem>(totals.Count);
+            foreach (KeyValuePair<string, int> pair in totals)
             {
-                int byCount = b.Value.CompareTo(a.Value);
-                if (byCount != 0)
-                    return byCount;
-                return string.CompareOrdinal(a.Key, b.Key);
-            });
-
-            int start = _page * Slots;
-            bool lastBoard = _page >= _pages - 1;
-            int remaining = Mathf.Max(0, ranked.Count - start);
-            int extraAfterThis = Mathf.Max(0, remaining - Slots);
-            int shown = remaining;
-            if (lastBoard && extraAfterThis > 0)
-                shown = Slots - 1;
-            else
-                shown = Mathf.Min(Slots, remaining);
-
-            for (int i = 0; i < Slots; i++)
-            {
-                if (lastBoard && extraAfterThis > 0 && i == Slots - 1)
-                {
-                    ClearSlot(i);
-                    SetAmount(i, "+" + extraAfterThis);
-                    continue;
-                }
-
-                int index = start + i;
-                if (i >= shown || index >= ranked.Count)
-                {
-                    ClearSlot(i);
-                    continue;
-                }
-
-                string key = ranked[index].Key;
                 ItemDrop.ItemData item;
-                sample.TryGetValue(key, out item);
-                int count = ranked[index].Value;
-
-                _slots[i].Icon.sprite = StackLimits.Icon(item);
-                _slots[i].Icon.enabled = _slots[i].Icon.sprite != null;
-                _slots[i].Icon.color = Color.white;
-                SetAmount(i, FormatCount(count));
+                sample.TryGetValue(pair.Key, out item);
+                int catId = CategoryIdForItem(item, filters, itemTokens);
+                ranked.Add(new RankedItem
+                {
+                    Sample = item,
+                    Count = pair.Value,
+                    CategoryId = catId,
+                    CategoryOrder = DisplayFilters.CategorySortOrder(catId)
+                });
             }
+
+            if (groupByCategory)
+            {
+                ranked.Sort((a, b) =>
+                {
+                    int byCat = a.CategoryOrder.CompareTo(b.CategoryOrder);
+                    if (byCat != 0)
+                        return byCat;
+                    int byCount = b.Count.CompareTo(a.Count);
+                    if (byCount != 0)
+                        return byCount;
+                    string na = a.Sample?.m_shared != null ? a.Sample.m_shared.m_name : "";
+                    string nb = b.Sample?.m_shared != null ? b.Sample.m_shared.m_name : "";
+                    return string.CompareOrdinal(na, nb);
+                });
+            }
+            else
+            {
+                ranked.Sort((a, b) =>
+                {
+                    int byCount = b.Count.CompareTo(a.Count);
+                    if (byCount != 0)
+                        return byCount;
+                    string na = a.Sample?.m_shared != null ? a.Sample.m_shared.m_name : "";
+                    string nb = b.Sample?.m_shared != null ? b.Sample.m_shared.m_name : "";
+                    return string.CompareOrdinal(na, nb);
+                });
+            }
+            return ranked;
+        }
+
+        private static int CategoryIdForItem(
+            ItemDrop.ItemData item,
+            List<int> filters,
+            List<string> itemTokens)
+        {
+            if (item == null)
+                return 0;
+
+            // Prefer a selected filter that matches this item (Choices order among selected).
+            if (filters != null && filters.Count > 0)
+            {
+                int best = 0;
+                int bestOrder = int.MaxValue;
+                for (int i = 0; i < filters.Count; i++)
+                {
+                    int id = filters[i];
+                    if (!DisplayFilters.Matches(item, id))
+                        continue;
+                    int order = DisplayFilters.CategorySortOrder(id);
+                    if (order < bestOrder)
+                    {
+                        bestOrder = order;
+                        best = id;
+                    }
+                }
+                if (best > 0)
+                    return best;
+            }
+
+            return DisplayFilters.ParentFilterId(item);
+        }
+
+        private void PaintSlot(int i, RankedItem entry)
+        {
+            _slots[i].Icon.sprite = StackLimits.Icon(entry.Sample);
+            _slots[i].Icon.enabled = _slots[i].Icon.sprite != null;
+            _slots[i].Icon.color = Color.white;
+            SetAmount(i, FormatCount(entry.Count));
+        }
+
+        private void ClearHeaders()
+        {
+            if (_headers == null)
+                return;
+            for (int i = 0; i < _headers.Length; i++)
+                SetHeader(i, "");
+        }
+
+        private void SetHeader(int col, string text)
+        {
+            if (_headers == null || col < 0 || col >= _headers.Length)
+                return;
+            TextMeshProUGUI header = _headers[col];
+            if (header == null)
+                return;
+            string next = text ?? "";
+            if (header.text == next)
+                return;
+            header.enabled = true;
+            header.text = next;
         }
 
         private void ClearSlot(int i)

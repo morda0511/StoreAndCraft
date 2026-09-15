@@ -170,9 +170,19 @@ namespace StoreAndCraft
                 + " (" + (IsOn(nv) ? Loc.T("on", "an") : Loc.T("off", "aus")) + ")";
         }
 
+        /// <summary>Cooking hover extras in fixed order: filter → auto-drop → auto-fill.</summary>
+        public static void AppendCookingHover(ref string text, CookingStation station)
+        {
+            if (station == null)
+                return;
+            StationPullFilter.AppendFilterHover(ref text, station);
+            CookingAutoDrop.AppendHover(ref text, station);
+            AppendHover(ref text, station.GetComponent<ZNetView>());
+        }
+
         public static bool TryToggle()
         {
-            if (InventoryGui.IsVisible() || StationFilterMenu.IsOpen || DisplayTypeMenu.IsOpen)
+            if (InventoryGui.IsVisible() || StationFilterMenu.IsOpen || DisplayTypeMenu.IsOpen || DisplayRangeMenu.IsOpen)
                 return false;
             if (!StationFeed.Ready())
                 return false;
@@ -1148,9 +1158,7 @@ namespace StoreAndCraft
     {
         private static void Postfix(CookingStation __instance, ref string __result)
         {
-            if (__instance == null)
-                return;
-            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
+            StationAutoFill.AppendCookingHover(ref __result, __instance);
         }
     }
 
@@ -1159,9 +1167,7 @@ namespace StoreAndCraft
     {
         private static void Postfix(CookingStation __instance, ref string __result)
         {
-            if (__instance == null)
-                return;
-            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
+            StationAutoFill.AppendCookingHover(ref __result, __instance);
         }
     }
 
@@ -1180,8 +1186,7 @@ namespace StoreAndCraft
             CookingStation oven = __instance.GetComponentInParent<CookingStation>();
             if (oven == null || __instance != oven.m_addFoodSwitch)
                 return;
-            StationAutoFill.AppendHover(ref __result, oven.GetComponent<ZNetView>());
-            CookingAutoDrop.AppendHover(ref __result, oven);
+            StationAutoFill.AppendCookingHover(ref __result, oven);
         }
     }
 

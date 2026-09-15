@@ -49,6 +49,15 @@ namespace StoreAndCraft
             if (string.Equals(SharedName(item), token, System.StringComparison.OrdinalIgnoreCase))
                 return true;
 
+            string normToken = Normalize(token);
+            if (!string.IsNullOrEmpty(normToken))
+            {
+                if (string.Equals(Normalize(PrefabName(item)), normToken, System.StringComparison.Ordinal))
+                    return true;
+                if (string.Equals(Normalize(SharedName(item)), normToken, System.StringComparison.Ordinal))
+                    return true;
+            }
+
             if (global::Localization.instance != null && item.m_shared != null)
             {
                 string localized = global::Localization.instance.Localize(item.m_shared.m_name);
@@ -57,6 +66,33 @@ namespace StoreAndCraft
             }
 
             return false;
+        }
+
+        /// <summary>Resolve a stored display token to the inventory shared-name for CountItems.</summary>
+        public static string SharedFromToken(string token)
+        {
+            if (string.IsNullOrEmpty(token))
+                return null;
+            if (token.StartsWith("$item_", System.StringComparison.OrdinalIgnoreCase))
+                return token;
+
+            GameObject prefab = PrefabFromToken(token);
+            ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            if (drop?.m_itemData?.m_shared != null && !string.IsNullOrEmpty(drop.m_itemData.m_shared.m_name))
+                return drop.m_itemData.m_shared.m_name;
+
+            return token;
+        }
+
+        private static string Normalize(string raw)
+        {
+            if (string.IsNullOrEmpty(raw))
+                return "";
+            string s = raw.Trim().ToLowerInvariant();
+            if (s.StartsWith("$item_"))
+                s = s.Substring(6);
+            s = s.Replace(" ", "").Replace("-", "").Replace("_", "");
+            return s;
         }
 
         public static GameObject PrefabFromToken(string token)
@@ -86,16 +122,6 @@ namespace StoreAndCraft
             }
 
             return null;
-        }
-
-        public static string SharedFromToken(string token)
-        {
-            GameObject prefab = PrefabFromToken(token);
-            if (prefab == null)
-                return token;
-
-            ItemDrop drop = prefab.GetComponent<ItemDrop>();
-            return drop?.m_itemData?.m_shared != null ? drop.m_itemData.m_shared.m_name : token;
         }
     }
 }

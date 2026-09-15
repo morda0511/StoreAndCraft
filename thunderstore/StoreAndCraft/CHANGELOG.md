@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.2 — Pre-release Test
+
+- **Feature:** Small / Medium / Large Storage Displays (hotbar item on Small, category grid on Medium, 3-column Large)
+- **Feature:** Food / Ingredients expand for single items; Medium sorts per category; category titles on the board
+- **Feature:** Per-display **DisplayRange** via **Alt+R** (5–50 m, any ward access, no admin)
+- **Feature:** Cooking spit / oven chest-pull filter (same hotkey as kiln/smelter)
+- **Fix:** Auto-store when chest inventory was stale until opened (budgeted force-load on miss)
+- **Fix:** Display filter labels and menu layout polish
+- Pre-release for testing — server + all clients need the **same** build
+
 ## 1.2.1 — Cooking auto-drop + stone oven auto-fill
 
 - **Feature:** look at a cooking spit, iron cooking station, or stone oven (inventory **closed**) and press **N** to toggle **auto-drop**. Finished food falls off as a ground drop so auto-store can put it in a chest. Per-station, saved on the piece. Hotkey `AutoDropKey` (default **N**)

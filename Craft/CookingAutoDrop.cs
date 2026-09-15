@@ -51,7 +51,7 @@ namespace StoreAndCraft
 
         public static bool TryToggle()
         {
-            if (InventoryGui.IsVisible() || StationFilterMenu.IsOpen || DisplayTypeMenu.IsOpen)
+            if (InventoryGui.IsVisible() || StationFilterMenu.IsOpen || DisplayTypeMenu.IsOpen || DisplayRangeMenu.IsOpen)
                 return false;
 
             Player player = Player.m_localPlayer;
@@ -128,24 +128,6 @@ namespace StoreAndCraft
         private static void Postfix(CookingStation __instance)
         {
             CookingAutoDrop.TryPopDone(__instance);
-        }
-    }
-
-    [HarmonyPatch(typeof(CookingStation), nameof(CookingStation.GetHoverText))]
-    internal static class CookingAutoDropHoverPatch
-    {
-        private static void Postfix(CookingStation __instance, ref string __result)
-        {
-            CookingAutoDrop.AppendHover(ref __result, __instance);
-        }
-    }
-
-    [HarmonyPatch(typeof(CookingStation), "OnHoverFuelSwitch")]
-    internal static class CookingAutoDropHoverFuelPatch
-    {
-        private static void Postfix(CookingStation __instance, ref string __result)
-        {
-            CookingAutoDrop.AppendHover(ref __result, __instance);
         }
     }
 }

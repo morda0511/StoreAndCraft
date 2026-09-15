@@ -9,7 +9,7 @@ namespace StoreAndCraft
             if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
                 return;
             if (Console.IsVisible() || (Chat.instance != null && Chat.instance.HasFocus()) || TextInput.IsVisible()
-                || DisplayTypeMenu.IsOpen || StationFilterMenu.IsOpen)
+                || DisplayTypeMenu.IsOpen || StationFilterMenu.IsOpen || DisplayRangeMenu.IsOpen)
                 return;
 
             if (KeyUtil.Down(Plugin.Settings.DumpKey.Value))
@@ -37,6 +37,11 @@ namespace StoreAndCraft
             else if (KeyUtil.Down(Plugin.Settings.AutoDropKey.Value))
             {
                 CookingAutoDrop.TryToggle();
+            }
+            else if (KeyUtil.Down(Plugin.Settings.DisplayRangeKey.Value))
+            {
+                // Per-display range: any player with ward access (not admin-gated).
+                DisplayRangeMenu.TryOpenHovered();
             }
 
             if (KeyUtil.Down(Plugin.Settings.RenameKey.Value))

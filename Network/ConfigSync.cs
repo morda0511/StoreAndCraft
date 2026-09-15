@@ -131,6 +131,12 @@ namespace StoreAndCraft
                     + " Craft=" + Plugin.Settings.CraftRange.Value
                     + " canEdit=" + ServerGrantedEdit);
             }
+            catch (System.Exception ex)
+            {
+                Plugin.Log.LogWarning(
+                    "StoreAndCraft: failed to apply server config: " + ex.GetType().Name +
+                    ": " + ex.Message + " (server/client version mismatch?)");
+            }
             finally
             {
                 IsApplyingRemoteConfig = false;

@@ -25,6 +25,7 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - **Middle mouse** (inventory open) — store only the hovered item.
 - Hotbar can be skipped (`IgnoreHotbar`).
 - Favorites are never dumped / hover-stored (see below).
+- **Remote dump (experimental):** if nothing matches near you, dump can ask a **buddy who is near matching base chests** to finish the store (they must have that area loaded). Toggle `RemoteDumpEnabled` (default on). Cooldown / max stacks in config. Easy kill-switch — set false or remove `Network/RemoteDump.cs` + `BEGIN REMOTE_DUMP` blocks.
 
 ### Craft & build from chests
 - Recipes and hammer pieces count nearby chest contents.

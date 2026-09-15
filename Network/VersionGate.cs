@@ -175,8 +175,9 @@ namespace StoreAndCraft
             if (AdminUtil.IsServer())
                 return;
 
+            bool was = ClientVerified;
             ClientVerified = ok != 0;
-            if (ClientVerified)
+            if (ClientVerified && !was)
                 Plugin.Log.LogInfo("StoreAndCraft: handshake acknowledged.");
         }
 

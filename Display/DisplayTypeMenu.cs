@@ -34,7 +34,10 @@ namespace StoreAndCraft
 
             if (IsOpen)
                 Close();
+            if (DisplayRangeMenu.IsOpen)
+                DisplayRangeMenu.Close();
 
+            DisplayFilters.InvalidateSubItemCache();
             _board = board;
             _skills = gui.m_skillsDialog;
             _openedAt = Time.unscaledTime;
@@ -71,6 +74,7 @@ namespace StoreAndCraft
                 IsOpen = false;
                 _openedInventory = false;
                 _board = null;
+                Expanded.Clear();
                 _suppressMenuFrame = Time.frameCount;
 
                 ClearOurRows();
@@ -128,15 +132,45 @@ namespace StoreAndCraft
             Close();
         }
 
+        private static readonly HashSet<int> Expanded = new HashSet<int>();
+
         private static void Pick(int id)
         {
             StorageDisplayBoard board = _board;
             if (board == null)
                 return;
             if (id == 0)
-                board.WriteFilters(new List<int>());
-            else
-                board.ToggleFilter(id);
+            {
+                board.WriteSelection(new List<int>(), new List<string>());
+                RebuildRows();
+                return;
+            }
+            if (DisplayFilters.IsExpandable(id))
+            {
+                if (!Expanded.Add(id))
+                    Expanded.Remove(id);
+                RebuildRows();
+                return;
+            }
+            board.ToggleFilter(id);
+            RebuildRows();
+        }
+
+        private static void PickAll(int filterId)
+        {
+            StorageDisplayBoard board = _board;
+            if (board == null)
+                return;
+            board.ToggleFilter(filterId);
+            RebuildRows();
+        }
+
+        private static void PickItem(string shared, int parentFilterId)
+        {
+            StorageDisplayBoard board = _board;
+            if (board == null)
+                return;
+            board.ToggleItemToken(shared, parentFilterId);
             RebuildRows();
         }
 
@@ -182,86 +216,137 @@ namespace StoreAndCraft
                 return;
 
             ClearOurRows();
-            int count = DisplayFilters.Choices.Length + 2;
             List<int> selected = _board != null ? _board.FilterIds() : new List<int>();
+            List<string> selectedItems = _board != null ? _board.ItemTokens() : new List<string>();
 
-            for (int i = 0; i < count; i++)
+            int rowIndex = 0;
+            for (int i = 0; i < DisplayFilters.Choices.Length; i++)
             {
-                int id;
-                string label;
-                bool on;
-                if (i < DisplayFilters.Choices.Length)
+                DisplayFilter choice = DisplayFilters.Choices[i];
+                int id = choice.Id;
+                bool expandable = DisplayFilters.IsExpandable(id);
+                bool expanded = expandable && Expanded.Contains(id);
+                bool categoryOn = selected.Contains(id);
+                bool anyChildOn = false;
+                if (expandable)
                 {
-                    id = DisplayFilters.Choices[i].Id;
-                    label = DisplayFilters.Choices[i].Label();
-                    on = selected.Contains(id);
-                }
-                else if (i == DisplayFilters.Choices.Length)
-                {
-                    id = 0;
-                    label = Loc.T("Clear", "Zurücksetzen");
-                    on = false;
-                }
-                else
-                {
-                    id = -1;
-                    label = Loc.T("Done", "Fertig");
-                    on = false;
+                    List<string> subs = DisplayFilters.SubItems(id);
+                    for (int s = 0; s < subs.Count; s++)
+                    {
+                        if (selectedItems.Contains(subs[s]))
+                        {
+                            anyChildOn = true;
+                            break;
+                        }
+                    }
                 }
 
-                GameObject row = Object.Instantiate(
-                    _skills.m_elementPrefab,
-                    Vector3.zero,
-                    Quaternion.identity,
-                    _skills.m_listRoot);
-                row.SetActive(true);
-                RectTransform rt = row.transform as RectTransform;
-                if (rt != null)
-                    rt.anchoredPosition = new Vector2(0f, -i * _skills.m_spacing);
-                if (id < 0)
-                    BindActionRow(row, label, Close);
-                else
-                    BindToggleRow(row, id, label, on);
-                _rows.Add(row);
+                bool parentOn = categoryOn || anyChildOn;
+                string expandMark = expandable ? (expanded ? " v " : " > ") : "   ";
+                string mark = parentOn ? "[+]" : "[-]";
+                string label = expandMark + mark + "  " + choice.Label();
+                AddToggleRow(rowIndex++, () => Pick(id), label, parentOn);
+
+                if (!expanded)
+                    continue;
+
+                string allLabel = "    " + (categoryOn ? "[+]" : "[-]") + "  "
+                    + Loc.T("All", "Alle") + " " + choice.Label();
+                int capturedId = id;
+                AddToggleRow(rowIndex++, () => PickAll(capturedId), allLabel, categoryOn);
+
+                List<string> items = DisplayFilters.SubItems(id);
+                for (int s = 0; s < items.Count; s++)
+                {
+                    string shared = items[s];
+                    bool on = selectedItems.Contains(shared);
+                    string itemLabel = "    " + (on ? "[+]" : "[-]") + "  " + DisplayFilters.ItemLabel(shared);
+                    string capturedShared = shared;
+                    int parent = id;
+                    AddToggleRow(rowIndex++, () => PickItem(capturedShared, parent), itemLabel, on);
+                }
             }
 
-            float height = Mathf.Max(_skills.m_listRoot.rect.height, count * _skills.m_spacing);
+            AddActionRow(rowIndex++, Loc.T("Clear", "Zurücksetzen"), () => Pick(0));
+            AddActionRow(rowIndex++, Loc.T("Done", "Fertig"), Close);
+
+            float height = Mathf.Max(_skills.m_listRoot.rect.height, rowIndex * _skills.m_spacing);
             _skills.m_listRoot.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
 
             if (_skills.m_totalSkillText != null)
             {
                 _skills.m_totalSkillText.text = Loc.T(
-                    "ON = show. OFF = hide. Combine several types. Done closes.",
-                    "AN = anzeigen. AUS = ausblenden. Mehrere Typen kombinieren. Fertig schließt.");
+                    "Food / Ingredients: expand for items. All = whole type. Done closes.",
+                    "Essen / Zutaten: aufklappen für Items. Alle = ganzer Typ. Fertig schließt.");
             }
+        }
+
+        private static void AddToggleRow(int index, UnityEngine.Events.UnityAction action, string label, bool selected)
+        {
+            GameObject row = Object.Instantiate(
+                _skills.m_elementPrefab,
+                Vector3.zero,
+                Quaternion.identity,
+                _skills.m_listRoot);
+            row.SetActive(true);
+            RectTransform rt = row.transform as RectTransform;
+            if (rt != null)
+                rt.anchoredPosition = new Vector2(0f, -index * _skills.m_spacing);
+            BindActionToggleRow(row, label, selected, action);
+            _rows.Add(row);
+        }
+
+        private static void AddActionRow(int index, string label, UnityEngine.Events.UnityAction action)
+        {
+            GameObject row = Object.Instantiate(
+                _skills.m_elementPrefab,
+                Vector3.zero,
+                Quaternion.identity,
+                _skills.m_listRoot);
+            row.SetActive(true);
+            RectTransform rt = row.transform as RectTransform;
+            if (rt != null)
+                rt.anchoredPosition = new Vector2(0f, -index * _skills.m_spacing);
+            BindActionRow(row, label, action);
+            _rows.Add(row);
+        }
+
+        private static void BindActionToggleRow(
+            GameObject row,
+            string label,
+            bool selected,
+            UnityEngine.Events.UnityAction action)
+        {
+            Transform t = row.transform;
+            Color color = selected ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f);
+            StripSkillChrome(t);
+            WidenNameField(t);
+            SetChildText(t, "name", label, color);
+            SetChildText(t, "leveltext", "", color);
+
+            Button button = EnsureButton(row);
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(action);
+
+            UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
+            if (input != null)
+                input.m_onLeftClick = go => action();
         }
 
         private static void BindToggleRow(GameObject row, int id, string label, bool selected)
         {
-            Transform t = row.transform;
             string mark = selected ? "[+]" : "[-]";
-            Color color = selected ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f);
-            SetChildText(t, "name", mark + "  " + label, color);
-            SetChildText(t, "leveltext", selected ? "ON" : "OFF", color);
-            StripSkillChrome(t);
-
-            Button button = EnsureButton(row);
-            int captured = id;
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(() => Pick(captured));
-
-            UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
-            if (input != null)
-                input.m_onLeftClick = go => Pick(captured);
+            BindActionToggleRow(row, mark + "  " + label, selected, () => Pick(id));
         }
 
         private static void BindActionRow(GameObject row, string label, UnityEngine.Events.UnityAction action)
         {
             Transform t = row.transform;
             Color accent = new Color(1f, 0.85f, 0.4f, 1f);
+            StripSkillChrome(t);
+            WidenNameField(t);
             SetChildText(t, "name", label, accent);
             SetChildText(t, "leveltext", "", Color.white);
-            StripSkillChrome(t);
 
             Button button = EnsureButton(row);
             button.onClick.RemoveAllListeners();
@@ -376,6 +461,25 @@ namespace StoreAndCraft
             }
         }
 
+        private static void WidenNameField(Transform root)
+        {
+            // Skills rows reserve space for icon + level — reclaim it for the label.
+            HideChild(root, "leveltext");
+            Transform name = FindChild(root, "name");
+            if (name == null)
+                return;
+            RectTransform rt = name as RectTransform;
+            if (rt == null)
+                return;
+            rt.anchorMin = new Vector2(0.02f, 0.05f);
+            rt.anchorMax = new Vector2(0.98f, 0.95f);
+            rt.pivot = new Vector2(0f, 0.5f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = Vector2.zero;
+        }
+
         private static void SetChildText(Transform root, string name, string text, Color color)
         {
             Transform child = FindChild(root, name);
@@ -387,6 +491,15 @@ namespace StoreAndCraft
             Component localize = child.GetComponent("Localize");
             if (localize is MonoBehaviour mb)
                 mb.enabled = false;
+
+            // Skills rows auto-size long names smaller and wrap — lock one uniform line.
+            tmp.enableAutoSizing = false;
+            tmp.fontSize = 18f;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.overflowMode = TextOverflowModes.Overflow;
+            tmp.maxVisibleLines = 1;
+            tmp.alignment = TextAlignmentOptions.MidlineLeft;
+
             tmp.text = text;
             tmp.color = color;
         }

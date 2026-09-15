@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace StoreAndCraft
 {
@@ -20,6 +21,16 @@ namespace StoreAndCraft
     internal static class DisplayFilters
     {
         public const string ZdoKey = "sac_filter";
+        public const string ZdoKeyMulti = "sac_filters";
+        public const string ZdoKeyItems = "sac_filter_items";
+
+        public const int FoodFilterId = 2;
+        public const int IngredientsFilterId = 22;
+
+        public static bool IsExpandable(int filterId)
+        {
+            return filterId == FoodFilterId || filterId == IngredientsFilterId;
+        }
 
         // Wood
         private static readonly string[] WoodNames =
@@ -69,19 +80,27 @@ namespace StoreAndCraft
             "barley", "barleyflour", "flax", "carrot", "onion", "turnip",
             "carrotseeds", "onionseeds", "turnipseeds", "beechseeds", "birchseeds",
             "fircone", "pinecone", "acorn", "oakseeds", "dandelion", "thistle",
-            "magecap", "jotunpuffs", "smokepuffs", "sap", "royaljelly"
+            "sap", "royaljelly"
         };
 
+        // Raw meats / fish for roasting (not berries or meal prep).
         private static readonly string[] RawFoodNames =
         {
             "rawmeat", "boar_meat", "deer_meat", "deermeat", "wolf_meat", "wolfmeat",
             "loxmeat", "fish_raw", "fishraw", "serpentmeat", "necktail",
-            "chicken_meat", "chickenmeat", "hare_meat", "haremeat", "asksvin_meat", "asksvinmeat",
+            "chicken_meat", "chickenmeat", "hare_meat", "haremeat", "asksvin_meat", "asksvinmeat"
+        };
+
+        // Cooking ingredients: berries, mushrooms, honey, dough / mead bases / uncooked pies.
+        private static readonly string[] IngredientNames =
+        {
+            "blueberry", "raspberry", "cloudberry", "blueberryjam",
+            "honey", "mushroom", "mushroomblue", "mushroomyellow", "mushroomendon",
+            "magecap", "jotunpuffs", "smokepuffs",
             "breaddough", "loxpie_uncooked", "loxpieuncooked",
             "meadbasefrostresist", "meadbasehealth_medium", "meadbasehealth",
             "meadbasepoisonresist", "meadbasestamina_medium", "meadbasestamina", "meadbasetasty",
-            "meadbaseeitr_minor", "meadbaseeitr_medium", "barleywinebase",
-            "honey", "mushroom", "mushroomblue", "mushroomyellow", "mushroomendon"
+            "meadbaseeitr_minor", "meadbaseeitr_medium", "barleywinebase"
         };
 
         private static readonly string[] GemNames =
@@ -109,6 +128,8 @@ namespace StoreAndCraft
             Named(18, "Crops & Seeds", "Pflanzen & Samen", CropNames,
                 ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Consumable),
             Named(19, "Raw Food", "Rohes Essen", RawFoodNames, ItemDrop.ItemData.ItemType.Material),
+            Named(22, "Ingredients", "Zutaten", IngredientNames,
+                ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Consumable),
             Named(20, "Gems & Coins", "Edelsteine & Münzen", GemNames, ItemDrop.ItemData.ItemType.Material),
             Named(21, "Boss / Rare", "Boss / Selten", BossNames, ItemDrop.ItemData.ItemType.Material),
             Typed(2, "Food", "Essen", true,
@@ -193,18 +214,12 @@ namespace StoreAndCraft
 
         public static string Label(IReadOnlyList<int> ids)
         {
-            if (ids == null || ids.Count == 0)
-                return Loc.T("Select type", "Typ wählen");
-            if (ids.Count == 1)
-                return Label(ids[0]);
+            return Label(ids, null);
+        }
 
-            var parts = new List<string>();
-            for (int i = 0; i < ids.Count; i++)
-            {
-                DisplayFilter found;
-                if (TryGet(ids[i], out found))
-                    parts.Add(found.Label());
-            }
+        public static string Label(IReadOnlyList<int> ids, IReadOnlyList<string> itemTokens)
+        {
+            List<string> parts = CategoryLabels(ids, itemTokens);
             if (parts.Count == 0)
                 return Loc.T("Select type", "Typ wählen");
             if (parts.Count <= 3)
@@ -212,7 +227,101 @@ namespace StoreAndCraft
             return parts[0] + ", " + parts[1] + " +" + (parts.Count - 2);
         }
 
-        public const string ZdoKeyMulti = "sac_filters";
+        /// <summary>
+        /// Category names for the selection (filter ids + parent cats of item tokens).
+        /// Prefer "Ingredients" over listing every berry when only sub-items are on.
+        /// </summary>
+        public static List<string> CategoryLabels(IReadOnlyList<int> ids, IReadOnlyList<string> itemTokens)
+        {
+            var parts = new List<string>();
+            var seenIds = new HashSet<int>();
+
+            if (ids != null)
+            {
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    int id = ids[i];
+                    DisplayFilter found;
+                    if (id <= 0 || !TryGet(id, out found) || !seenIds.Add(id))
+                        continue;
+                    parts.Add(found.Label());
+                }
+            }
+
+            if (itemTokens != null)
+            {
+                for (int i = 0; i < itemTokens.Count; i++)
+                {
+                    string token = itemTokens[i];
+                    if (string.IsNullOrEmpty(token))
+                        continue;
+                    int parent = ParentFilterIdFromToken(token);
+                    if (parent > 0)
+                    {
+                        if (!seenIds.Add(parent))
+                            continue;
+                        DisplayFilter found;
+                        if (TryGet(parent, out found))
+                            parts.Add(found.Label());
+                        continue;
+                    }
+                    string shown = ItemLabel(token);
+                    if (!string.IsNullOrEmpty(shown) && !parts.Contains(shown))
+                        parts.Add(shown);
+                }
+            }
+
+            return parts;
+        }
+
+        /// <summary>Which display category owns this item (Choices order; expandable Food/Ingredients first for tokens).</summary>
+        public static int ParentFilterId(ItemDrop.ItemData item)
+        {
+            if (item?.m_shared == null)
+                return 0;
+            // Prefer explicit named lists / expandable before broad Food.
+            if (Matches(item, IngredientsFilterId))
+                return IngredientsFilterId;
+            if (Matches(item, FoodFilterId))
+                return FoodFilterId;
+            for (int i = 0; i < Choices.Length; i++)
+            {
+                int id = Choices[i].Id;
+                if (id == FoodFilterId || id == IngredientsFilterId)
+                    continue;
+                if (Matches(item, id))
+                    return id;
+            }
+            return 0;
+        }
+
+        public static int ParentFilterIdFromToken(string token)
+        {
+            if (string.IsNullOrEmpty(token))
+                return 0;
+            if (TokenBelongsToCategory(token, IngredientsFilterId))
+                return IngredientsFilterId;
+            if (TokenBelongsToCategory(token, FoodFilterId))
+                return FoodFilterId;
+
+            GameObject prefab = ItemIds.PrefabFromToken(token);
+            ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            if (drop?.m_itemData != null)
+                return ParentFilterId(drop.m_itemData);
+            return 0;
+        }
+
+        public static int CategorySortOrder(int filterId)
+        {
+            if (filterId <= 0)
+                return 1000;
+            for (int i = 0; i < Choices.Length; i++)
+            {
+                if (Choices[i].Id == filterId)
+                    return i;
+            }
+            return 1000;
+        }
 
         public static List<int> ReadIds(ZDO zdo)
         {
@@ -310,6 +419,213 @@ namespace StoreAndCraft
             return false;
         }
 
+        public static bool MatchesSelection(
+            ItemDrop.ItemData item,
+            IReadOnlyList<int> filterIds,
+            IReadOnlyList<string> itemTokens)
+        {
+            if (MatchesAny(item, filterIds))
+                return true;
+            if (item?.m_shared == null || itemTokens == null || itemTokens.Count == 0)
+                return false;
+            for (int i = 0; i < itemTokens.Count; i++)
+            {
+                if (ItemIds.Matches(item, itemTokens[i]))
+                    return true;
+            }
+            return false;
+        }
+
+        public static List<string> ReadItemTokens(ZDO zdo)
+        {
+            var list = new List<string>();
+            if (zdo == null)
+                return list;
+            string raw = zdo.GetString(ZdoKeyItems, "");
+            if (string.IsNullOrEmpty(raw))
+                return list;
+            string[] parts = raw.Split('|');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i];
+                if (string.IsNullOrEmpty(p) || list.Contains(p))
+                    continue;
+                list.Add(p);
+            }
+            list.Sort(System.StringComparer.Ordinal);
+            return list;
+        }
+
+        public static string EncodeItemTokens(IEnumerable<string> tokens)
+        {
+            if (tokens == null)
+                return "";
+            var list = new List<string>();
+            foreach (string t in tokens)
+            {
+                if (string.IsNullOrEmpty(t) || list.Contains(t))
+                    continue;
+                list.Add(t);
+            }
+            list.Sort(System.StringComparer.Ordinal);
+            if (list.Count == 0)
+                return "";
+            return string.Join("|", list.ToArray());
+        }
+
+        public static bool SameItemTokens(IReadOnlyList<string> a, IReadOnlyList<string> b)
+        {
+            if (a == null || b == null)
+                return a == b;
+            if (a.Count != b.Count)
+                return false;
+            for (int i = 0; i < a.Count; i++)
+            {
+                if (!string.Equals(a[i], b[i], System.StringComparison.Ordinal))
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>Shared-name tokens for expandable Food / Ingredients rows (cached).</summary>
+        public static List<string> SubItems(int filterId)
+        {
+            if (filterId == IngredientsFilterId)
+                return IngredientSubItems();
+            if (filterId == FoodFilterId)
+                return FoodSubItems();
+            return new List<string>();
+        }
+
+        private static List<string> _ingredientSubs;
+        private static List<string> _foodSubs;
+
+        public static void InvalidateSubItemCache()
+        {
+            _ingredientSubs = null;
+            _foodSubs = null;
+        }
+
+        private static List<string> IngredientSubItems()
+        {
+            if (_ingredientSubs != null)
+                return _ingredientSubs;
+            var list = new List<string>();
+            for (int i = 0; i < IngredientNames.Length; i++)
+            {
+                string shared = ResolveSharedName(IngredientNames[i]);
+                if (string.IsNullOrEmpty(shared) || list.Contains(shared))
+                    continue;
+                list.Add(shared);
+            }
+            list.Sort(CompareLocalized);
+            _ingredientSubs = list;
+            return list;
+        }
+
+        private static List<string> FoodSubItems()
+        {
+            if (_foodSubs != null)
+                return _foodSubs;
+            var list = new List<string>();
+            if (ObjectDB.instance?.m_items == null)
+                return list;
+            foreach (UnityEngine.GameObject go in ObjectDB.instance.m_items)
+            {
+                if (go == null)
+                    continue;
+                ItemDrop drop = go.GetComponent<ItemDrop>();
+                if (drop?.m_itemData?.m_shared == null)
+                    continue;
+                if (!Matches(drop.m_itemData, FoodFilterId))
+                    continue;
+                string shared = drop.m_itemData.m_shared.m_name;
+                if (!string.IsNullOrEmpty(shared) && !list.Contains(shared))
+                    list.Add(shared);
+            }
+            list.Sort(CompareLocalized);
+            // Only cache once ObjectDB actually returned entries.
+            if (list.Count > 0)
+                _foodSubs = list;
+            return list;
+        }
+
+        private static string ResolveSharedName(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                return null;
+
+            UnityEngine.GameObject prefab = ItemIds.PrefabFromToken(key);
+            if (prefab == null && key.IndexOf('_') >= 0)
+                prefab = ItemIds.PrefabFromToken(key.Replace("_", ""));
+            if (prefab == null && !key.StartsWith("$item_"))
+                prefab = ItemIds.PrefabFromToken("$item_" + key);
+
+            ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            if (drop?.m_itemData?.m_shared == null || string.IsNullOrEmpty(drop.m_itemData.m_shared.m_name))
+                return null;
+            return drop.m_itemData.m_shared.m_name;
+        }
+
+        private static int CompareLocalized(string a, string b)
+        {
+            return string.Compare(ItemLabel(a), ItemLabel(b), System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static string ItemLabel(string shared)
+        {
+            if (string.IsNullOrEmpty(shared))
+                return "?";
+
+            string shown = Localization.instance != null
+                ? Localization.instance.Localize(shared)
+                : shared;
+
+            // Missing Valheim keys show as "[item_foo]" — resolve via ObjectDB and retry.
+            if (IsBadLabel(shown))
+            {
+                UnityEngine.GameObject prefab = ItemIds.PrefabFromToken(shared);
+                ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+                string token = drop?.m_itemData?.m_shared != null ? drop.m_itemData.m_shared.m_name : null;
+                if (!string.IsNullOrEmpty(token) && Localization.instance != null)
+                    shown = Localization.instance.Localize(token);
+            }
+
+            if (IsBadLabel(shown))
+            {
+                // Last resort: strip $item_ / brackets for readability.
+                shown = shared;
+                if (shown.StartsWith("$item_"))
+                    shown = shown.Substring(6);
+                if (shown.StartsWith("[") && shown.EndsWith("]"))
+                    shown = shown.Substring(1, shown.Length - 2);
+                shown = shown.Replace('_', ' ');
+            }
+
+            return shown;
+        }
+
+        private static bool IsBadLabel(string shown)
+        {
+            if (string.IsNullOrEmpty(shown))
+                return true;
+            if (shown.StartsWith("$item_"))
+                return true;
+            if (shown.StartsWith("[") && shown.EndsWith("]"))
+                return true;
+            if (shown.StartsWith("[item_", System.StringComparison.OrdinalIgnoreCase))
+                return true;
+            return false;
+        }
+
+        public static bool TokenBelongsToCategory(string shared, int filterId)
+        {
+            if (string.IsNullOrEmpty(shared) || !IsExpandable(filterId))
+                return false;
+            List<string> subs = SubItems(filterId);
+            return subs.Contains(shared);
+        }
+
         private static bool TypeAllowed(ItemDrop.ItemData.ItemType type, ItemDrop.ItemData.ItemType[] types)
         {
             if (types == null || types.Length == 0)
@@ -324,7 +640,9 @@ namespace StoreAndCraft
 
         private static bool IsClaimedByNamedFilter(string key, ItemDrop.ItemData.ItemType type)
         {
-            if (NameInList(key, CropNames) || NameInList(key, RawFoodNames))
+            if (NameInList(key, CropNames)
+                || NameInList(key, RawFoodNames)
+                || NameInList(key, IngredientNames))
                 return true;
             if (type != ItemDrop.ItemData.ItemType.Material)
                 return false;

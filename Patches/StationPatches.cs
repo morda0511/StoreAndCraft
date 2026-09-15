@@ -132,9 +132,7 @@ namespace StoreAndCraft
                 return;
             if (StationPullFilter.CanConfigure(__instance))
             {
-                string key = StationPullFilter.PromptLabel();
-                __result += "\n[<color=yellow><b>" + key + "</b></color>] "
-                    + Loc.T("Chest pull filter", "Truhen-Zug Filter");
+                StationPullFilter.AppendFilterHover(ref __result, __instance);
             }
             StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
         }
@@ -313,7 +311,8 @@ namespace StoreAndCraft
             StationFeed.EnsureAny(player, FoodNames(__instance), 1);
         }
 
-        internal static List<string> FoodNames(CookingStation station)
+        /// <summary>All conversion inputs (menu choices). Not filtered.</summary>
+        internal static List<string> AllFoodNames(CookingStation station)
         {
             var names = new List<string>();
             if (station?.m_conversion == null)
@@ -325,6 +324,12 @@ namespace StoreAndCraft
                     names.Add(shared);
             }
             return names;
+        }
+
+        /// <summary>Inputs allowed by the per-station chest-pull / autofill filter.</summary>
+        internal static List<string> FoodNames(CookingStation station)
+        {
+            return StationPullFilter.AllowedFoodNames(station);
         }
     }
 

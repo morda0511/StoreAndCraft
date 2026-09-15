@@ -19,6 +19,13 @@ namespace StoreAndCraft
             __result = true;
             return false;
         }
+
+        private static void Postfix(Container __instance, bool __result)
+        {
+            if (!__result || __instance == null)
+                return;
+            NearbyIndex.MarkInventorySeen(__instance);
+        }
     }
 
     [HarmonyPatch(typeof(Container), nameof(Container.GetHoverName))]

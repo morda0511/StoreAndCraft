@@ -6,6 +6,7 @@ namespace StoreAndCraft
     {
         private float _nextRequest;
         private int _attempts;
+        private bool _loggedGiveUp;
 
         private void Update()
         {
@@ -29,18 +30,31 @@ namespace StoreAndCraft
 
             _attempts++;
             _nextRequest = Time.time + 2f;
-            VersionGate.SendHello();
 
-            if (ConfigSync.Registered && !ConfigSync.HasReceivedConfig)
+            // Handshake already done: only re-request config. Re-sending Hello every
+            // tick spammed "handshake acknowledged" while config stayed missing.
+            if (!VersionGate.ClientVerified)
+                VersionGate.SendHello();
+            else if (ConfigSync.Registered && !ConfigSync.HasReceivedConfig)
                 ConfigSync.RequestConfigFromServer();
 
-            if (_attempts == 1 || _attempts % 5 == 0)
+            if (_attempts == 1 || _attempts % 10 == 0)
             {
                 Plugin.Log.LogInfo(
                     "StoreAndCraft: waiting for server" +
                     (VersionGate.ClientVerified ? "" : " handshake") +
                     (ConfigSync.HasReceivedConfig ? "" : " config") +
                     " (attempt " + _attempts + ")...");
+            }
+
+            if (!_loggedGiveUp && _attempts >= 30 && !ConfigSync.HasReceivedConfig)
+            {
+                _loggedGiveUp = true;
+                Plugin.Log.LogWarning(
+                    "StoreAndCraft: still no server config after " + _attempts +
+                    " attempts. Install the same StoreAndCraft version on the dedicated" +
+                    " server (full client plugin, not only StoreAndCraftServer), then" +
+                    " reconnect. Handshake can succeed while config sync fails.");
             }
         }
     }

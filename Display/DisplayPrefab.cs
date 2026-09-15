@@ -5,33 +5,33 @@ using UnityEngine;
 
 namespace StoreAndCraft
 {
+    internal enum DisplayKind
+    {
+        Small = 0,
+        Medium = 1,
+        Large = 2
+    }
+
     internal static class DisplayPrefab
     {
-        public const string PrefabName = "sac_storage_display";
+        public const string MediumName = "sac_storage_display";
+        public const string SmallName = "sac_storage_display_small";
+        public const string LargeName = "sac_storage_display_large";
 
-        private static GameObject _prefab;
+        private static readonly Dictionary<int, GameObject> ByHash = new Dictionary<int, GameObject>();
+        private static readonly List<GameObject> AllPrefabs = new List<GameObject>();
         private static GameObject _hide;
         private static bool _busy;
-        private static int _prefabHash;
 
         public static bool IsDisplay(Piece piece)
         {
             return piece != null && piece.GetComponent<StorageDisplayBoard>() != null;
         }
 
-        public static GameObject Prefab
+        public static GameObject PrefabForHash(int hash)
         {
-            get { return _prefab; }
-        }
-
-        public static int PrefabHash
-        {
-            get
-            {
-                if (_prefabHash == 0)
-                    _prefabHash = PrefabName.GetStableHashCode();
-                return _prefabHash;
-            }
+            GameObject go;
+            return ByHash.TryGetValue(hash, out go) ? go : null;
         }
 
         public static void RegisterForScene(ZNetScene scene)
@@ -71,9 +71,10 @@ namespace StoreAndCraft
             if (scene == null)
                 return;
 
-            if (_prefab != null)
+            if (AllPrefabs.Count > 0)
             {
-                EnsureNamed(scene, _prefab);
+                for (int i = 0; i < AllPrefabs.Count; i++)
+                    EnsureNamed(scene, AllPrefabs[i]);
                 return;
             }
 
@@ -91,34 +92,58 @@ namespace StoreAndCraft
                 _hide.SetActive(false);
             }
 
+            BuildVariant(scene, sign, SmallName, DisplayKind.Small,
+                "Small Storage Display",
+                "Shows the total of one item from nearby chests. Look at it and press hotbar 1-8 to set the item.",
+                Vector3.one);
+
+            BuildVariant(scene, sign, MediumName, DisplayKind.Medium,
+                "Medium Storage Display",
+                "Shows nearby chest totals for one item type. Press [E] and click a type.",
+                new Vector3(2.5f, 2.1f, 1f));
+
+            BuildVariant(scene, sign, LargeName, DisplayKind.Large,
+                "Large Storage Display",
+                "Wide board with three columns of nearby chest totals. Press [E] and click types.",
+                new Vector3(7.5f, 6.3f, 1f));
+
+            Plugin.Log.LogInfo("StoreAndCraft storage displays registered (small / medium / large).");
+        }
+
+        private static void BuildVariant(
+            ZNetScene scene,
+            GameObject sign,
+            string prefabName,
+            DisplayKind kind,
+            string pieceName,
+            string pieceDesc,
+            Vector3 scaleMul)
+        {
             bool wasActive = sign.activeSelf;
             sign.SetActive(false);
             GameObject clone = Object.Instantiate(sign, _hide.transform);
             sign.SetActive(wasActive);
 
-            clone.name = PrefabName;
+            clone.name = prefabName;
             clone.SetActive(true);
 
             ZNetView znv = clone.GetComponent<ZNetView>();
             if (znv == null)
             {
-                Plugin.Log.LogWarning("StoreAndCraft: storage display clone lost ZNetView, skipped.");
+                Plugin.Log.LogWarning("StoreAndCraft: storage display clone lost ZNetView (" + prefabName + ").");
                 Object.Destroy(clone);
                 return;
             }
 
             znv.m_persistent = true;
-
-            clone.transform.localScale = Vector3.Scale(
-                clone.transform.localScale,
-                new Vector3(2.5f, 2.1f, 1f));
+            clone.transform.localScale = Vector3.Scale(clone.transform.localScale, scaleMul);
 
             Piece piece = clone.GetComponent<Piece>();
             Piece source = sign.GetComponent<Piece>();
             if (piece != null)
             {
-                piece.m_name = "Storage Display";
-                piece.m_description = "Shows nearby chest totals for one item type. Press [E] and click a type.";
+                piece.m_name = pieceName;
+                piece.m_description = pieceDesc;
                 if (piece.m_placeEffect == null && source != null)
                     piece.m_placeEffect = source.m_placeEffect;
                 if (piece.m_placeEffect == null)
@@ -127,18 +152,20 @@ namespace StoreAndCraft
                     piece.m_resources = source.m_resources;
             }
 
-            if (clone.GetComponent<StorageDisplayBoard>() == null)
-                clone.AddComponent<StorageDisplayBoard>();
+            StorageDisplayBoard board = clone.GetComponent<StorageDisplayBoard>();
+            if (board == null)
+                board = clone.AddComponent<StorageDisplayBoard>();
+            board.Configure(kind);
 
-            _prefab = clone;
-            _prefabHash = PrefabName.GetStableHashCode();
-            EnsureNamed(scene, _prefab);
-            Plugin.Log.LogInfo("StoreAndCraft storage display registered.");
+            int hash = prefabName.GetStableHashCode();
+            ByHash[hash] = clone;
+            AllPrefabs.Add(clone);
+            EnsureNamed(scene, clone);
         }
 
         private static void RegisterHammer()
         {
-            if (_prefab == null || ObjectDB.instance == null)
+            if (AllPrefabs.Count == 0 || ObjectDB.instance == null)
                 return;
 
             GameObject hammer = ObjectDB.instance.GetItemPrefab("Hammer");
@@ -150,8 +177,13 @@ namespace StoreAndCraft
                 : null;
             if (table == null || table.m_pieces == null)
                 return;
-            if (!table.m_pieces.Contains(_prefab))
-                table.m_pieces.Add(_prefab);
+
+            for (int i = 0; i < AllPrefabs.Count; i++)
+            {
+                GameObject prefab = AllPrefabs[i];
+                if (prefab != null && !table.m_pieces.Contains(prefab))
+                    table.m_pieces.Add(prefab);
+            }
         }
 
         private static void EnsureNamed(ZNetScene scene, GameObject prefab)
@@ -165,7 +197,7 @@ namespace StoreAndCraft
             FieldInfo named = AccessTools.Field(typeof(ZNetScene), "m_namedPrefabs");
             var map = named != null ? named.GetValue(scene) as Dictionary<int, GameObject> : null;
             if (map != null)
-                map[PrefabHash] = prefab;
+                map[prefab.name.GetStableHashCode()] = prefab;
         }
     }
 
@@ -183,10 +215,11 @@ namespace StoreAndCraft
     {
         private static void Postfix(int hash, ref GameObject __result)
         {
-            if (__result != null || DisplayPrefab.Prefab == null)
+            if (__result != null)
                 return;
-            if (hash == DisplayPrefab.PrefabHash)
-                __result = DisplayPrefab.Prefab;
+            GameObject found = DisplayPrefab.PrefabForHash(hash);
+            if (found != null)
+                __result = found;
         }
     }
 
@@ -265,6 +298,15 @@ namespace StoreAndCraft
             if (board == null)
                 return;
             __result = board.HoverLabel();
+        }
+    }
+
+    [HarmonyPatch(typeof(Player), "UseHotbarItem")]
+    internal static class PlayerHotbarDisplayPatch
+    {
+        private static bool Prefix(Player __instance, int index)
+        {
+            return !StorageDisplayBoard.TryAssignFromHotbar(__instance, index);
         }
     }
 }

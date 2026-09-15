@@ -6,8 +6,8 @@ namespace StoreAndCraft
 {
     /// <summary>
     /// Per-station (ZDO) deny-list for chest pulls into Smelter ore slots
-    /// (charcoal kiln wood types, blast furnace ores, …). Empty = allow all.
-    /// Inventory use is never blocked — only auto-pull from chests.
+    /// and CookingStation food slots. Empty = allow all.
+    /// Inventory use is never blocked — only auto-pull from chests / autofill.
     /// </summary>
     internal static class StationPullFilter
     {
@@ -15,14 +15,23 @@ namespace StoreAndCraft
 
         public static Smelter HoveredSmelter()
         {
+            return HoveredComponent<Smelter>();
+        }
+
+        public static CookingStation HoveredCooking()
+        {
+            return HoveredComponent<CookingStation>();
+        }
+
+        private static T HoveredComponent<T>() where T : Component
+        {
             Player player = Player.m_localPlayer;
             if (player == null)
                 return null;
             GameObject hover = player.GetHoverObject();
             if (hover == null)
                 return null;
-            Smelter smelter = hover.GetComponentInParent<Smelter>();
-            return smelter;
+            return hover.GetComponentInParent<T>();
         }
 
         public static bool CanConfigure(Smelter smelter)
@@ -30,35 +39,39 @@ namespace StoreAndCraft
             return OreChoices(smelter).Count >= 2;
         }
 
+        public static bool CanConfigure(CookingStation cook)
+        {
+            return FoodChoices(cook).Count >= 2;
+        }
+
         public static List<string> OreChoices(Smelter smelter)
         {
             return SmelterAddOrePatch.OreNames(smelter);
         }
 
+        public static List<string> FoodChoices(CookingStation cook)
+        {
+            return CookingOnInteractPatch.AllFoodNames(cook);
+        }
+
         public static List<string> AllowedOreNames(Smelter smelter)
         {
-            List<string> all = OreChoices(smelter);
-            if (all.Count == 0)
-                return all;
+            return FilterAllowed(OreChoices(smelter), ReadDenied(View(smelter)));
+        }
 
-            HashSet<string> denied = ReadDenied(smelter);
-            if (denied.Count == 0)
-                return all;
-
-            var allowed = new List<string>();
-            foreach (string shared in all)
-            {
-                if (!denied.Contains(shared))
-                    allowed.Add(shared);
-            }
-            return allowed;
+        public static List<string> AllowedFoodNames(CookingStation cook)
+        {
+            return FilterAllowed(FoodChoices(cook), ReadDenied(View(cook)));
         }
 
         public static bool IsDenied(Smelter smelter, string shared)
         {
-            if (smelter == null || string.IsNullOrEmpty(shared))
-                return false;
-            return ReadDenied(smelter).Contains(shared);
+            return IsDenied(View(smelter), shared);
+        }
+
+        public static bool IsDenied(CookingStation cook, string shared)
+        {
+            return IsDenied(View(cook), shared);
         }
 
         public static bool IsAllowed(Smelter smelter, string shared)
@@ -66,56 +79,39 @@ namespace StoreAndCraft
             return !IsDenied(smelter, shared);
         }
 
+        public static bool IsAllowed(CookingStation cook, string shared)
+        {
+            return !IsDenied(cook, shared);
+        }
+
         public static void SetDenied(Smelter smelter, string shared, bool denied)
         {
-            if (smelter == null || string.IsNullOrEmpty(shared))
-                return;
+            SetDenied(View(smelter), shared, denied);
+        }
 
-            ZNetView nv = smelter.GetComponent<ZNetView>();
-            if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
-                return;
-            if (!nv.IsOwner())
-                nv.ClaimOwnership();
-
-            HashSet<string> set = ReadDenied(smelter);
-            if (denied)
-                set.Add(shared);
-            else
-                set.Remove(shared);
-
-            nv.GetZDO().Set(ZdoKey, Encode(set));
+        public static void SetDenied(CookingStation cook, string shared, bool denied)
+        {
+            SetDenied(View(cook), shared, denied);
         }
 
         public static void Clear(Smelter smelter)
         {
-            ZNetView nv = smelter != null ? smelter.GetComponent<ZNetView>() : null;
-            if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
-                return;
-            if (!nv.IsOwner())
-                nv.ClaimOwnership();
-            nv.GetZDO().Set(ZdoKey, "");
+            Clear(View(smelter));
+        }
+
+        public static void Clear(CookingStation cook)
+        {
+            Clear(View(cook));
         }
 
         public static HashSet<string> ReadDenied(Smelter smelter)
         {
-            var set = new HashSet<string>();
-            ZNetView nv = smelter != null ? smelter.GetComponent<ZNetView>() : null;
-            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
-            if (zdo == null)
-                return set;
+            return ReadDenied(View(smelter));
+        }
 
-            string raw = zdo.GetString(ZdoKey, "");
-            if (string.IsNullOrEmpty(raw))
-                return set;
-
-            string[] parts = raw.Split('|');
-            for (int i = 0; i < parts.Length; i++)
-            {
-                string p = parts[i];
-                if (!string.IsNullOrEmpty(p))
-                    set.Add(p);
-            }
-            return set;
+        public static HashSet<string> ReadDenied(CookingStation cook)
+        {
+            return ReadDenied(View(cook));
         }
 
         public static string DisplayName(string shared)
@@ -132,6 +128,27 @@ namespace StoreAndCraft
             return ChestRename.PromptLabel();
         }
 
+        public static void AppendFilterHover(ref string text, Smelter smelter)
+        {
+            if (smelter == null || !CanConfigure(smelter))
+                return;
+            AppendFilterLine(ref text);
+        }
+
+        public static void AppendFilterHover(ref string text, CookingStation cook)
+        {
+            if (cook == null || !CanConfigure(cook))
+                return;
+            AppendFilterLine(ref text);
+        }
+
+        private static void AppendFilterLine(ref string text)
+        {
+            string key = PromptLabel();
+            text += "\n[<color=yellow><b>" + key + "</b></color>] "
+                + Loc.T("Chest pull filter", "Truhen-Zug Filter");
+        }
+
         public static bool TryOpen(bool warnIfMissing = true)
         {
             Player player = Player.m_localPlayer;
@@ -139,28 +156,113 @@ namespace StoreAndCraft
                 return false;
 
             Smelter smelter = HoveredSmelter();
-            if (smelter == null || !CanConfigure(smelter))
+            if (smelter != null && CanConfigure(smelter))
             {
-                if (warnIfMissing)
+                if (!PrivateArea.CheckAccess(smelter.transform.position, 0f, false, true))
                 {
-                    player.Message(
-                        MessageHud.MessageType.Center,
-                        Loc.T(
-                            "Look at a kiln / smelter with multiple inputs, then press " + PromptLabel() + ".",
-                            "Schau einen Ofen / eine Schmelze mit mehreren Inputs an, dann " + PromptLabel() + "."),
-                        0, null, false);
+                    player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                    return true;
                 }
-                return false;
-            }
-
-            if (!PrivateArea.CheckAccess(smelter.transform.position, 0f, false, true))
-            {
-                player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                StationFilterMenu.Open(smelter);
                 return true;
             }
 
-            StationFilterMenu.Open(smelter);
-            return true;
+            CookingStation cook = HoveredCooking();
+            if (cook != null && CanConfigure(cook))
+            {
+                if (!PrivateArea.CheckAccess(cook.transform.position, 0f, false, true))
+                {
+                    player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                    return true;
+                }
+                StationFilterMenu.Open(cook);
+                return true;
+            }
+
+            if (warnIfMissing)
+            {
+                player.Message(
+                    MessageHud.MessageType.Center,
+                    Loc.T(
+                        "Look at a kiln / smelter / cook station with multiple inputs, then press " + PromptLabel() + ".",
+                        "Schau Ofen / Schmelze / Grill mit mehreren Inputs an, dann " + PromptLabel() + "."),
+                    0, null, false);
+            }
+            return false;
+        }
+
+        private static ZNetView View(Component c)
+        {
+            return c != null ? c.GetComponent<ZNetView>() : null;
+        }
+
+        private static List<string> FilterAllowed(List<string> all, HashSet<string> denied)
+        {
+            if (all == null || all.Count == 0)
+                return all ?? new List<string>();
+            if (denied == null || denied.Count == 0)
+                return all;
+
+            var allowed = new List<string>();
+            foreach (string shared in all)
+            {
+                if (!denied.Contains(shared))
+                    allowed.Add(shared);
+            }
+            return allowed;
+        }
+
+        private static bool IsDenied(ZNetView nv, string shared)
+        {
+            if (nv == null || string.IsNullOrEmpty(shared))
+                return false;
+            return ReadDenied(nv).Contains(shared);
+        }
+
+        private static void SetDenied(ZNetView nv, string shared, bool denied)
+        {
+            if (nv == null || !nv.IsValid() || nv.GetZDO() == null || string.IsNullOrEmpty(shared))
+                return;
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+
+            HashSet<string> set = ReadDenied(nv);
+            if (denied)
+                set.Add(shared);
+            else
+                set.Remove(shared);
+
+            nv.GetZDO().Set(ZdoKey, Encode(set));
+        }
+
+        private static void Clear(ZNetView nv)
+        {
+            if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
+                return;
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+            nv.GetZDO().Set(ZdoKey, "");
+        }
+
+        private static HashSet<string> ReadDenied(ZNetView nv)
+        {
+            var set = new HashSet<string>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return set;
+
+            string raw = zdo.GetString(ZdoKey, "");
+            if (string.IsNullOrEmpty(raw))
+                return set;
+
+            string[] parts = raw.Split('|');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i];
+                if (!string.IsNullOrEmpty(p))
+                    set.Add(p);
+            }
+            return set;
         }
 
         private static string Encode(HashSet<string> set)

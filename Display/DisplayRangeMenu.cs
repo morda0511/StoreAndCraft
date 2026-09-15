@@ -7,15 +7,16 @@ using UnityEngine.UI;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Multi-select SkillsDialog UI: toggle which Smelter/kiln inputs may be
-    /// auto-pulled from chests. Same visual language as Storage Display type menu.
+    /// Per-display chest-scan range picker (Alt+R). Anyone with ward access may set it;
+    /// no admin / LockConfig gate — stored on the piece ZDO.
     /// </summary>
-    internal static class StationFilterMenu
+    internal static class DisplayRangeMenu
     {
         public static bool IsOpen { get; private set; }
 
-        private static Smelter _smelter;
-        private static CookingStation _cook;
+        public static readonly int[] Steps = { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50 };
+
+        private static StorageDisplayBoard _board;
         private static SkillsDialog _skills;
         private static bool _skillsWasEnabled;
         private static bool _openedInventory;
@@ -28,24 +29,9 @@ namespace StoreAndCraft
         private static readonly List<bool> _titleLocalize = new List<bool>();
         private static bool _closing;
 
-        public static bool AnySkillsMenuOpen
+        public static void Open(StorageDisplayBoard board)
         {
-            get { return IsOpen || DisplayTypeMenu.IsOpen || DisplayRangeMenu.IsOpen; }
-        }
-
-        public static void Open(Smelter smelter)
-        {
-            OpenInternal(smelter, null);
-        }
-
-        public static void Open(CookingStation cook)
-        {
-            OpenInternal(null, cook);
-        }
-
-        private static void OpenInternal(Smelter smelter, CookingStation cook)
-        {
-            if ((smelter == null && cook == null) || Player.m_localPlayer == null)
+            if (board == null || Player.m_localPlayer == null)
                 return;
 
             InventoryGui gui = InventoryGui.instance;
@@ -54,13 +40,12 @@ namespace StoreAndCraft
 
             if (DisplayTypeMenu.IsOpen)
                 DisplayTypeMenu.Close();
-            if (DisplayRangeMenu.IsOpen)
-                DisplayRangeMenu.Close();
+            if (StationFilterMenu.IsOpen)
+                StationFilterMenu.Close();
             if (IsOpen)
                 Close();
 
-            _smelter = smelter;
-            _cook = cook;
+            _board = board;
             _skills = gui.m_skillsDialog;
             _openedAt = Time.unscaledTime;
             _openedInventory = false;
@@ -95,8 +80,7 @@ namespace StoreAndCraft
                 SkillsDialog skills = _skills;
                 IsOpen = false;
                 _openedInventory = false;
-                _smelter = null;
-                _cook = null;
+                _board = null;
                 _suppressMenuFrame = Time.frameCount;
 
                 ClearOurRows();
@@ -120,15 +104,9 @@ namespace StoreAndCraft
             }
         }
 
-        public static void CloseIf(Smelter smelter)
+        public static void CloseIf(StorageDisplayBoard board)
         {
-            if (IsOpen && _smelter == smelter)
-                Close();
-        }
-
-        public static void CloseIf(CookingStation cook)
-        {
-            if (IsOpen && _cook == cook)
+            if (IsOpen && _board == board)
                 Close();
         }
 
@@ -137,11 +115,48 @@ namespace StoreAndCraft
             return IsOpen || Time.frameCount == _suppressMenuFrame;
         }
 
+        public static bool TryOpenHovered()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return false;
+
+            StorageDisplayBoard board = HoveredBoard();
+            if (board == null)
+                return false;
+
+            if (!PrivateArea.CheckAccess(board.transform.position, 0f, false, true))
+            {
+                player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                return true;
+            }
+
+            Open(board);
+            return true;
+        }
+
+        private static StorageDisplayBoard HoveredBoard()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return null;
+
+            GameObject hover = player.GetHoverObject();
+            StorageDisplayBoard fromHover = hover != null
+                ? hover.GetComponentInParent<StorageDisplayBoard>()
+                : null;
+            if (fromHover != null)
+                return fromHover;
+
+            Piece piece = player.GetHoveringPiece();
+            return piece != null ? piece.GetComponent<StorageDisplayBoard>() : null;
+        }
+
         internal static void Tick()
         {
             if (!IsOpen)
                 return;
-            if ((_smelter == null && _cook == null) || _skills == null || Player.m_localPlayer == null)
+            if (_board == null || _skills == null || Player.m_localPlayer == null)
             {
                 Close();
                 return;
@@ -160,35 +175,11 @@ namespace StoreAndCraft
             Close();
         }
 
-        private static void Toggle(string shared)
+        private static void Pick(int meters)
         {
-            if (string.IsNullOrEmpty(shared))
+            if (_board == null)
                 return;
-            if (_smelter != null)
-            {
-                bool nowDenied = !StationPullFilter.IsDenied(_smelter, shared);
-                StationPullFilter.SetDenied(_smelter, shared, nowDenied);
-            }
-            else if (_cook != null)
-            {
-                bool nowDenied = !StationPullFilter.IsDenied(_cook, shared);
-                StationPullFilter.SetDenied(_cook, shared, nowDenied);
-            }
-            else
-            {
-                return;
-            }
-            RebuildRows();
-        }
-
-        private static void AllowAll()
-        {
-            if (_smelter != null)
-                StationPullFilter.Clear(_smelter);
-            else if (_cook != null)
-                StationPullFilter.Clear(_cook);
-            else
-                return;
+            _board.SetDisplayRangeMeters(meters);
             RebuildRows();
         }
 
@@ -234,85 +225,79 @@ namespace StoreAndCraft
                 return;
 
             ClearOurRows();
-            List<string> choices = _cook != null
-                ? StationPullFilter.FoodChoices(_cook)
-                : StationPullFilter.OreChoices(_smelter);
-            int count = choices.Count + 2;
+            int current = _board != null ? _board.DisplayRangeMeters() : 0;
+            if (current <= 0 && _board != null)
+                current = Mathf.Clamp(Mathf.RoundToInt(_board.EffectiveDisplayRange() / 5f) * 5, 5, 50);
+            int rowIndex = 0;
 
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < Steps.Length; i++)
             {
-                GameObject row = Object.Instantiate(
-                    _skills.m_elementPrefab,
-                    Vector3.zero,
-                    Quaternion.identity,
-                    _skills.m_listRoot);
-                row.SetActive(true);
-                RectTransform rt = row.transform as RectTransform;
-                if (rt != null)
-                    rt.anchoredPosition = new Vector2(0f, -i * _skills.m_spacing);
-
-                if (i < choices.Count)
-                {
-                    string shared = choices[i];
-                    bool allowed = _cook != null
-                        ? StationPullFilter.IsAllowed(_cook, shared)
-                        : StationPullFilter.IsAllowed(_smelter, shared);
-                    // ASCII only — Valheim-AveriaSerifLibre has no ✓/✗ glyphs.
-                    string mark = allowed ? "[+]" : "[-]";
-                    string label = StationPullFilter.DisplayName(shared);
-                    BindToggleRow(row, shared, mark + "  " + label, allowed);
-                }
-                else if (i == choices.Count)
-                {
-                    BindActionRow(row, Loc.T("Allow all", "Alle erlauben"), AllowAll);
-                }
-                else
-                {
-                    BindActionRow(row, Loc.T("Done", "Fertig"), Close);
-                }
-
-                _rows.Add(row);
+                int meters = Steps[i];
+                bool on = current == meters;
+                string mark = on ? "[+]" : "[-]";
+                string label = mark + "  " + meters + " m";
+                int captured = meters;
+                AddToggleRow(rowIndex++, () => Pick(captured), label, on);
             }
 
-            float height = Mathf.Max(_skills.m_listRoot.rect.height, count * _skills.m_spacing);
+            AddActionRow(rowIndex++, Loc.T("Done", "Fertig"), Close);
+
+            float height = Mathf.Max(_skills.m_listRoot.rect.height, rowIndex * _skills.m_spacing);
             _skills.m_listRoot.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
 
             if (_skills.m_totalSkillText != null)
             {
-                _skills.m_totalSkillText.text = _cook != null
-                    ? Loc.T(
-                        "ON = may roast / pull. OFF = ignore that meat on this grill.",
-                        "AN = darf braten / ziehen. AUS = dieses Fleisch an diesem Grill ignorieren.")
-                    : Loc.T(
-                        "ON = may use / pull. OFF = ignore (turn Wood OFF to keep Fine/Core wood).",
-                        "AN = darf ziehen. AUS = ignorieren (Holz AUS = nur Fein-/Kernholz).");
+                _skills.m_totalSkillText.text = Loc.T(
+                    "Chest scan range for this display only. Anyone may change it.",
+                    "Truhen-Scanreichweite nur für dieses Display. Jeder darf sie ändern.");
             }
         }
 
-        private static void BindToggleRow(GameObject row, string shared, string label, bool allowed)
+        private static void AddToggleRow(int index, UnityEngine.Events.UnityAction action, string label, bool selected)
         {
-            Transform t = row.transform;
-            SetChildText(t, "name", label, allowed ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
-            SetChildText(t, "leveltext", allowed ? "ON" : "OFF", allowed ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
-            StripSkillChrome(t);
-
-            Button button = EnsureButton(row);
-            string captured = shared;
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(() => Toggle(captured));
-
-            UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
-            if (input != null)
-                input.m_onLeftClick = go => Toggle(captured);
+            GameObject row = Object.Instantiate(
+                _skills.m_elementPrefab,
+                Vector3.zero,
+                Quaternion.identity,
+                _skills.m_listRoot);
+            row.SetActive(true);
+            RectTransform rt = row.transform as RectTransform;
+            if (rt != null)
+                rt.anchoredPosition = new Vector2(0f, -index * _skills.m_spacing);
+            BindRow(row, label, selected, action);
+            _rows.Add(row);
         }
 
-        private static void BindActionRow(GameObject row, string label, UnityEngine.Events.UnityAction action)
+        private static void AddActionRow(int index, string label, UnityEngine.Events.UnityAction action)
+        {
+            GameObject row = Object.Instantiate(
+                _skills.m_elementPrefab,
+                Vector3.zero,
+                Quaternion.identity,
+                _skills.m_listRoot);
+            row.SetActive(true);
+            RectTransform rt = row.transform as RectTransform;
+            if (rt != null)
+                rt.anchoredPosition = new Vector2(0f, -index * _skills.m_spacing);
+            BindRow(row, label, false, action, accent: true);
+            _rows.Add(row);
+        }
+
+        private static void BindRow(
+            GameObject row,
+            string label,
+            bool selected,
+            UnityEngine.Events.UnityAction action,
+            bool accent = false)
         {
             Transform t = row.transform;
-            Color accent = new Color(1f, 0.85f, 0.4f, 1f);
-            SetChildText(t, "name", label, accent);
-            SetChildText(t, "leveltext", "", Color.white);
+            Color color = accent
+                ? new Color(1f, 0.85f, 0.4f, 1f)
+                : (selected ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
             StripSkillChrome(t);
+            WidenNameField(t);
+            SetChildText(t, "name", label, color);
+            SetChildText(t, "leveltext", "", color);
 
             Button button = EnsureButton(row);
             button.onClick.RemoveAllListeners();
@@ -323,9 +308,6 @@ namespace StoreAndCraft
                 input.m_onLeftClick = go => action();
         }
 
-        /// <summary>
-        /// Skills rows ship with an empty icon slot (square). Hide bars/icons so only the name remains.
-        /// </summary>
         private static void StripSkillChrome(Transform root)
         {
             HideChild(root, "bonustext");
@@ -333,25 +315,39 @@ namespace StoreAndCraft
             HideChild(root, "levelbar_total");
             HideChild(root, "currentlevel");
             HideChild(root, "icon");
-
             if (root == null)
                 return;
-
             Transform[] all = root.GetComponentsInChildren<Transform>(true);
             for (int i = 0; i < all.Length; i++)
             {
                 Transform child = all[i];
                 if (child == null || child == root)
                     continue;
-
                 string n = child.gameObject.name.ToLowerInvariant();
-                // Empty skill icon / icon frame shows as a square slot beside the name.
                 if (!(n.Contains("icon") || n.Contains("skillicon") || n.EndsWith("_icon")))
                     continue;
                 if (child.GetComponent<TMP_Text>() != null)
                     continue;
                 child.gameObject.SetActive(false);
             }
+        }
+
+        private static void WidenNameField(Transform root)
+        {
+            HideChild(root, "leveltext");
+            Transform name = FindChild(root, "name");
+            if (name == null)
+                return;
+            RectTransform rt = name as RectTransform;
+            if (rt == null)
+                return;
+            rt.anchorMin = new Vector2(0.02f, 0.05f);
+            rt.anchorMax = new Vector2(0.98f, 0.95f);
+            rt.pivot = new Vector2(0f, 0.5f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = Vector2.zero;
         }
 
         private static Button EnsureButton(GameObject row)
@@ -370,7 +366,7 @@ namespace StoreAndCraft
         private static void ApplyTitle()
         {
             CacheTitles();
-            string title = Loc.T("Chest pull filter", "Truhen-Zug Filter");
+            string title = Loc.T("Display range", "Display-Reichweite");
             for (int i = 0; i < _titleTexts.Count; i++)
             {
                 TMP_Text tmp = _titleTexts[i];
@@ -405,27 +401,19 @@ namespace StoreAndCraft
             _titleLocalize.Clear();
             if (_skills == null)
                 return;
-
-            Transform listRoot = _skills.m_listRoot;
             TMP_Text[] texts = _skills.GetComponentsInChildren<TMP_Text>(true);
             for (int i = 0; i < texts.Length; i++)
             {
                 TMP_Text tmp = texts[i];
-                if (tmp == null || tmp == _skills.m_totalSkillText)
+                if (tmp == null)
                     continue;
-                if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
-                    continue;
-
                 string n = tmp.gameObject.name.ToLowerInvariant();
-                if (!(n.Contains("title") || n.Contains("header") || n.Contains("topic") || n.Contains("label")
-                    || n == "text" || n.Contains("skill")))
+                if (!(n.Contains("title") || n.Contains("header") || n == "text"))
                     continue;
-
                 Component localize = tmp.GetComponent("Localize");
                 bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
                 if (hadLocalize)
                     ((MonoBehaviour)localize).enabled = false;
-
                 _titleTexts.Add(tmp);
                 _titleBackup.Add(tmp.text ?? "");
                 _titleLocalize.Add(hadLocalize);
@@ -443,6 +431,12 @@ namespace StoreAndCraft
             Component localize = child.GetComponent("Localize");
             if (localize is MonoBehaviour mb)
                 mb.enabled = false;
+            tmp.enableAutoSizing = false;
+            tmp.fontSize = 18f;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.overflowMode = TextOverflowModes.Overflow;
+            tmp.maxVisibleLines = 1;
+            tmp.alignment = TextAlignmentOptions.MidlineLeft;
             tmp.text = text;
             tmp.color = color;
         }
@@ -472,64 +466,55 @@ namespace StoreAndCraft
     }
 
     [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.IsVisible))]
-    internal static class StationFilterInventoryVisiblePatch
+    internal static class DisplayRangeMenuInventoryVisiblePatch
     {
         private static void Postfix(ref bool __result)
         {
-            if (StationFilterMenu.IsOpen)
+            if (DisplayRangeMenu.IsOpen)
                 __result = true;
         }
     }
 
     [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Show))]
-    internal static class StationFilterInventoryShowPatch
+    internal static class DisplayRangeMenuInventoryShowPatch
     {
         private static bool Prefix()
         {
-            if (!StationFilterMenu.IsOpen)
+            if (!DisplayRangeMenu.IsOpen)
                 return true;
-            StationFilterMenu.Close();
+            DisplayRangeMenu.Close();
             return false;
         }
     }
 
     [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Hide))]
-    internal static class StationFilterInventoryHidePatch
+    internal static class DisplayRangeMenuInventoryHidePatch
     {
-        private static void Postfix()
+        private static void Prefix()
         {
-            if (StationFilterMenu.IsOpen)
-                StationFilterMenu.Close();
+            if (DisplayRangeMenu.IsOpen)
+                DisplayRangeMenu.Close();
         }
     }
 
-    [HarmonyPatch(typeof(Menu), nameof(Menu.Show))]
-    internal static class StationFilterPausePatch
+    [HarmonyPatch(typeof(Menu), "OnClose")]
+    internal static class DisplayRangeMenuPausePatch
     {
         private static bool Prefix()
         {
-            if (!StationFilterMenu.ShouldBlockPause())
+            if (!DisplayRangeMenu.ShouldBlockPause())
                 return true;
-            StationFilterMenu.Close();
+            DisplayRangeMenu.Close();
             return false;
         }
     }
 
     [HarmonyPatch(typeof(SkillsDialog), nameof(SkillsDialog.OnClose))]
-    internal static class StationFilterSkillsClosePatch
+    internal static class DisplayRangeMenuSkillsClosePatch
     {
         private static void Prefix(SkillsDialog __instance)
         {
-            StationFilterMenu.OnSkillsClosed(__instance);
-        }
-    }
-
-    [HarmonyPatch(typeof(SkillsDialog), nameof(SkillsDialog.Setup))]
-    internal static class StationFilterSkillsSetupPatch
-    {
-        private static bool Prefix()
-        {
-            return !StationFilterMenu.IsOpen;
+            DisplayRangeMenu.OnSkillsClosed(__instance);
         }
     }
 }

@@ -283,27 +283,32 @@ namespace StoreAndCraft
             int variant = pkg.ReadInt();
             long crafterId = pkg.ReadLong();
             string crafterName = pkg.ReadString();
+            // BEGIN REMOTE_DUMP — optional refund peer after crafterName (relay deposits for miner)
+            long refundTo = sender;
+            if (pkg.Size() > pkg.GetPos() + 7)
+                refundTo = pkg.ReadLong();
+            // END REMOTE_DUMP
             if (stack <= 0)
                 return;
 
             Inventory inv = container.GetInventory();
             if (inv == null)
             {
-                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                RefundDeposit(refundTo, name, stack, quality, variant, crafterId, crafterName);
                 return;
             }
 
             GameObject prefab = ItemIds.PrefabFromToken(name);
             if (prefab == null)
             {
-                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                RefundDeposit(refundTo, name, stack, quality, variant, crafterId, crafterName);
                 return;
             }
 
             ItemDrop.ItemData probe = prefab.GetComponent<ItemDrop>()?.m_itemData?.Clone();
             if (probe == null)
             {
-                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                RefundDeposit(refundTo, name, stack, quality, variant, crafterId, crafterName);
                 return;
             }
 
@@ -315,7 +320,7 @@ namespace StoreAndCraft
 
             if (!inv.CanAddItem(probe, stack))
             {
-                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                RefundDeposit(refundTo, name, stack, quality, variant, crafterId, crafterName);
                 return;
             }
 
@@ -325,7 +330,7 @@ namespace StoreAndCraft
                 // Fallback: clone path
                 if (!inv.AddItem(probe))
                 {
-                    RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                    RefundDeposit(refundTo, name, stack, quality, variant, crafterId, crafterName);
                     return;
                 }
             }
@@ -348,7 +353,12 @@ namespace StoreAndCraft
                 int variant = pkg.ReadInt();
                 long crafterId = pkg.ReadLong();
                 string crafterName = pkg.ReadString();
-                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                // BEGIN REMOTE_DUMP
+                long refundTo = sender;
+                if (pkg.Size() > pkg.GetPos() + 7)
+                    refundTo = pkg.ReadLong();
+                RefundDeposit(refundTo, name, stack, quality, variant, crafterId, crafterName);
+                // END REMOTE_DUMP
             }
             catch
             {
@@ -388,6 +398,112 @@ namespace StoreAndCraft
             pkg.Write(worldLevel);
             ZRoutedRpc.instance.InvokeRoutedRPC(sender, RpcGrant, pkg);
         }
+
+        // BEGIN REMOTE_DUMP — public wrappers for Network/RemoteDump.cs (delete with that file)
+        public static void GrantToPeer(
+            long peer,
+            string prefabOrShared,
+            int amount,
+            int quality,
+            int variant,
+            long crafterId,
+            string crafterName,
+            int worldLevel)
+        {
+            SendGrant(peer, prefabOrShared, amount, quality, variant, crafterId, crafterName, worldLevel);
+        }
+
+        /// <summary>
+        /// Relay deposits a packaged stack into a chest without taking from the relay inventory.
+        /// Validates that the relay (local player) is in range. Refunds go to <paramref name="refundPeer"/>.
+        /// </summary>
+        public static bool DepositPackagedForRelay(
+            Container chest,
+            long refundPeer,
+            string prefabName,
+            int stack,
+            int quality,
+            int variant,
+            long crafterId,
+            string crafterName)
+        {
+            if (chest == null || stack <= 0 || string.IsNullOrEmpty(prefabName))
+                return false;
+            if (ChestNames.IsIgnored(chest) || !ContainerFilter.IsPlayerBuiltStorage(chest))
+                return false;
+
+            Player local = Player.m_localPlayer;
+            if (local == null)
+                return false;
+
+            float range = MaxStoreRange();
+            if (ContainerFilter.Distance(local.transform.position, chest.transform.position) > range + 6f)
+                return false;
+            if (!PrivateArea.CheckAccess(chest.transform.position, 0f, false, true))
+                return false;
+
+            if (IsChestOwner(chest))
+            {
+                ContainerFilter.RefreshInventory(chest);
+                Inventory inv = chest.GetInventory();
+                if (inv == null)
+                    return false;
+
+                GameObject go = ItemIds.PrefabFromToken(prefabName);
+                ItemDrop.ItemData probe = go != null ? go.GetComponent<ItemDrop>()?.m_itemData?.Clone() : null;
+                if (probe == null)
+                    return false;
+
+                probe.m_stack = stack;
+                probe.m_quality = quality;
+                probe.m_variant = variant;
+                probe.m_crafterID = crafterId;
+                probe.m_crafterName = crafterName ?? "";
+                if (go != null)
+                    probe.m_dropPrefab = go;
+
+                int fit = ChestPicker.AmountThatFits(inv, probe);
+                int take = Mathf.Min(stack, fit);
+                if (take <= 0)
+                    return false;
+
+                probe.m_stack = take;
+                if (!inv.CanAddItem(probe, take))
+                    return false;
+
+                ItemDrop.ItemData added = inv.AddItem(
+                    prefabName, take, quality, variant, crafterId, crafterName ?? "", false, false);
+                if (added == null && !inv.AddItem(probe))
+                    return false;
+
+                if (take < stack && refundPeer != 0)
+                {
+                    GrantToPeer(refundPeer, prefabName, stack - take, quality, variant, crafterId,
+                        crafterName ?? "", Game.m_worldLevel);
+                }
+
+                ContainerFilter.SaveInventory(chest);
+                Highlight(chest);
+                return true;
+            }
+
+            var pkg = new ZPackage();
+            pkg.Write(prefabName);
+            pkg.Write(stack);
+            pkg.Write(quality);
+            pkg.Write(variant);
+            pkg.Write(crafterId);
+            pkg.Write(crafterName ?? "");
+            pkg.Write(refundPeer);
+
+            ZNetView nv = Refs.View(chest);
+            if (nv == null || !nv.IsValid())
+                return false;
+
+            nv.InvokeRPC(RpcDeposit, pkg);
+            return true;
+        }
+        // END REMOTE_DUMP
 
         internal static void OnStoreDrop(Container container, long sender, ZDOID dropId)
         {
