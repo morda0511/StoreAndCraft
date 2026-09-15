@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.6 — Pre-release hotfix
+
+- **Fix:** Harmony crash on load — `PlacePiece` is void; Shift+build grab no longer uses `__result`
+
 ## 1.2.5 — Pre-release Test
 
 - **Large displays:** category bands (1–12) fill the board height; labels left; items wrap indented under icons (not under the name); max 12 categories with yellow message

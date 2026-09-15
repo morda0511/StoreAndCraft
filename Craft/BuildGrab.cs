@@ -104,15 +104,15 @@ namespace StoreAndCraft
     [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece))]
     internal static class PlacePieceGrabPatch
     {
-        private static bool Prefix(Player __instance, Piece piece, ref bool __result)
+        // Valheim PlacePiece is void (pos/rot/doAttack/cheated) — do not use __result.
+        private static bool Prefix(Player __instance, Piece piece)
         {
             if (__instance == null || __instance != Player.m_localPlayer)
                 return true;
             if (!BuildGrab.TryGrab(__instance, piece))
                 return true;
 
-            // Consumed the place attempt as a grab — do not build.
-            __result = false;
+            // Skip place — grab already ran.
             return false;
         }
     }
