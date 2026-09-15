@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.4 — Pre-release hotfix
+
+- **Fix:** Storage Displays place again (1.2.3 trigger-collider / piece tweaks ate materials and spawned nothing)
+- **Keys:** rename / station pull filter default back to **Alt+E** — remap in config if it clashes with cooking
+- Displays keep solid colliders (placement-safe); depth softening only where a BoxCollider exists
+
 ## 1.2.3 — Pre-release Test
 
 - **Large displays:** flowing category sections (any number of categories); empty selected categories still show with **0**

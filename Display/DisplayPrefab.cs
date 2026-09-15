@@ -140,8 +140,23 @@ namespace StoreAndCraft
             znv.m_distant = false;
 
             clone.transform.localScale = Vector3.Scale(clone.transform.localScale, scaleMul);
-            HardenColliders(clone, kind);
-            SetupPiece(clone, sign, pieceName, pieceDesc);
+
+            Piece piece = clone.GetComponent<Piece>();
+            Piece source = sign.GetComponent<Piece>();
+            if (piece != null)
+            {
+                piece.m_name = pieceName;
+                piece.m_description = pieceDesc;
+                if (piece.m_placeEffect == null && source != null)
+                    piece.m_placeEffect = source.m_placeEffect;
+                if (piece.m_placeEffect == null)
+                    piece.m_placeEffect = new EffectList { m_effectPrefabs = new EffectList.EffectData[0] };
+                if (piece.m_resources == null && source != null)
+                    piece.m_resources = source.m_resources;
+            }
+
+            // Soften colliders after clone is fully set up (must stay solid enough to place).
+            SoftenColliders(clone, kind);
 
             StorageDisplayBoard board = clone.GetComponent<StorageDisplayBoard>();
             if (board == null)
@@ -155,68 +170,43 @@ namespace StoreAndCraft
         }
 
         /// <summary>
-        /// Signs scaled up become solid walls/traps. Replace mesh colliders with a thin
-        /// trigger box so players walk through but hover / [E] still works.
+        /// Large/Medium signs scale into full walls. Keep solid colliders (placement needs them)
+        /// but shrink depth so they are harder to stand on / use as traps.
+        /// Do not use triggers — that breaks PlacePiece (mats eaten, nothing built).
         /// </summary>
-        private static void HardenColliders(GameObject clone, DisplayKind kind)
+        private static void SoftenColliders(GameObject clone, DisplayKind kind)
         {
-            if (clone == null)
+            if (clone == null || kind == DisplayKind.Small)
                 return;
 
-            Collider[] old = clone.GetComponentsInChildren<Collider>(true);
-            for (int i = 0; i < old.Length; i++)
+            // Local Z thickness after root scale: keep a real solid slab, just thinner.
+            float depth = kind == DisplayKind.Large ? 0.04f : 0.06f;
+
+            Collider[] cols = clone.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < cols.Length; i++)
             {
-                if (old[i] != null)
-                    Object.Destroy(old[i]);
-            }
+                Collider col = cols[i];
+                if (col == null)
+                    continue;
 
-            // Local sizes before root scale: Medium ~2.5x, Large ~7.5x on X/Y.
-            float depth = kind == DisplayKind.Large ? 0.012f
-                : kind == DisplayKind.Medium ? 0.03f
-                : 0.08f;
-            float faceX = kind == DisplayKind.Large ? 0.95f
-                : kind == DisplayKind.Medium ? 0.95f
-                : 0.9f;
-            float faceY = kind == DisplayKind.Large ? 0.95f
-                : kind == DisplayKind.Medium ? 0.95f
-                : 0.9f;
+                // Never destroy — Destroy() on a prefab breaks later PlacePiece/GetPrefab use.
+                BoxCollider box = col as BoxCollider;
+                if (box != null)
+                {
+                    Vector3 size = box.size;
+                    // Prefer thinning the shallowest axis (sign face depth).
+                    if (size.z <= size.x && size.z <= size.y)
+                        size.z = Mathf.Min(size.z, depth);
+                    else if (size.x <= size.y)
+                        size.x = Mathf.Min(size.x, depth);
+                    else
+                        size.y = Mathf.Min(size.y, depth);
+                    box.size = size;
+                    box.isTrigger = false;
+                    continue;
+                }
 
-            BoxCollider box = clone.AddComponent<BoxCollider>();
-            box.isTrigger = true;
-            box.center = Vector3.zero;
-            box.size = new Vector3(faceX, faceY, depth);
-        }
-
-        private static void SetupPiece(GameObject clone, GameObject sign, string pieceName, string pieceDesc)
-        {
-            Piece piece = clone.GetComponent<Piece>();
-            Piece source = sign != null ? sign.GetComponent<Piece>() : null;
-            if (piece == null)
-                return;
-
-            piece.m_name = pieceName;
-            piece.m_description = pieceDesc;
-            if (piece.m_placeEffect == null && source != null)
-                piece.m_placeEffect = source.m_placeEffect;
-            if (piece.m_placeEffect == null)
-                piece.m_placeEffect = new EffectList { m_effectPrefabs = new EffectList.EffectData[0] };
-            if (piece.m_resources == null && source != null)
-                piece.m_resources = source.m_resources;
-
-            // Require a workbench like normal furniture (signs alone do not).
-            if (piece.m_craftingStation == null && ZNetScene.instance != null)
-            {
-                GameObject bench = ZNetScene.instance.GetPrefab("piece_workbench");
-                if (bench != null)
-                    piece.m_craftingStation = bench.GetComponent<CraftingStation>();
-            }
-
-            // Allow targeting / wear like wood pieces when WearNTear exists.
-            WearNTear wear = clone.GetComponent<WearNTear>();
-            if (wear != null)
-            {
-                wear.m_noRoofWear = false;
-                wear.m_noSupportWear = false;
+                // Mesh colliders stay as-is (needed for placement); cannot safely thin them.
             }
         }
 

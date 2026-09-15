@@ -94,8 +94,8 @@ namespace StoreAndCraft
                 "Hotkey: store only the inventory item under the cursor into a nearby chest that already holds it.");
             SearchKey = file.Bind("4 - Keys", "SearchKey", new KeyboardShortcut(KeyCode.Y),
                 "While inventory is open: hover an item and press to ping/blink the nearest chest that contains it (blinks 3 times).");
-            RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.B, KeyCode.LeftAlt),
-                "Look at a chest to rename it, or at a kiln/smelter/grill with multiple inputs to open the chest-pull filter. Default Alt+B (avoids Alt+E cooking and F skills). Shift+E (Valheim alt-use) also renames chests. Prefix a chest name with [I] to ignore it.");
+            RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.E, KeyCode.LeftAlt),
+                "Look at a chest to rename it, or at a kiln/smelter/grill with multiple inputs to open the chest-pull filter. Default Alt+E — remap in config if it clashes with cooking. Shift+E (Valheim alt-use) also renames chests. Prefix a chest name with [I] to ignore it.");
             TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
             FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),
