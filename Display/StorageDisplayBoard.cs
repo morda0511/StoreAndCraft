@@ -24,6 +24,10 @@ namespace StoreAndCraft
         private bool _columnHeaders;
         private bool _tightSlots;
         private bool _flowSections;
+        private float _labelWidth;
+        private int _builtBandCount = -1;
+        private TextMeshProUGUI[] _bandLabels;
+        private RectTransform _gridRoot;
 
         private readonly List<Container> _watched = new List<Container>();
         private readonly List<int> _watchIds = new List<int>();
@@ -79,19 +83,19 @@ namespace StoreAndCraft
                     _flowSections = false;
                     break;
                 case DisplayKind.Large:
-                    // Dense row-major grid; categories flow as sections (empty cats still shown).
+                    // Item grid to the right of a left label column; band height scales with N (1–12).
                     _headerColumns = 0;
                     _itemsPerGroup = 1;
-                    _columns = 8;
+                    _columns = 9;
                     _rows = 12;
                     _slotCount = _columns * _rows;
-                    // Prefab is 3x medium scale; keep world text size like medium.
-                    _fontFactor = 0.16f / 3f;
-                    _titleFactor = 0.10f / 3f;
+                    _fontFactor = 0.14f / 3f;
+                    _titleFactor = 0.09f / 3f;
                     _columnMajor = false;
                     _columnHeaders = false;
                     _tightSlots = true;
                     _flowSections = true;
+                    _labelWidth = 0.15f;
                     break;
                 default:
                     // Category title strip + denser item cells; sort grouped by category.
@@ -443,6 +447,8 @@ namespace StoreAndCraft
             }
             else
             {
+                if (!CanAddCategory(ids, items, id))
+                    return;
                 ids.Add(id);
                 // Whole category selected: drop fine-grained picks under it.
                 if (DisplayFilters.IsExpandable(id))
@@ -462,11 +468,52 @@ namespace StoreAndCraft
                 items.Remove(shared);
             else
             {
+                // Adding a token whose parent is not already represented counts as a new category.
+                int parent = parentFilterId > 0 ? parentFilterId : DisplayFilters.ParentFilterIdFromToken(shared);
+                if (parent > 0 && !ids.Contains(parent) && !CategoryRepresentedByItems(items, parent))
+                {
+                    if (!CanAddCategory(ids, items, parent))
+                        return;
+                }
                 items.Add(shared);
                 if (parentFilterId > 0)
                     ids.Remove(parentFilterId);
             }
             WriteSelection(ids, items);
+        }
+
+        private static bool CategoryRepresentedByItems(List<string> items, int parentId)
+        {
+            if (items == null || parentId <= 0)
+                return false;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (DisplayFilters.ParentFilterIdFromToken(items[i]) == parentId)
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool CanAddCategory(List<int> ids, List<string> items, int newId)
+        {
+            var probeIds = new List<int>(ids ?? new List<int>());
+            if (newId > 0 && !probeIds.Contains(newId))
+                probeIds.Add(newId);
+            int count = BuildSectionOrder(probeIds, items).Count;
+            if (count <= DisplayFilters.MaxCategories)
+                return true;
+
+            Player player = Player.m_localPlayer;
+            if (player != null)
+            {
+                player.Message(
+                    MessageHud.MessageType.Center,
+                    Loc.T(
+                        "You reached the maximum of 12 categories",
+                        "Maximal 12 Kategorien erreicht"),
+                    0, null, false);
+            }
+            return false;
         }
 
         private static List<string> RemoveCategoryItems(List<string> items, int filterId)
@@ -525,6 +572,16 @@ namespace StoreAndCraft
             // Large switched from fixed 3-column headers to flowing sections.
             if (_slots != null && _kind == DisplayKind.Large && (_headers != null || !_flowSections || _columnMajor))
                 _slots = null;
+            // Large band count changed (1–12) → rebuild anchors.
+            if (_slots != null && _kind == DisplayKind.Large && _flowSections)
+            {
+                int want = Mathf.Clamp(
+                    BuildSectionOrder(FilterIds(), ItemTokens()).Count,
+                    1,
+                    DisplayFilters.MaxCategories);
+                if (_builtBandCount != want)
+                    _slots = null;
+            }
             if (_slots != null && _kind == DisplayKind.Small && _slots.Length == 1
                 && _slots[0].Amount != null && _slots[0].Amount.fontSize < 1f)
                 _slots = null;
@@ -632,6 +689,13 @@ namespace StoreAndCraft
             rt.localRotation = board.localRotation;
 
             float font = template.fontSize * _fontFactor;
+
+            if (_kind == DisplayKind.Large && _flowSections)
+            {
+                BuildLargeUi(root, template, font);
+                return;
+            }
+
             float contentTop = 1f;
             if (_columnHeaders && _headerColumns > 0)
             {
@@ -688,71 +752,175 @@ namespace StoreAndCraft
                 int col;
                 int row;
                 SlotCoord(i, out col, out row);
-
-                var cell = new GameObject("Slot" + i, typeof(RectTransform));
-                cell.transform.SetParent(root.transform, false);
-                RectTransform cellRt = cell.GetComponent<RectTransform>();
-                float y0 = contentTop * (1f - (row + 1) / (float)_rows) + padY * contentTop;
-                float y1 = contentTop * (1f - row / (float)_rows) - padY * contentTop;
-                cellRt.anchorMin = new Vector2(col / (float)_columns + padX, y0);
-                cellRt.anchorMax = new Vector2((col + 1) / (float)_columns - padX, y1);
-                cellRt.offsetMin = Vector2.zero;
-                cellRt.offsetMax = Vector2.zero;
-                cellRt.localScale = Vector3.one;
-
-                var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-                iconGo.transform.SetParent(cell.transform, false);
-                RectTransform iconRt = iconGo.GetComponent<RectTransform>();
-                iconRt.anchorMin = new Vector2(0.00f, 0.10f);
-                iconRt.anchorMax = new Vector2(iconMax, 0.92f);
-                iconRt.offsetMin = Vector2.zero;
-                iconRt.offsetMax = Vector2.zero;
-                Image icon = iconGo.GetComponent<Image>();
-                icon.preserveAspect = true;
-                icon.color = Color.white;
-                icon.raycastTarget = false;
-                icon.enabled = false;
-
-                GameObject textGo = Object.Instantiate(template.gameObject, cell.transform);
-                textGo.name = "Amount";
-                textGo.SetActive(true);
-                textGo.transform.SetAsLastSibling();
-                RectTransform textRt = textGo.GetComponent<RectTransform>();
-                textRt.anchorMin = new Vector2(textMin, 0.08f);
-                textRt.anchorMax = new Vector2(1.00f, 0.92f);
-                textRt.pivot = new Vector2(0f, 0.5f);
-                textRt.offsetMin = Vector2.zero;
-                textRt.offsetMax = Vector2.zero;
-                textRt.anchoredPosition = Vector2.zero;
-                textRt.sizeDelta = Vector2.zero;
-                textRt.localScale = Vector3.one;
-                textRt.localRotation = Quaternion.identity;
-
-                TextMeshProUGUI amount = textGo.GetComponent<TextMeshProUGUI>();
-                amount.enabled = true;
-                var localizeAmt = textGo.GetComponent("Localize") as MonoBehaviour;
-                if (localizeAmt != null)
-                    Object.Destroy(localizeAmt);
-                if (template.font != null)
-                    amount.font = template.font;
-                amount.alignment = _kind == DisplayKind.Small
-                    ? TextAlignmentOptions.MidlineLeft
-                    : TextAlignmentOptions.MidlineLeft;
-                amount.textWrappingMode = TextWrappingModes.NoWrap;
-                amount.overflowMode = TextOverflowModes.Overflow;
-                amount.enableAutoSizing = false;
-                amount.fontSize = font;
-                if (_kind == DisplayKind.Small)
-                    amount.fontSize = Mathf.Max(font, template.fontSize * 0.22f);
-                amount.color = new Color(1f, 0.95f, 0.75f, 1f);
-                amount.faceColor = new Color32(255, 242, 191, 255);
-                amount.outlineWidth = 0f;
-                amount.raycastTarget = false;
-                amount.text = "";
-
-                _slots[i].Icon = icon;
-                _slots[i].Amount = amount;
+                CreateSlotCell(root.transform, template, font, iconMax, textMin, padX, padY, 1f,
+                    col / (float)_columns, (col + 1) / (float)_columns,
+                    contentTop * (1f - (row + 1) / (float)_rows),
+                    contentTop * (1f - row / (float)_rows),
+                    i);
             }
+            _bandLabels = null;
+            _builtBandCount = -1;
+            _gridRoot = rt;
+        }
+
+        private void BuildLargeUi(GameObject root, TextMeshProUGUI template, float font)
+        {
+            _headers = null;
+            _gridRoot = root.GetComponent<RectTransform>();
+            int bands = Mathf.Clamp(
+                BuildSectionOrder(FilterIds(), ItemTokens()).Count,
+                1,
+                DisplayFilters.MaxCategories);
+            _builtBandCount = bands;
+
+            int linesPerBand = Mathf.Max(1, _rows / bands);
+            int itemCols = _columns;
+            float labelW = Mathf.Clamp(_labelWidth, 0.10f, 0.22f);
+            float padX = 0.004f;
+            float padY = 0.008f;
+            float iconMax = 0.38f;
+            float textMin = 0.34f;
+
+            _bandLabels = new TextMeshProUGUI[DisplayFilters.MaxCategories];
+            for (int b = 0; b < DisplayFilters.MaxCategories; b++)
+            {
+                GameObject labelGo = Object.Instantiate(template.gameObject, root.transform);
+                labelGo.name = "BandLabel" + b;
+                labelGo.SetActive(b < bands);
+                RectTransform labelRt = labelGo.GetComponent<RectTransform>();
+                float y0 = 1f - (b + 1) / (float)bands;
+                float y1 = 1f - b / (float)bands;
+                // Flush left; label only in left strip.
+                labelRt.anchorMin = new Vector2(0.005f, y0 + padY * 0.5f);
+                labelRt.anchorMax = new Vector2(labelW - 0.005f, y1 - padY * 0.5f);
+                labelRt.offsetMin = Vector2.zero;
+                labelRt.offsetMax = Vector2.zero;
+                labelRt.localScale = Vector3.one;
+                labelRt.localRotation = Quaternion.identity;
+
+                TextMeshProUGUI label = labelGo.GetComponent<TextMeshProUGUI>();
+                var localize = labelGo.GetComponent("Localize") as MonoBehaviour;
+                if (localize != null)
+                    Object.Destroy(localize);
+                if (template.font != null)
+                    label.font = template.font;
+                label.enabled = true;
+                label.alignment = TextAlignmentOptions.MidlineLeft;
+                label.textWrappingMode = TextWrappingModes.NoWrap;
+                label.overflowMode = TextOverflowModes.Ellipsis;
+                label.enableAutoSizing = false;
+                label.fontSize = font * 0.9f;
+                label.color = new Color(1f, 0.92f, 0.55f, 1f);
+                label.faceColor = new Color32(255, 235, 140, 255);
+                label.outlineWidth = 0f;
+                label.raycastTarget = false;
+                label.text = "";
+                _bandLabels[b] = label;
+            }
+
+            _slots = new SlotUi[_slotCount];
+            for (int i = 0; i < _slotCount; i++)
+                _slots[i] = default(SlotUi);
+
+            // Map slots: for each band, linesPerBand × itemCols — only first bands*lines*cols used.
+            int slot = 0;
+            for (int b = 0; b < bands; b++)
+            {
+                float bandY0 = 1f - (b + 1) / (float)bands;
+                float bandY1 = 1f - b / (float)bands;
+                float bandH = bandY1 - bandY0;
+                for (int line = 0; line < linesPerBand; line++)
+                {
+                    float ly0 = bandY0 + bandH * (1f - (line + 1) / (float)linesPerBand);
+                    float ly1 = bandY0 + bandH * (1f - line / (float)linesPerBand);
+                    for (int col = 0; col < itemCols; col++)
+                    {
+                        if (slot >= _slotCount)
+                            return;
+                        float x0 = labelW + (1f - labelW) * (col / (float)itemCols);
+                        float x1 = labelW + (1f - labelW) * ((col + 1) / (float)itemCols);
+                        CreateSlotCell(root.transform, template, font, iconMax, textMin, padX, padY, 1f,
+                            x0, x1, ly0, ly1, slot);
+                        slot++;
+                    }
+                }
+            }
+        }
+
+        private void CreateSlotCell(
+            Transform parent,
+            TextMeshProUGUI template,
+            float font,
+            float iconMax,
+            float textMin,
+            float padX,
+            float padY,
+            float contentTop,
+            float x0,
+            float x1,
+            float y0,
+            float y1,
+            int index)
+        {
+            var cell = new GameObject("Slot" + index, typeof(RectTransform));
+            cell.transform.SetParent(parent, false);
+            RectTransform cellRt = cell.GetComponent<RectTransform>();
+            cellRt.anchorMin = new Vector2(x0 + padX, y0 + padY);
+            cellRt.anchorMax = new Vector2(x1 - padX, y1 - padY);
+            cellRt.offsetMin = Vector2.zero;
+            cellRt.offsetMax = Vector2.zero;
+            cellRt.localScale = Vector3.one;
+
+            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            iconGo.transform.SetParent(cell.transform, false);
+            RectTransform iconRt = iconGo.GetComponent<RectTransform>();
+            iconRt.anchorMin = new Vector2(0.00f, 0.10f);
+            iconRt.anchorMax = new Vector2(iconMax, 0.92f);
+            iconRt.offsetMin = Vector2.zero;
+            iconRt.offsetMax = Vector2.zero;
+            Image icon = iconGo.GetComponent<Image>();
+            icon.preserveAspect = true;
+            icon.color = Color.white;
+            icon.raycastTarget = false;
+            icon.enabled = false;
+
+            GameObject textGo = Object.Instantiate(template.gameObject, cell.transform);
+            textGo.name = "Amount";
+            textGo.SetActive(true);
+            textGo.transform.SetAsLastSibling();
+            RectTransform textRt = textGo.GetComponent<RectTransform>();
+            textRt.anchorMin = new Vector2(textMin, 0.08f);
+            textRt.anchorMax = new Vector2(1.00f, 0.92f);
+            textRt.pivot = new Vector2(0f, 0.5f);
+            textRt.offsetMin = Vector2.zero;
+            textRt.offsetMax = Vector2.zero;
+            textRt.anchoredPosition = Vector2.zero;
+            textRt.sizeDelta = Vector2.zero;
+            textRt.localScale = Vector3.one;
+            textRt.localRotation = Quaternion.identity;
+
+            TextMeshProUGUI amount = textGo.GetComponent<TextMeshProUGUI>();
+            amount.enabled = true;
+            var localizeAmt = textGo.GetComponent("Localize") as MonoBehaviour;
+            if (localizeAmt != null)
+                Object.Destroy(localizeAmt);
+            if (template.font != null)
+                amount.font = template.font;
+            amount.alignment = TextAlignmentOptions.MidlineLeft;
+            amount.textWrappingMode = TextWrappingModes.NoWrap;
+            amount.overflowMode = TextOverflowModes.Overflow;
+            amount.enableAutoSizing = false;
+            amount.fontSize = font;
+            if (_kind == DisplayKind.Small)
+                amount.fontSize = Mathf.Max(font, template.fontSize * 0.22f);
+            amount.color = new Color(1f, 0.95f, 0.75f, 1f);
+            amount.faceColor = new Color32(255, 242, 191, 255);
+            amount.outlineWidth = 0f;
+            amount.raycastTarget = false;
+            amount.text = "";
+
+            _slots[index].Icon = icon;
+            _slots[index].Amount = amount;
         }
 
         private void SlotCoord(int index, out int col, out int row)
@@ -1089,116 +1257,93 @@ namespace StoreAndCraft
         {
             ClearHeaders();
             List<int> sections = BuildSectionOrder(filters, itemTokens);
-            if (sections.Count == 0)
-            {
-                for (int i = 0; i < _slotCount; i++)
-                    ClearSlot(i);
-                return;
-            }
-
-            // Flatten to paint ops so cluster pages share one continuous flow.
-            var ops = new List<SectionOp>(64);
-            int cursor = 0;
-            for (int s = 0; s < sections.Count; s++)
-            {
-                int catId = sections[s];
-
-                // Start each category on a new row (keeps headers readable).
-                if (cursor % _columns != 0)
-                {
-                    int pad = _columns - (cursor % _columns);
-                    for (int p = 0; p < pad; p++)
-                    {
-                        ops.Add(new SectionOp { Kind = OpKind.Pad });
-                        cursor++;
-                    }
-                }
-
-                ops.Add(new SectionOp { Kind = OpKind.Header, CategoryId = catId });
-                cursor++;
-
-                List<int> oneFilter = null;
-                List<string> oneTokens = null;
-                SplitSelectionForSection(catId, filters, itemTokens, out oneFilter, out oneTokens);
-                var ranked = RankItems(cluster, oneFilter, oneTokens, false);
-                if (ranked.Count == 0)
-                {
-                    // Keep empty selected categories visible (e.g. Fish = 0 in storage).
-                    ops.Add(new SectionOp { Kind = OpKind.Empty, CategoryId = catId });
-                    cursor++;
-                }
-                else
-                {
-                    for (int r = 0; r < ranked.Count; r++)
-                    {
-                        ops.Add(new SectionOp { Kind = OpKind.Item, CategoryId = catId, Item = ranked[r] });
-                        cursor++;
-                    }
-                }
-            }
-
-            int start = _page * _slotCount;
-            bool lastBoard = _page >= _pages - 1;
-            int remaining = Mathf.Max(0, ops.Count - start);
-            int extraAfterThis = Mathf.Max(0, remaining - _slotCount);
-            int shown = remaining;
-            if (lastBoard && extraAfterThis > 0)
-                shown = _slotCount - 1;
-            else
-                shown = Mathf.Min(_slotCount, remaining);
-
             for (int i = 0; i < _slotCount; i++)
             {
-                if (lastBoard && extraAfterThis > 0 && i == _slotCount - 1)
-                {
+                if (_slots[i].Icon != null)
                     ClearSlot(i);
-                    SetAmount(i, "+" + extraAfterThis, new Color(1f, 0.85f, 0.45f, 1f));
+            }
+
+            if (_bandLabels != null)
+            {
+                for (int i = 0; i < _bandLabels.Length; i++)
+                {
+                    if (_bandLabels[i] == null)
+                        continue;
+                    _bandLabels[i].text = "";
+                    _bandLabels[i].gameObject.SetActive(false);
+                }
+            }
+
+            if (sections.Count == 0)
+                return;
+
+            int bands = Mathf.Clamp(sections.Count, 1, DisplayFilters.MaxCategories);
+            int linesPerBand = Mathf.Max(1, _rows / bands);
+            int itemCols = _columns;
+            int perBand = linesPerBand * itemCols;
+
+            for (int b = 0; b < bands; b++)
+            {
+                int catId = sections[b];
+                if (_bandLabels != null && b < _bandLabels.Length && _bandLabels[b] != null)
+                {
+                    _bandLabels[b].gameObject.SetActive(true);
+                    _bandLabels[b].text = ShortCategoryLabel(catId);
+                }
+
+                List<int> oneFilter;
+                List<string> oneTokens;
+                SplitSelectionForSection(catId, filters, itemTokens, out oneFilter, out oneTokens);
+                var ranked = RankItems(cluster, oneFilter, oneTokens, false);
+
+                int baseSlot = b * perBand;
+                if (ranked.Count == 0)
+                {
+                    int emptySlot = baseSlot;
+                    if (emptySlot < _slotCount && _slots[emptySlot].Amount != null)
+                        SetAmount(emptySlot, "0", new Color(0.75f, 0.7f, 0.55f, 1f));
                     continue;
                 }
 
-                int index = start + i;
-                if (i >= shown || index >= ops.Count)
+                int capacity = perBand;
+                int extra = Mathf.Max(0, ranked.Count - capacity);
+                int show = extra > 0 ? capacity - 1 : Mathf.Min(capacity, ranked.Count);
+                for (int r = 0; r < show; r++)
                 {
-                    ClearSlot(i);
-                    continue;
+                    int slot = baseSlot + r;
+                    if (slot >= _slotCount || _slots[slot].Icon == null)
+                        break;
+                    PaintSlot(slot, ranked[r]);
                 }
 
-                SectionOp op = ops[index];
-                if (op.Kind == OpKind.Header)
+                if (extra > 0)
                 {
-                    ClearSlot(i);
-                    SetAmount(i, DisplayFilters.Label(op.CategoryId).ToUpperInvariant(),
-                        new Color(1f, 0.92f, 0.55f, 1f));
-                }
-                else if (op.Kind == OpKind.Empty)
-                {
-                    ClearSlot(i);
-                    SetAmount(i, "0", new Color(0.75f, 0.7f, 0.55f, 1f));
-                }
-                else if (op.Kind == OpKind.Item)
-                {
-                    PaintSlot(i, op.Item);
-                }
-                else
-                {
-                    ClearSlot(i);
+                    int overflowSlot = baseSlot + capacity - 1;
+                    if (overflowSlot < _slotCount && _slots[overflowSlot].Amount != null)
+                    {
+                        ClearSlot(overflowSlot);
+                        SetAmount(overflowSlot, "+" + (ranked.Count - show),
+                            new Color(1f, 0.85f, 0.45f, 1f));
+                    }
                 }
             }
         }
 
-        private enum OpKind
+        private static string ShortCategoryLabel(int catId)
         {
-            Header,
-            Item,
-            Empty,
-            Pad
-        }
-
-        private struct SectionOp
-        {
-            public OpKind Kind;
-            public int CategoryId;
-            public RankedItem Item;
+            string label = DisplayFilters.Label(catId);
+            if (string.IsNullOrEmpty(label))
+                return "?";
+            // Keep readable but avoid eating item space (CROPS & SEEDS → CROPS).
+            int amp = label.IndexOf('&');
+            if (amp > 0)
+                label = label.Substring(0, amp).Trim();
+            int space = label.IndexOf(' ');
+            if (space > 0 && label.Length > 10)
+                label = label.Substring(0, space);
+            if (label.Length > 12)
+                label = label.Substring(0, 12);
+            return label.ToUpperInvariant();
         }
 
         /// <summary>
@@ -1478,8 +1623,13 @@ namespace StoreAndCraft
 
         private void ClearSlot(int i)
         {
-            _slots[i].Icon.enabled = false;
-            _slots[i].Icon.sprite = null;
+            if (_slots == null || i < 0 || i >= _slots.Length)
+                return;
+            if (_slots[i].Icon != null)
+            {
+                _slots[i].Icon.enabled = false;
+                _slots[i].Icon.sprite = null;
+            }
             SetAmount(i, "");
         }
 
@@ -1490,6 +1640,8 @@ namespace StoreAndCraft
 
         private void SetAmount(int i, string text, Color color)
         {
+            if (_slots == null || i < 0 || i >= _slots.Length)
+                return;
             TextMeshProUGUI amount = _slots[i].Amount;
             if (amount == null)
                 return;

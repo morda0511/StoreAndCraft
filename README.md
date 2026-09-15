@@ -33,6 +33,8 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - Craft / upgrade button enables when mats are in **inventory or chests**.
 - Yellow tint on requirement text when part of the count comes from a chest.
 - `LeaveOneItem` (default on): one item stays in each chest so auto-store can keep refilling. That leftover item cannot be spent (craft, build, plant, or station [E]). Turn the setting off if you want to use the last item.
+- **Shift + place:** hold **Shift** while confirming a build to **grab** that piece’s materials from nearby chests into your inventory (nothing is placed).
+- **Epic Loot:** works alongside Epic Loot — craft/enchant chest-pull uses the same requirement path when the station checks mats; Storage Displays soft-match EL reagents/hides.
 
 ### Station refill `[E]`
 Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters, turrets, etc.:
@@ -58,11 +60,11 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - Saved per station (ZDO). Manual use from inventory is not blocked for types you hold yourself; auto-select / chest pull respects the filter.
 
 ### Storage Display (Hammer)
-- Build **Storage Display** (wood-sign look).
-- **[E]** → type menu (**[+]** / **[-]**), same style as the kiln filter.
-- Select **one or several** types at once (e.g. Wood + Ore); board shows all matching items.
+- Build **Small / Medium / Large Storage Display**.
+- **[E]** → type menu (**[+]** / **[-]**). Up to **12 categories** per board (yellow message if you try more).
+- Large: one band per category, labels left, items wrap under the item columns (not under the name). Band height scales with how many categories you pick.
 - Chests named with **`[I]`** are ignored.
-- Place several displays with the **same** selection next to each other → shared pages `(1/2)`, `(2/2)`, …
+- **Alt+R** → per-display chest scan range (5–50 m).
 
 ### Favorites
 - Inventory open → hover item → **F**.
@@ -82,7 +84,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 ### Sort
 - Inventory open → **R**.
 - Bag only: sorts your inventory. Open chest: sorts **that chest only** (not both).
-- Favorites stay put (equipped + hotbar too when `IgnoreHotbar` is on).
+- Favorites and the **hotbar stay put** — sort never packs items into hotbar slots.
 
 ### Multiplayer
 - Install on **server + all clients**, same version.
@@ -104,6 +106,8 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 | **N** | Toggle auto-drop on a cooking spit / iron station / stone oven (inventory closed) |
 | **Y** | Hover an inventory item and press — nearest chest with that item blinks **3×** + map ping |
 | **R** | Sort: bag open = inventory only; chest open = that chest only |
+| **Shift + place** | Grab build materials from chests (do not place) |
+| **Alt + R** | Storage Display range |
 
 All hotkeys are configurable in the `.cfg` and stay **local** (not overwritten by server sync).
 

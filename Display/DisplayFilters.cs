@@ -27,6 +27,7 @@ namespace StoreAndCraft
         public const int FoodFilterId = 2;
         public const int IngredientsFilterId = 22;
         public const int OtherMaterialsFilterId = 23;
+        public const int MaxCategories = 12;
 
         public static bool IsExpandable(int filterId)
         {
@@ -66,14 +67,15 @@ namespace StoreAndCraft
         private static readonly string[] HideNames =
         {
             "deerhide", "leatherscraps", "trollhide", "wolfpelt", "loxpelt",
-            "serpentscale", "chitin", "scalehide", "asksvinhide", "hare_pelt", "harepelt"
+            "serpentscale", "chitin", "scalehide", "asksvinhide", "hare_pelt", "harepelt",
+            "bearhide", "bear_hide", "bearpelt", "bear_pelt"
         };
 
         private static readonly string[] PartsNames =
         {
             "bonefragments", "witheredbone", "entrails", "bloodbag", "feathers", "guck", "ooze",
             "needle", "greydwarfeye", "freezegland", "hardantler", "wolffang", "root",
-            "softtissue", "mandible", "bukeperries"
+            "softtissue", "mandible", "bukeperries", "ectoplasm", "bilebag", "refinedeitr"
         };
 
         private static readonly string[] CropNames =
@@ -135,8 +137,8 @@ namespace StoreAndCraft
             Named(21, "Boss / Rare", "Boss / Selten", BossNames, ItemDrop.ItemData.ItemType.Material),
             // Catch-all for mod materials (Epic Loot reagents, etc.) not in named lists.
             Other(23, "Other materials", "Andere Materialien"),
-            // All Food = every consumable (no ExcludeNamed) so Medium/Large show meals + meads.
-            Typed(2, "Food", "Essen", false,
+            // All Food = cooked consumables only (ingredients / raw claimed elsewhere).
+            Typed(2, "Food", "Essen", true,
                 ItemDrop.ItemData.ItemType.Consumable),
             Typed(3, "Fish", "Fisch", false,
                 ItemDrop.ItemData.ItemType.Fish),
@@ -423,7 +425,15 @@ namespace StoreAndCraft
 
             string key = Key(item);
             if (found.Names != null && found.Names.Length > 0)
-                return NameInList(key, found.Names) || ExtraOreWoodMatch(key, found.Id);
+            {
+                if (NameInList(key, found.Names) || ExtraOreWoodMatch(key, found.Id))
+                    return true;
+                if (found.Id == 16 && SoftHideMatch(key))
+                    return true;
+                if (found.Id == 17 && SoftPartsMatch(key))
+                    return true;
+                return false;
+            }
 
             if (found.ExcludeNamed)
                 return !IsClaimedByNamedFilter(key, item.m_shared.m_itemType);
@@ -440,17 +450,25 @@ namespace StoreAndCraft
             if (type != ItemDrop.ItemData.ItemType.Material && type != ItemDrop.ItemData.ItemType.Misc)
                 return false;
 
+            string key = Key(item);
+            // Prefer hide/parts soft rules over dumping into Other.
+            if (SoftHideMatch(key) || SoftPartsMatch(key))
+                return false;
+
             for (int i = 0; i < Choices.Length; i++)
             {
                 int id = Choices[i].Id;
                 if (id == OtherMaterialsFilterId)
                     continue;
-                // Skip broad typed buckets that would swallow everything.
                 if (id == 5 || id == FoodFilterId)
                     continue;
                 if (Matches(item, id))
                     return false;
             }
+
+            // Epic Loot enchant mats land here deliberately.
+            if (SoftEpicLootMaterial(key))
+                return true;
             return true;
         }
 
@@ -709,7 +727,9 @@ namespace StoreAndCraft
                 || NameInList(key, StoneNames)
                 || NameInList(key, FuelNames)
                 || NameInList(key, HideNames)
+                || SoftHideMatch(key)
                 || NameInList(key, PartsNames)
+                || SoftPartsMatch(key)
                 || NameInList(key, GemNames)
                 || NameInList(key, BossNames)
                 || ExtraOreWoodMatch(key, 11)
@@ -733,6 +753,34 @@ namespace StoreAndCraft
                     return NameInList(key, OreNames) || key.Contains("metal") || key.Contains("iron") || key.Contains("copper") || key.Contains("black");
             }
             return false;
+        }
+
+        private static bool SoftHideMatch(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                return false;
+            if (key.Contains("leather") || key.EndsWith("hide") || key.EndsWith("pelt")
+                || key.Contains("chitin") || key.EndsWith("scale"))
+                return true;
+            return false;
+        }
+
+        private static bool SoftPartsMatch(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                return false;
+            return key.Contains("ectoplasm") || key.Contains("bile") || key.Contains("entrails")
+                || key.Contains("bloodbag") || key.Contains("bonefragment");
+        }
+
+        /// <summary>Epic Loot enchant mats and similar mod reagents.</summary>
+        public static bool SoftEpicLootMaterial(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                return false;
+            return key.Contains("essence") || key.Contains("reagent") || key.Contains("shard")
+                || key.Contains("dust") || key.Contains("runestone") || key.Contains("magic")
+                || key.Contains("epicloot") || key.Contains("augment");
         }
 
         private static bool NameInList(string key, string[] names)

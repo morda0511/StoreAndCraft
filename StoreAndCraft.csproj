@@ -10,8 +10,8 @@
     <AssemblyName>StoreAndCraft</AssemblyName>
     <RootNamespace>StoreAndCraft</RootNamespace>
     <Product>StoreAndCraft</Product>
-    <Version>1.2.4</Version>
-    <ModVersion>1.2.4</ModVersion>
+    <Version>1.2.5</Version>
+    <ModVersion>1.2.5</ModVersion>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <DebugType>portable</DebugType>
   </PropertyGroup>

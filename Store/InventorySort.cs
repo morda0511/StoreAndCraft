@@ -128,6 +128,9 @@ namespace StoreAndCraft
             var freeSlots = new List<Vector2i>();
             for (int y = 0; y < height; y++)
             {
+                // Player hotbar is row 0 — never pack sorted bag items into it.
+                if (lockHotbar && y == 0)
+                    continue;
                 for (int x = 0; x < width; x++)
                 {
                     var slot = new Vector2i(x, y);
@@ -162,7 +165,7 @@ namespace StoreAndCraft
                 return true;
             if (lockFavorites && Favorites.IsFavorite(item))
                 return true;
-            if (lockHotbar && Plugin.Settings != null && Plugin.Settings.IgnoreHotbar.Value && item.m_gridPos.y == 0)
+            if (lockHotbar && item.m_gridPos.y == 0)
                 return true;
             return false;
         }

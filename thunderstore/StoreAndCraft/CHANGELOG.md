@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.5 — Pre-release Test
+
+- **Large displays:** category bands (1–12) fill the board height; labels left; items wrap indented under icons (not under the name); max 12 categories with yellow message
+- **Filters:** Food vs Ingredients exclusive; Hides/Parts soft-match (bear, chitin, ectoplasm); Epic Loot mats → Other materials
+- **Epic Loot:** soft compatibility — displays categorize EL mats; enchanting/craft chest-pull uses the same paths as other stations when requirements are checked
+- **Shift+build grab:** hold Shift while placing to pull piece costs from chests into your bag (no build)
+- **Fix:** inventory sort never moves items into the hotbar row
+- Pre-release — server + all clients need the **same** build
+
 ## 1.2.4 — Pre-release hotfix
 
 - **Fix:** Storage Displays place again (1.2.3 trigger-collider / piece tweaks ate materials and spawned nothing)
