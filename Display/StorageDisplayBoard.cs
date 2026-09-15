@@ -83,19 +83,20 @@ namespace StoreAndCraft
                     _flowSections = false;
                     break;
                 case DisplayKind.Large:
-                    // Item grid to the right of a left label column; band height scales with N (1–12).
+                    // Fixed row table: label strip + dense items (wrap stays in item columns).
                     _headerColumns = 0;
                     _itemsPerGroup = 1;
-                    _columns = 9;
+                    _columns = 8;
                     _rows = 12;
                     _slotCount = _columns * _rows;
-                    _fontFactor = 0.14f / 3f;
-                    _titleFactor = 0.09f / 3f;
+                    // Prefab ~3× medium; keep labels/icons readable (was far too small).
+                    _fontFactor = 0.32f / 3f;
+                    _titleFactor = 0.14f / 3f;
                     _columnMajor = false;
                     _columnHeaders = false;
                     _tightSlots = true;
                     _flowSections = true;
-                    _labelWidth = 0.15f;
+                    _labelWidth = 0.18f;
                     break;
                 default:
                     // Category title strip + denser item cells; sort grouped by category.
@@ -685,7 +686,8 @@ namespace StoreAndCraft
             rt.sizeDelta = board.sizeDelta;
             rt.offsetMin = board.offsetMin;
             rt.offsetMax = board.offsetMax;
-            rt.localScale = board.localScale;
+            // Parent already carries piece scale — do not multiply again.
+            rt.localScale = Vector3.one;
             rt.localRotation = board.localRotation;
 
             float font = template.fontSize * _fontFactor;
@@ -767,32 +769,32 @@ namespace StoreAndCraft
         {
             _headers = null;
             _gridRoot = root.GetComponent<RectTransform>();
-            int bands = Mathf.Clamp(
-                BuildSectionOrder(FilterIds(), ItemTokens()).Count,
-                1,
-                DisplayFilters.MaxCategories);
+            int cats = BuildSectionOrder(FilterIds(), ItemTokens()).Count;
+            int bands = Mathf.Clamp(cats, 1, DisplayFilters.MaxCategories);
             _builtBandCount = bands;
 
+            // Share vertical space: few cats → more item lines each; 12 cats → one line each.
             int linesPerBand = Mathf.Max(1, _rows / bands);
             int itemCols = _columns;
-            float labelW = Mathf.Clamp(_labelWidth, 0.10f, 0.22f);
-            float padX = 0.004f;
-            float padY = 0.008f;
-            float iconMax = 0.38f;
-            float textMin = 0.34f;
+            float labelW = Mathf.Clamp(_labelWidth, 0.14f, 0.24f);
+            float padX = 0.003f;
+            float padY = 0.006f;
+            float iconMax = 0.42f;
+            float textMin = 0.38f;
 
             _bandLabels = new TextMeshProUGUI[DisplayFilters.MaxCategories];
             for (int b = 0; b < DisplayFilters.MaxCategories; b++)
             {
                 GameObject labelGo = Object.Instantiate(template.gameObject, root.transform);
                 labelGo.name = "BandLabel" + b;
-                labelGo.SetActive(b < bands);
+                bool on = b < bands;
+                labelGo.SetActive(on);
                 RectTransform labelRt = labelGo.GetComponent<RectTransform>();
                 float y0 = 1f - (b + 1) / (float)bands;
                 float y1 = 1f - b / (float)bands;
-                // Flush left; label only in left strip.
-                labelRt.anchorMin = new Vector2(0.005f, y0 + padY * 0.5f);
-                labelRt.anchorMax = new Vector2(labelW - 0.005f, y1 - padY * 0.5f);
+                // Label only in left strip — flush to left edge.
+                labelRt.anchorMin = new Vector2(0.002f, y0 + padY);
+                labelRt.anchorMax = new Vector2(labelW - 0.008f, y1 - padY);
                 labelRt.offsetMin = Vector2.zero;
                 labelRt.offsetMax = Vector2.zero;
                 labelRt.localScale = Vector3.one;
@@ -805,11 +807,12 @@ namespace StoreAndCraft
                 if (template.font != null)
                     label.font = template.font;
                 label.enabled = true;
-                label.alignment = TextAlignmentOptions.MidlineLeft;
+                label.alignment = TextAlignmentOptions.Left;
                 label.textWrappingMode = TextWrappingModes.NoWrap;
                 label.overflowMode = TextOverflowModes.Ellipsis;
-                label.enableAutoSizing = false;
-                label.fontSize = font * 0.9f;
+                label.enableAutoSizing = true;
+                label.fontSizeMin = font * 0.55f;
+                label.fontSizeMax = font * 1.15f;
                 label.color = new Color(1f, 0.92f, 0.55f, 1f);
                 label.faceColor = new Color32(255, 235, 140, 255);
                 label.outlineWidth = 0f;
@@ -818,11 +821,11 @@ namespace StoreAndCraft
                 _bandLabels[b] = label;
             }
 
-            _slots = new SlotUi[_slotCount];
-            for (int i = 0; i < _slotCount; i++)
+            int needSlots = bands * linesPerBand * itemCols;
+            _slots = new SlotUi[Mathf.Max(_slotCount, needSlots)];
+            for (int i = 0; i < _slots.Length; i++)
                 _slots[i] = default(SlotUi);
 
-            // Map slots: for each band, linesPerBand × itemCols — only first bands*lines*cols used.
             int slot = 0;
             for (int b = 0; b < bands; b++)
             {
@@ -831,12 +834,11 @@ namespace StoreAndCraft
                 float bandH = bandY1 - bandY0;
                 for (int line = 0; line < linesPerBand; line++)
                 {
-                    float ly0 = bandY0 + bandH * (1f - (line + 1) / (float)linesPerBand);
-                    float ly1 = bandY0 + bandH * (1f - line / (float)linesPerBand);
+                    float ly0 = bandY0 + bandH * (1f - (line + 1) / (float)linesPerBand) + padY * 0.5f;
+                    float ly1 = bandY0 + bandH * (1f - line / (float)linesPerBand) - padY * 0.5f;
                     for (int col = 0; col < itemCols; col++)
                     {
-                        if (slot >= _slotCount)
-                            return;
+                        // Items only to the RIGHT of the label column (wrap stays indented).
                         float x0 = labelW + (1f - labelW) * (col / (float)itemCols);
                         float x1 = labelW + (1f - labelW) * ((col + 1) / (float)itemCols);
                         CreateSlotCell(root.transform, template, font, iconMax, textMin, padX, padY, 1f,
@@ -845,6 +847,8 @@ namespace StoreAndCraft
                     }
                 }
             }
+
+            _slotCount = slot;
         }
 
         private void CreateSlotCell(

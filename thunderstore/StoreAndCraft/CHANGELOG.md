@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.7 — Pre-release hotfix
+
+- **Fix:** Large display with many categories was unreadable (tiny icons / empty board) — bigger fonts, correct grid scale, label column + indented wrap
+- **Fix:** Shift+build grab — while Shift is held, placing is blocked; mats are pulled from nearby chests into the bag
+
 ## 1.2.6 — Pre-release hotfix
 
 - **Fix:** Harmony crash on load — `PlacePiece` is void; Shift+build grab no longer uses `__result`

@@ -1,119 +1,150 @@
+using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Shift + place: pull the hovered piece's build costs from nearby chests into the
-    /// backpack without placing the piece.
+    /// Shift + place: never build — pull the ghost piece's costs from nearby chests into the bag.
     /// </summary>
     internal static class BuildGrab
     {
-        public static bool TryGrab(Player player, Piece piece)
-        {
-            if (player == null || piece == null || !StagingPull.Active)
-                return false;
-            if (!Input.GetKey(KeyCode.LeftShift) && !Input.GetKey(KeyCode.RightShift))
-                return false;
+        private static readonly List<Container> Scratch = new List<Container>(64);
+        private static float _lastGrabMsg;
 
+        public static bool ShiftHeld()
+        {
+            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                return true;
+            try
+            {
+                if (ZInput.GetKey(KeyCode.LeftShift) || ZInput.GetKey(KeyCode.RightShift))
+                    return true;
+            }
+            catch
+            {
+                // ZInput may be unavailable very early.
+            }
+            return false;
+        }
+
+        /// <summary>Returns true if place must be cancelled (Shift held).</summary>
+        public static bool TryInterceptPlace(Player player, Piece piece)
+        {
+            if (player == null || player != Player.m_localPlayer || piece == null)
+                return false;
+            if (!ShiftHeld())
+                return false;
+            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value || !Plugin.Settings.CraftEnabled.Value)
+            {
+                MaybeMsg(player, Loc.T("Craft/build from chests is disabled", "Craft/Bauen aus Truhen ist aus"));
+                return true; // still block place while Shift held
+            }
+
+            GrabIntoInventory(player, piece);
+            return true;
+        }
+
+        private static void GrabIntoInventory(Player player, Piece piece)
+        {
             Piece.Requirement[] reqs = piece.m_resources;
             if (reqs == null || reqs.Length == 0)
             {
-                player.Message(MessageHud.MessageType.Center,
-                    Loc.T("Nothing to grab for this piece", "Nichts zum Holen für dieses Piece"),
-                    0, null, false);
-                return true;
+                MaybeMsg(player, Loc.T("Nothing to grab for this piece", "Nichts zum Holen für dieses Piece"));
+                return;
             }
 
             Inventory inv = player.GetInventory();
             if (inv == null)
-                return true;
+                return;
 
             NearbyIndex.Tick();
             bool leaveOne = Plugin.Settings.LeaveOneItem.Value;
             float range = Plugin.Settings.CraftRange.Value;
             Vector3 origin = player.transform.position;
+            Scratch.Clear();
+            NearbyIndex.CollectNear(origin, range, Scratch);
+
             int pulled = 0;
             int missing = 0;
 
-            foreach (Piece.Requirement req in reqs)
+            InventoryCountPatches.Skip++;
+            try
             {
-                if (req?.m_resItem?.m_itemData?.m_shared == null)
-                    continue;
-                int need = req.GetAmount(1);
-                if (need <= 0)
-                    continue;
-
-                string shared = req.m_resItem.m_itemData.m_shared.m_name;
-                int have = inv.CountItems(shared, -1, true);
-                int want = need; // one piece worth into the bag
-                int deficit = want - have;
-                if (deficit <= 0)
-                    continue;
-
-                int still = deficit;
-                foreach (Container chest in NearbyIndex.Current)
+                foreach (Piece.Requirement req in reqs)
                 {
-                    if (still <= 0)
-                        break;
-                    if (chest == null || ChestNames.IsIgnored(chest))
+                    if (req?.m_resItem?.m_itemData?.m_shared == null)
                         continue;
-                    if (ContainerFilter.Distance(origin, chest.transform.position) > range)
-                        continue;
-                    if (!ContainerFilter.PlayerMayUse(chest, origin))
+                    int need = req.GetAmount(1);
+                    if (need <= 0)
                         continue;
 
-                    int took = TransferService.Withdraw(chest, shared, still, inv, leaveOne);
-                    still -= took;
-                    pulled += took;
+                    string shared = req.m_resItem.m_itemData.m_shared.m_name;
+                    int have = inv.CountItems(shared, -1, true);
+                    int deficit = need - have;
+                    if (deficit <= 0)
+                        continue;
+
+                    int still = deficit;
+                    for (int i = 0; i < Scratch.Count; i++)
+                    {
+                        Container chest = Scratch[i];
+                        if (still <= 0)
+                            break;
+                        if (chest == null || ChestNames.IsIgnored(chest))
+                            continue;
+                        if (!ContainerFilter.IsPlayerBuiltStorage(chest))
+                            continue;
+                        if (!ContainerFilter.PlayerMayUse(chest, origin))
+                            continue;
+                        if (ContainerFilter.Distance(origin, chest.transform.position) > range)
+                            continue;
+
+                        NearbyIndex.EnsureInventory(chest);
+                        int took = TransferService.Withdraw(chest, shared, still, inv, leaveOne);
+                        still -= took;
+                        pulled += took;
+                    }
+
+                    if (still > 0)
+                        missing += still;
                 }
-
-                if (still > 0)
-                    missing += still;
+            }
+            finally
+            {
+                InventoryCountPatches.Skip--;
             }
 
             if (pulled <= 0 && missing > 0)
-            {
-                player.Message(MessageHud.MessageType.Center,
-                    Loc.T("No materials in nearby chests", "Keine Materialien in nahen Truhen"),
-                    0, null, false);
-            }
+                MaybeMsg(player, Loc.T("No materials in nearby chests", "Keine Materialien in nahen Truhen"));
             else if (missing > 0)
-            {
-                player.Message(MessageHud.MessageType.Center,
-                    Loc.T("Grabbed some materials (still short)", "Material geholt (noch zu wenig)"),
-                    0, null, false);
-            }
+                MaybeMsg(player, Loc.T("Grabbed some materials (still short)", "Material geholt (noch zu wenig)"));
             else if (pulled > 0)
-            {
-                player.Message(MessageHud.MessageType.Center,
-                    Loc.T("Grabbed build materials from chests", "Baumaterial aus Truhen geholt"),
-                    0, null, false);
-            }
+                MaybeMsg(player, Loc.T("Grabbed build materials from chests", "Baumaterial aus Truhen geholt"));
             else
-            {
-                player.Message(MessageHud.MessageType.Center,
-                    Loc.T("You already have the materials", "Material schon im Inventar"),
-                    0, null, false);
-            }
+                MaybeMsg(player, Loc.T("You already have the materials", "Material schon im Inventar"));
+        }
 
-            return true;
+        private static void MaybeMsg(Player player, string text)
+        {
+            if (player == null || string.IsNullOrEmpty(text))
+                return;
+            if (Time.time - _lastGrabMsg < 0.35f)
+                return;
+            _lastGrabMsg = Time.time;
+            player.Message(MessageHud.MessageType.Center, text, 0, null, false);
         }
     }
 
     [HarmonyPatch(typeof(Player), nameof(Player.PlacePiece))]
     internal static class PlacePieceGrabPatch
     {
-        // Valheim PlacePiece is void (pos/rot/doAttack/cheated) — do not use __result.
+        // PlacePiece is void — Prefix returning false skips place entirely while Shift is held.
         private static bool Prefix(Player __instance, Piece piece)
         {
-            if (__instance == null || __instance != Player.m_localPlayer)
-                return true;
-            if (!BuildGrab.TryGrab(__instance, piece))
-                return true;
-
-            // Skip place — grab already ran.
-            return false;
+            if (BuildGrab.TryInterceptPlace(__instance, piece))
+                return false;
+            return true;
         }
     }
 }
