@@ -51,7 +51,15 @@ namespace StoreAndCraft
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null)
                 return;
-            StationFeed.EnsureInInventory(player, StationFeed.SharedFrom(__instance.m_fuelItem), 1);
+            StationLink.PushStation(__instance);
+            try
+            {
+                StationFeed.EnsureInInventory(player, StationFeed.SharedFrom(__instance.m_fuelItem), 1);
+            }
+            finally
+            {
+                StationLink.Pop();
+            }
         }
     }
 
@@ -63,7 +71,15 @@ namespace StoreAndCraft
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null)
                 return;
-            StationFeed.EnsureForUse(player, ref item, StationPullFilter.AllowedOreNames(__instance));
+            StationLink.PushStation(__instance);
+            try
+            {
+                StationFeed.EnsureForUse(player, ref item, StationPullFilter.AllowedOreNames(__instance));
+            }
+            finally
+            {
+                StationLink.Pop();
+            }
         }
 
         internal static List<string> OreNames(Smelter smelter)
@@ -91,6 +107,7 @@ namespace StoreAndCraft
 
         private static void Postfix(Smelter __instance, Player player, ref bool __result)
         {
+            StationLink.PushStation(__instance);
             try
             {
                 if (__result || !StationFeed.Ready() || player == null || __instance == null)
@@ -118,6 +135,7 @@ namespace StoreAndCraft
             }
             finally
             {
+                StationLink.Pop();
                 StationHover.End();
             }
         }
@@ -130,10 +148,7 @@ namespace StoreAndCraft
         {
             if (__instance == null || !StationFeed.Ready())
                 return;
-            if (StationPullFilter.CanConfigure(__instance))
-            {
-                StationPullFilter.AppendFilterHover(ref __result, __instance);
-            }
+            StationPullFilter.AppendFilterHover(ref __result, __instance);
             StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
         }
     }
@@ -275,7 +290,15 @@ namespace StoreAndCraft
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null)
                 return;
-            StationFeed.EnsureInInventory(player, StationFeed.SharedFrom(__instance.m_fuelItem), 1);
+            StationLink.PushStation(__instance);
+            try
+            {
+                StationFeed.EnsureInInventory(player, StationFeed.SharedFrom(__instance.m_fuelItem), 1);
+            }
+            finally
+            {
+                StationLink.Pop();
+            }
         }
     }
 
@@ -287,7 +310,15 @@ namespace StoreAndCraft
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null)
                 return;
-            StationFeed.EnsureForUse(player, ref item, CookingOnInteractPatch.FoodNames(__instance));
+            StationLink.PushStation(__instance);
+            try
+            {
+                StationFeed.EnsureForUse(player, ref item, CookingOnInteractPatch.FoodNames(__instance));
+            }
+            finally
+            {
+                StationLink.Pop();
+            }
         }
     }
 
@@ -308,7 +339,15 @@ namespace StoreAndCraft
             if (HaveDoneItem != null && (bool)HaveDoneItem.Invoke(__instance, null))
                 return;
 
-            StationFeed.EnsureAny(player, FoodNames(__instance), 1);
+            StationLink.PushStation(__instance);
+            try
+            {
+                StationFeed.EnsureAny(player, FoodNames(__instance), 1);
+            }
+            finally
+            {
+                StationLink.Pop();
+            }
         }
 
         /// <summary>All conversion inputs (menu choices). Not filtered.</summary>
@@ -343,6 +382,7 @@ namespace StoreAndCraft
 
         private static void Postfix(CookingStation __instance, Player player, ref bool __result)
         {
+            StationLink.PushStation(__instance);
             try
             {
                 if (__result || !StationFeed.Ready() || player == null || __instance == null)
@@ -360,6 +400,7 @@ namespace StoreAndCraft
             }
             finally
             {
+                StationLink.Pop();
                 StationHover.End();
             }
         }

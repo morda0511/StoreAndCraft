@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.4-test — Pre-release
+
+- **Feature (test):** Station **Link 1–9** in Alt+E filter menu (kiln / smelter / cook). Chests tagged `[linkN]` in their rename label only feed stations with that link. Station **Link: none** uses untagged chests only. Craft / build / Epic Loot unchanged (all chests except `[I]`/`[H]`).
+
 ## 1.3.3 — Hotfix
 
 - **Epic Loot:** Enchanting Table (Sacrifice / Enchant / Upgrade / …) now sees and spends nearby chest items via Epic Loot’s inventory-provider API (custom UI does not use vanilla craft hooks)

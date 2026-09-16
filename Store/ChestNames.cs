@@ -10,6 +10,10 @@ namespace StoreAndCraft
         public const string IgnorePrefix = "[I]";
         /// <summary>Hidden from dump/store/craft pull; still counted on Storage Displays.</summary>
         public const string HiddenPrefix = "[H]";
+        /// <summary>
+        /// Optional station channel in the chest name: [link1]…[link9] (see StationLink).
+        /// Works with rename; can combine with a normal label, e.g. [link2] Wood.
+        /// </summary>
 
         /// <summary>Dump / auto-store / craft / auto-fill / build-grab skip these ([I] or [H]).</summary>
         public static bool IsIgnored(Container container)

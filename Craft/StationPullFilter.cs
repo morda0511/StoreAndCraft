@@ -130,23 +130,29 @@ namespace StoreAndCraft
 
         public static void AppendFilterHover(ref string text, Smelter smelter)
         {
-            if (smelter == null || !CanConfigure(smelter))
+            if (smelter == null)
                 return;
-            AppendFilterLine(ref text);
+            AppendFilterLine(ref text, smelter);
         }
 
         public static void AppendFilterHover(ref string text, CookingStation cook)
         {
-            if (cook == null || !CanConfigure(cook))
+            if (cook == null)
                 return;
-            AppendFilterLine(ref text);
+            AppendFilterLine(ref text, cook);
         }
 
-        private static void AppendFilterLine(ref string text)
+        private static void AppendFilterLine(ref string text, Component station)
         {
             string key = PromptLabel();
             text += "\n[<color=yellow><b>" + key + "</b></color>] "
                 + Loc.T("Chest pull filter", "Truhen-Zug Filter");
+            int link = StationLink.Get(station);
+            if (link > 0)
+            {
+                text += "\n" + Loc.T("Station link", "Stations-Link") + ": "
+                    + "<color=cyan>[link" + link + "]</color>";
+            }
         }
 
         public static bool TryOpen(bool warnIfMissing = true)
@@ -156,7 +162,7 @@ namespace StoreAndCraft
                 return false;
 
             Smelter smelter = HoveredSmelter();
-            if (smelter != null && CanConfigure(smelter))
+            if (smelter != null)
             {
                 if (!PrivateArea.CheckAccess(smelter.transform.position, 0f, false, true))
                 {
@@ -168,7 +174,7 @@ namespace StoreAndCraft
             }
 
             CookingStation cook = HoveredCooking();
-            if (cook != null && CanConfigure(cook))
+            if (cook != null)
             {
                 if (!PrivateArea.CheckAccess(cook.transform.position, 0f, false, true))
                 {
@@ -184,8 +190,8 @@ namespace StoreAndCraft
                 player.Message(
                     MessageHud.MessageType.Center,
                     Loc.T(
-                        "Look at a kiln / smelter / cook station with multiple inputs, then press " + PromptLabel() + ".",
-                        "Schau Ofen / Schmelze / Grill mit mehreren Inputs an, dann " + PromptLabel() + "."),
+                        "Look at a kiln / smelter / cook station, then press " + PromptLabel() + ".",
+                        "Schau Ofen / Schmelze / Grill an, dann " + PromptLabel() + "."),
                     0, null, false);
             }
             return false;

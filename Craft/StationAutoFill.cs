@@ -389,8 +389,16 @@ namespace StoreAndCraft
 
                 cursor = i + 1;
                 checks++;
-                if (tryFill(station, player))
-                    bursts++;
+                StationLink.PushStation(station);
+                try
+                {
+                    if (tryFill(station, player))
+                        bursts++;
+                }
+                finally
+                {
+                    StationLink.Pop();
+                }
             }
 
             return checks;

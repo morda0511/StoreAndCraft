@@ -409,7 +409,8 @@ namespace StoreAndCraft
             }
 
             float useRange = range > 0f ? range : StationFeed.ActivePullRange();
-            string key = sharedName + "|" + quality + "|" + (leaveOne ? 1 : 0) + "|" + useRange.ToString("0.##");
+            string key = sharedName + "|" + quality + "|" + (leaveOne ? 1 : 0) + "|"
+                + useRange.ToString("0.##") + "|L" + StationLink.ActiveId;
             int cached;
             if (CountCache.TryGetValue(key, out cached))
                 return cached;
@@ -418,7 +419,7 @@ namespace StoreAndCraft
             float craftSq = useRange * useRange;
             foreach (Container c in Cached)
             {
-                if (c == null || ChestNames.IsIgnored(c))
+                if (c == null || !StationLink.ChestAllowedForActive(c))
                     continue;
 
                 if (ContainerFilter.SqrDistance(origin, c.transform.position) > craftSq)

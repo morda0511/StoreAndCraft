@@ -181,6 +181,15 @@ namespace StoreAndCraft
             RebuildRows();
         }
 
+        private static void SetLink(int linkId)
+        {
+            Component station = (Component)_smelter ?? _cook;
+            if (station == null)
+                return;
+            StationLink.Set(station, linkId);
+            RebuildRows();
+        }
+
         private static void AllowAll()
         {
             if (_smelter != null)
@@ -236,41 +245,47 @@ namespace StoreAndCraft
             ClearOurRows();
             List<string> choices = _cook != null
                 ? StationPullFilter.FoodChoices(_cook)
-                : StationPullFilter.OreChoices(_smelter);
-            int count = choices.Count + 2;
+                : (_smelter != null ? StationPullFilter.OreChoices(_smelter) : new List<string>());
 
-            for (int i = 0; i < count; i++)
+            Component station = (Component)_smelter ?? _cook;
+            int currentLink = StationLink.Get(station);
+            // Link none + link1..9 + ore/food rows + Allow all + Done
+            int linkRows = StationLink.MaxId + 1;
+            int count = linkRows + choices.Count + 2;
+            int rowIndex = 0;
+
+            for (int link = 0; link <= StationLink.MaxId; link++)
             {
-                GameObject row = Object.Instantiate(
-                    _skills.m_elementPrefab,
-                    Vector3.zero,
-                    Quaternion.identity,
-                    _skills.m_listRoot);
-                row.SetActive(true);
-                RectTransform rt = row.transform as RectTransform;
-                if (rt != null)
-                    rt.anchoredPosition = new Vector2(0f, -i * _skills.m_spacing);
+                GameObject row = SpawnRow(rowIndex++);
+                bool on = currentLink == link;
+                string mark = on ? "[+]" : "[-]";
+                string label = mark + "  " + StationLink.Label(link);
+                int captured = link;
+                BindLinkRow(row, label, on, () => SetLink(captured));
+                _rows.Add(row);
+            }
 
-                if (i < choices.Count)
-                {
-                    string shared = choices[i];
-                    bool allowed = _cook != null
-                        ? StationPullFilter.IsAllowed(_cook, shared)
-                        : StationPullFilter.IsAllowed(_smelter, shared);
-                    // ASCII only — Valheim-AveriaSerifLibre has no ✓/✗ glyphs.
-                    string mark = allowed ? "[+]" : "[-]";
-                    string label = StationPullFilter.DisplayName(shared);
-                    BindToggleRow(row, shared, mark + "  " + label, allowed);
-                }
-                else if (i == choices.Count)
-                {
-                    BindActionRow(row, Loc.T("Allow all", "Alle erlauben"), AllowAll);
-                }
-                else
-                {
-                    BindActionRow(row, Loc.T("Done", "Fertig"), Close);
-                }
+            for (int i = 0; i < choices.Count; i++)
+            {
+                GameObject row = SpawnRow(rowIndex++);
+                string shared = choices[i];
+                bool allowed = _cook != null
+                    ? StationPullFilter.IsAllowed(_cook, shared)
+                    : StationPullFilter.IsAllowed(_smelter, shared);
+                string mark = allowed ? "[+]" : "[-]";
+                string label = StationPullFilter.DisplayName(shared);
+                BindToggleRow(row, shared, mark + "  " + label, allowed);
+                _rows.Add(row);
+            }
 
+            {
+                GameObject row = SpawnRow(rowIndex++);
+                BindActionRow(row, Loc.T("Allow all inputs", "Alle Inputs erlauben"), AllowAll);
+                _rows.Add(row);
+            }
+            {
+                GameObject row = SpawnRow(rowIndex++);
+                BindActionRow(row, Loc.T("Done", "Fertig"), Close);
                 _rows.Add(row);
             }
 
@@ -279,14 +294,41 @@ namespace StoreAndCraft
 
             if (_skills.m_totalSkillText != null)
             {
-                _skills.m_totalSkillText.text = _cook != null
-                    ? Loc.T(
-                        "ON = may roast / pull. OFF = ignore that meat on this grill.",
-                        "AN = darf braten / ziehen. AUS = dieses Fleisch an diesem Grill ignorieren.")
-                    : Loc.T(
-                        "ON = may use / pull. OFF = ignore (turn Wood OFF to keep Fine/Core wood).",
-                        "AN = darf ziehen. AUS = ignorieren (Holz AUS = nur Fein-/Kernholz).");
+                _skills.m_totalSkillText.text = Loc.T(
+                    "Link 1-9 = only chests named [linkN]. Link none = untagged chests. Then input toggles.",
+                    "Link 1-9 = nur Kisten mit [linkN]. Link keiner = Kisten ohne Tag. Dann Input-Toggles.");
             }
+        }
+
+        private static GameObject SpawnRow(int index)
+        {
+            GameObject row = Object.Instantiate(
+                _skills.m_elementPrefab,
+                Vector3.zero,
+                Quaternion.identity,
+                _skills.m_listRoot);
+            row.SetActive(true);
+            RectTransform rt = row.transform as RectTransform;
+            if (rt != null)
+                rt.anchoredPosition = new Vector2(0f, -index * _skills.m_spacing);
+            return row;
+        }
+
+        private static void BindLinkRow(GameObject row, string label, bool on, UnityEngine.Events.UnityAction action)
+        {
+            Transform t = row.transform;
+            Color color = on ? new Color(0.35f, 0.85f, 1f, 1f) : new Color(0.75f, 0.75f, 0.8f, 1f);
+            SetChildText(t, "name", label, color);
+            SetChildText(t, "leveltext", on ? "ON" : "", color);
+            StripSkillChrome(t);
+
+            Button button = EnsureButton(row);
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(action);
+
+            UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
+            if (input != null)
+                input.m_onLeftClick = go => action();
         }
 
         private static void BindToggleRow(GameObject row, string shared, string label, bool allowed)

@@ -48,6 +48,10 @@ namespace StoreAndCraft
             if (player == null || string.IsNullOrEmpty(shared))
                 return false;
 
+            // Linked station context: don't use the unfiltered autofill snapshot.
+            if (StationLink.ActiveId >= 0)
+                return RequirementBridge.CountNearby(player, shared) > 0;
+
             if (_pulseActive && _pulseSpendable != null)
             {
                 int n;
@@ -199,7 +203,7 @@ namespace StoreAndCraft
             {
                 if (need <= 0)
                     break;
-                if (chest == null || ChestNames.IsIgnored(chest))
+                if (chest == null || !StationLink.ChestAllowedForActive(chest))
                     continue;
                 if (ContainerFilter.Distance(origin, chest.transform.position) > range)
                     continue;
@@ -234,7 +238,7 @@ namespace StoreAndCraft
             {
                 if (need <= 0)
                     break;
-                if (chest == null || ChestNames.IsIgnored(chest))
+                if (chest == null || !StationLink.ChestAllowedForActive(chest))
                     continue;
 
                 if (ContainerFilter.Distance(origin, chest.transform.position) > cfgCraft)
@@ -308,7 +312,7 @@ namespace StoreAndCraft
             NearbyIndex.Tick();
             foreach (Container chest in NearbyIndex.Current)
             {
-                if (chest == null || ChestNames.IsIgnored(chest))
+                if (chest == null || !StationLink.ChestAllowedForActive(chest))
                     continue;
                 Inventory inv = chest.GetInventory();
                 if (inv == null)

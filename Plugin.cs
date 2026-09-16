@@ -13,7 +13,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.3.3";
+        public const string ModVersion = "1.3.4-test";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
