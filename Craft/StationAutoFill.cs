@@ -15,9 +15,11 @@ namespace StoreAndCraft
     internal static class StationAutoFill
     {
         public const string ZdoKey = "SAC_autoFill";
-        private const float Interval = 3f;
-        private const float QuietEmptySeconds = 20f;
+        private const float Interval = 5f;
+        private const float QuietEmptySeconds = 25f;
         private const int MaxBurstsPerPulse = 1;
+        /// <summary>Cap how many needy stations we evaluate per pulse (after range/IsOn filters).</summary>
+        private const int MaxChecksPerPulse = 4;
 
         internal static int Silence;
 
@@ -47,6 +49,10 @@ namespace StoreAndCraft
 
         private static float _nextPulse;
         private static float _nextPrune;
+        private static int _smelterCursor;
+        private static int _fireCursor;
+        private static int _ovenCursor;
+        private static int _fermenterCursor;
 
         public static void Register(Smelter smelter)
         {
@@ -249,76 +255,145 @@ namespace StoreAndCraft
             float range = Plugin.Settings.AutoFillRange.Value;
             float rangeSq = range * range;
             Vector3 origin = player.transform.position;
+
+            // No station with auto-fill ON in range → no chest snapshot / fill work.
+            if (!AnyOnInRange(origin, rangeSq))
+                return;
+
             int bursts = 0;
+            int checks = 0;
 
             StationFeed.PullRangeOverride = range;
+            StationFeed.BeginAutoFillPulse(player, range);
             try
             {
+                checks = RoundRobinFill(
+                    Smelters, ref _smelterCursor, origin, rangeSq, player, ref bursts, checks,
+                    s => IsOn(s) && PrivateArea.CheckAccess(s.transform.position, 0f, false, true),
+                    FillSmelterWhenEmpty);
 
-            for (int i = 0; i < Smelters.Count && bursts < MaxBurstsPerPulse; i++)
-            {
-                Smelter smelter = Smelters[i];
-                if (smelter == null)
-                    continue;
-                if (ContainerFilter.SqrDistance(origin, smelter.transform.position) > rangeSq)
-                    continue;
-                if (!IsOn(smelter))
-                    continue;
-                if (!PrivateArea.CheckAccess(smelter.transform.position, 0f, false, true))
-                    continue;
-                if (FillSmelterWhenEmpty(smelter, player))
-                    bursts++;
-            }
+                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
+                {
+                    checks = RoundRobinFill(
+                        Fires, ref _fireCursor, origin, rangeSq, player, ref bursts, checks,
+                        f => f != null && f.m_canRefill && !IsQuiet(f, "fire") && IsOn(f)
+                            && PrivateArea.CheckAccess(f.transform.position, 0f, false, true),
+                        FillFireWhenEmpty);
+                }
 
-            for (int i = 0; i < Fires.Count && bursts < MaxBurstsPerPulse; i++)
-            {
-                Fireplace fire = Fires[i];
-                if (fire == null || !fire.m_canRefill || IsQuiet(fire, "fire"))
-                    continue;
-                if (ContainerFilter.SqrDistance(origin, fire.transform.position) > rangeSq)
-                    continue;
-                if (!IsOn(fire))
-                    continue;
-                if (!PrivateArea.CheckAccess(fire.transform.position, 0f, false, true))
-                    continue;
-                if (FillFireWhenEmpty(fire, player))
-                    bursts++;
-            }
+                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
+                {
+                    checks = RoundRobinFill(
+                        Ovens, ref _ovenCursor, origin, rangeSq, player, ref bursts, checks,
+                        o => IsOn(o.GetComponent<ZNetView>())
+                            && PrivateArea.CheckAccess(o.transform.position, 0f, false, true),
+                        FillOvenWhenEmpty);
+                }
 
-            for (int i = 0; i < Ovens.Count && bursts < MaxBurstsPerPulse; i++)
-            {
-                CookingStation oven = Ovens[i];
-                if (oven == null)
-                    continue;
-                if (ContainerFilter.SqrDistance(origin, oven.transform.position) > rangeSq)
-                    continue;
-                if (!IsOn(oven.GetComponent<ZNetView>()))
-                    continue;
-                if (!PrivateArea.CheckAccess(oven.transform.position, 0f, false, true))
-                    continue;
-                if (FillOvenWhenEmpty(oven, player))
-                    bursts++;
-            }
-
-            for (int i = 0; i < Fermenters.Count && bursts < MaxBurstsPerPulse; i++)
-            {
-                Fermenter fermenter = Fermenters[i];
-                if (fermenter == null || IsQuiet(fermenter, "mead"))
-                    continue;
-                if (ContainerFilter.SqrDistance(origin, fermenter.transform.position) > rangeSq)
-                    continue;
-                if (!IsOn(fermenter.GetComponent<ZNetView>()))
-                    continue;
-                if (!PrivateArea.CheckAccess(fermenter.transform.position, 0f, false, true))
-                    continue;
-                if (FillFermenterWhenEmpty(fermenter, player))
-                    bursts++;
-            }
+                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
+                {
+                    RoundRobinFill(
+                        Fermenters, ref _fermenterCursor, origin, rangeSq, player, ref bursts, checks,
+                        f => f != null && !IsQuiet(f, "mead") && IsOn(f.GetComponent<ZNetView>())
+                            && PrivateArea.CheckAccess(f.transform.position, 0f, false, true),
+                        FillFermenterWhenEmpty);
+                }
             }
             finally
             {
+                StationFeed.EndAutoFillPulse();
                 StationFeed.PullRangeOverride = 0f;
             }
+        }
+
+        private static bool AnyOnInRange(Vector3 origin, float rangeSq)
+        {
+            for (int i = 0; i < Smelters.Count; i++)
+            {
+                Smelter s = Smelters[i];
+                if (s == null)
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, s.transform.position) > rangeSq)
+                    continue;
+                if (IsOn(s))
+                    return true;
+            }
+
+            for (int i = 0; i < Fires.Count; i++)
+            {
+                Fireplace f = Fires[i];
+                if (f == null || !f.m_canRefill)
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, f.transform.position) > rangeSq)
+                    continue;
+                if (IsOn(f))
+                    return true;
+            }
+
+            for (int i = 0; i < Ovens.Count; i++)
+            {
+                CookingStation o = Ovens[i];
+                if (o == null)
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, o.transform.position) > rangeSq)
+                    continue;
+                if (IsOn(o.GetComponent<ZNetView>()))
+                    return true;
+            }
+
+            for (int i = 0; i < Fermenters.Count; i++)
+            {
+                Fermenter f = Fermenters[i];
+                if (f == null)
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, f.transform.position) > rangeSq)
+                    continue;
+                if (IsOn(f.GetComponent<ZNetView>()))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Walk the list from a rotating cursor. Only ON / candidate stations consume the check budget.
+        /// </summary>
+        private static int RoundRobinFill<T>(
+            List<T> list,
+            ref int cursor,
+            Vector3 origin,
+            float rangeSq,
+            Player player,
+            ref int bursts,
+            int checks,
+            System.Func<T, bool> isCandidate,
+            System.Func<T, Player, bool> tryFill) where T : Component
+        {
+            if (list == null || list.Count == 0 || isCandidate == null || tryFill == null)
+                return checks;
+
+            int start = cursor % list.Count;
+            for (int n = 0; n < list.Count; n++)
+            {
+                if (bursts >= MaxBurstsPerPulse || checks >= MaxChecksPerPulse)
+                    break;
+
+                int i = (start + n) % list.Count;
+                T station = list[i];
+                if (station == null)
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, station.transform.position) > rangeSq)
+                    continue;
+                if (!isCandidate(station))
+                    continue;
+
+                cursor = i + 1;
+                checks++;
+                if (tryFill(station, player))
+                    bursts++;
+            }
+
+            return checks;
         }
 
         private static bool FillSmelterWhenEmpty(Smelter smelter, Player player)

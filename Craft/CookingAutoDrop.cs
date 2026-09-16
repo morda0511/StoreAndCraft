@@ -7,8 +7,8 @@ namespace StoreAndCraft
     /// <summary>
     /// Per cooking station (spit / stone oven): when on, finished food pops off as a
     /// ground drop so auto-store can pick it up. Hover with inventory closed and press N.
-    /// Uses the same RPC path as vanilla [E] pickup. Cheap: only runs on the station
-    /// owner's UpdateCooking tick when the ZDO flag is set.
+    /// Uses the same RPC path as vanilla [E] pickup.
+    /// Off = only a cheap ZDO flag check; never scans chests.
     /// </summary>
     internal static class CookingAutoDrop
     {
@@ -87,6 +87,7 @@ namespace StoreAndCraft
 
         public static void TryPopDone(CookingStation station)
         {
+            // Off = stop here. Auto-drop never scans chests (on or off).
             if (station == null || !IsOn(station))
                 return;
 
@@ -127,6 +128,9 @@ namespace StoreAndCraft
     {
         private static void Postfix(CookingStation __instance)
         {
+            // Fast path when off: IsOn check only, no HaveDoneItem / RPC.
+            if (__instance == null || !CookingAutoDrop.IsOn(__instance))
+                return;
             CookingAutoDrop.TryPopDone(__instance);
         }
     }

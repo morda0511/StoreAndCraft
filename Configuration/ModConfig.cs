@@ -5,8 +5,8 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        // Bump when package layout changes. v8 = display layout + Alt+B filter key.
-        public const int ProtocolVersion = 8;
+        // Bump when package layout changes. v9 = removed experimental remote dump.
+        public const int ProtocolVersion = 9;
 
         public ConfigEntry<bool> LockConfig { get; }
         public ConfigEntry<bool> ModEnabled { get; }
@@ -26,11 +26,6 @@ namespace StoreAndCraft
         public ConfigEntry<float> AutoFillRange { get; }
         public ConfigEntry<float> IntakeInterval { get; }
         public ConfigEntry<int> MaxTransfersPerTick { get; }
-        // BEGIN REMOTE_DUMP
-        public ConfigEntry<bool> RemoteDumpEnabled { get; }
-        public ConfigEntry<float> RemoteDumpCooldown { get; }
-        public ConfigEntry<int> RemoteDumpMaxStacks { get; }
-        // END REMOTE_DUMP
         public ConfigEntry<KeyboardShortcut> DumpKey { get; }
         public ConfigEntry<KeyboardShortcut> HoverStoreKey { get; }
         public ConfigEntry<KeyboardShortcut> SearchKey { get; }
@@ -80,14 +75,6 @@ namespace StoreAndCraft
                 "Seconds between automatic scans for ground items. Lower = snappier, higher = less CPU.");
             MaxTransfersPerTick = file.Bind("1 - General", "MaxTransfersPerTick", 8,
                 "Maximum item moves per frame. Raise only if storing feels too slow.");
-            // BEGIN REMOTE_DUMP — delete these three binds with Network/RemoteDump.cs
-            RemoteDumpEnabled = file.Bind("2 - Store", "RemoteDumpEnabled", true,
-                "EXPERIMENTAL: if dump finds no local chest, try a buddy who is near matching base chests (they must load that area). Kill-switch: set false.");
-            RemoteDumpCooldown = file.Bind("2 - Store", "RemoteDumpCooldown", 3f,
-                "Seconds between remote dump attempts per player (anti-spam).");
-            RemoteDumpMaxStacks = file.Bind("2 - Store", "RemoteDumpMaxStacks", 24,
-                "Max inventory stacks sent in one remote dump batch.");
-            // END REMOTE_DUMP
             DumpKey = file.Bind("4 - Keys", "DumpKey", new KeyboardShortcut(KeyCode.Period),
                 "Hotkey: move allowed inventory stacks into nearby chests that already hold those items.");
             HoverStoreKey = file.Bind("4 - Keys", "HoverStoreKey", new KeyboardShortcut(KeyCode.Mouse2),
@@ -137,11 +124,6 @@ namespace StoreAndCraft
             pkg.Write(AutoFillRange.Value);
             pkg.Write(IntakeInterval.Value);
             pkg.Write(MaxTransfersPerTick.Value);
-            // BEGIN REMOTE_DUMP
-            pkg.Write(RemoteDumpEnabled.Value);
-            pkg.Write(RemoteDumpCooldown.Value);
-            pkg.Write(RemoteDumpMaxStacks.Value);
-            // END REMOTE_DUMP
         }
 
         public void ReadFromPackage(ZPackage pkg)
@@ -161,11 +143,6 @@ namespace StoreAndCraft
             AutoFillRange.Value = pkg.ReadSingle();
             IntakeInterval.Value = pkg.ReadSingle();
             MaxTransfersPerTick.Value = pkg.ReadInt();
-            // BEGIN REMOTE_DUMP
-            RemoteDumpEnabled.Value = pkg.ReadBool();
-            RemoteDumpCooldown.Value = pkg.ReadSingle();
-            RemoteDumpMaxStacks.Value = pkg.ReadInt();
-            // END REMOTE_DUMP
         }
     }
 }

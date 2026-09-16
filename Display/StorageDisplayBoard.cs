@@ -40,6 +40,8 @@ namespace StoreAndCraft
         private float _nextScan;
         private float _nextPaint;
         private bool _dirty = true;
+        /// <summary>Chest discovery / subscribe list — only when selection, range, or rare discovery.</summary>
+        private bool _watchDirty = true;
         private bool _configured;
         private int _page;
         private int _pages = 1;
@@ -154,6 +156,7 @@ namespace StoreAndCraft
                 All.Add(this);
             _born = Time.time;
             _dirty = true;
+            _watchDirty = true;
             _nextScan = 0f;
             InvalidateClusters();
         }
@@ -268,6 +271,7 @@ namespace StoreAndCraft
 
             nv.GetZDO().Set(ZdoRangeKey, meters);
             _dirty = true;
+            _watchDirty = true;
             _nextScan = 0f;
             _cluster = null;
             InvalidateClusters();
@@ -430,6 +434,7 @@ namespace StoreAndCraft
             }
             zdo.Set(DisplayFilters.ZdoKey, legacy);
             _dirty = true;
+            _watchDirty = true;
             _cluster = null;
             InvalidateClusters();
         }
@@ -606,20 +611,34 @@ namespace StoreAndCraft
             if (_slots == null)
                 return;
 
+            // Cheap: keep vanilla sign text off. Avoid ApplyTitle/FilterIds every frame.
             SilenceSignText();
-            ApplyTitle();
 
-            float interval = Time.time - _born < 8f ? 0.4f : 2.5f;
-            if (Time.time >= _nextScan)
+            // Chest discovery only on demand (enable / selection / range) or rare pickup of new chests.
+            // Inventory count changes use m_onChanged → MarkDirty → Paint, not a full rescan.
+            if (_watchDirty || _watched.Count == 0)
             {
-                _nextScan = Time.time + interval;
+                if (Time.time >= _nextScan)
+                {
+                    _nextScan = Time.time + 0.35f;
+                    Resubscribe();
+                    _watchDirty = false;
+                }
+            }
+            else if (Time.time >= _nextScan)
+            {
+                // Very rare discovery pass for newly placed chests (no ZDO reload when list unchanged).
+                _nextScan = Time.time + 30f;
                 Resubscribe();
             }
+
+            if (_dirty)
+                ApplyTitle();
 
             if (!_dirty || Time.time < _nextPaint)
                 return;
 
-            _nextPaint = Time.time + 0.25f;
+            _nextPaint = Time.time + (_kind == DisplayKind.Large ? 0.5f : 0.3f);
             _dirty = false;
             Paint();
         }
@@ -1054,9 +1073,8 @@ namespace StoreAndCraft
 
             if (same)
             {
-                // Still refresh inventories so counts stay current without reopening chests.
-                for (int i = 0; i < _watched.Count; i++)
-                    NearbyIndex.EnsureInventory(_watched[i]);
+                // List unchanged: do not reload inventories or force a paint.
+                // Counts stay live via Inventory.m_onChanged → MarkDirty.
                 return;
             }
 
@@ -1347,6 +1365,22 @@ namespace StoreAndCraft
             // Few categories → more rows each; 12 cats → one row each.
             int linesPerCat = Mathf.Max(1, rows / cats);
 
+            // One chest scan for the whole board — not once per category.
+            var rankedAll = RankItems(cluster, filters, itemTokens, groupByCategory: true);
+            var byCat = new Dictionary<int, List<RankedItem>>();
+            for (int i = 0; i < rankedAll.Count; i++)
+            {
+                RankedItem entry = rankedAll[i];
+                int id = entry.CategoryId;
+                List<RankedItem> list;
+                if (!byCat.TryGetValue(id, out list))
+                {
+                    list = new List<RankedItem>();
+                    byCat[id] = list;
+                }
+                list.Add(entry);
+            }
+
             for (int c = 0; c < cats; c++)
             {
                 int catId = sections[c];
@@ -1360,10 +1394,9 @@ namespace StoreAndCraft
                     _bandLabels[row0].text = ShortCategoryLabel(catId);
                 }
 
-                List<int> oneFilter;
-                List<string> oneTokens;
-                SplitSelectionForSection(catId, filters, itemTokens, out oneFilter, out oneTokens);
-                var ranked = RankItems(cluster, oneFilter, oneTokens, false);
+                List<RankedItem> ranked;
+                if (!byCat.TryGetValue(catId, out ranked) || ranked == null)
+                    ranked = new List<RankedItem>();
 
                 int capacity = linesPerCat * itemCols;
                 int baseSlot = row0 * itemCols;
@@ -1565,8 +1598,13 @@ namespace StoreAndCraft
                 {
                     if (container == null || !seenChest.Add(container.GetInstanceID()))
                         continue;
-                    NearbyIndex.EnsureInventory(container);
+                    // Prefer already-loaded inventories; only ZDO-load empty/unopened chests.
                     Inventory inv = container.GetInventory();
+                    if (inv == null || inv.NrOfItems() <= 0)
+                    {
+                        NearbyIndex.EnsureInventory(container);
+                        inv = container.GetInventory();
+                    }
                     if (inv == null)
                         continue;
                     foreach (ItemDrop.ItemData item in inv.GetAllItems())

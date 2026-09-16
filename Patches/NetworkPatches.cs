@@ -35,9 +35,6 @@ namespace StoreAndCraft
             VersionGate.ResetClient();
             ConfigSync.Register();
             TransferService.RegisterGrant();
-            // BEGIN REMOTE_DUMP
-            RemoteDump.Register();
-            // END REMOTE_DUMP
             ConfigCommands.RegisterRpc();
             NearbyIndex.BootstrapExisting();
             StationAutoFill.BootstrapExisting();

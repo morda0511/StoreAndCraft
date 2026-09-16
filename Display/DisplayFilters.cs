@@ -840,6 +840,9 @@ namespace StoreAndCraft
             }
             if (filterId == 12)
             {
+                // "surtlingcore" / "*core" ends with "ore" — those belong in Boss/Rare, not Ore.
+                if (NameInList(key, BossNames) || key.EndsWith("core"))
+                    return false;
                 if (key.EndsWith("ore"))
                     return true;
                 if (key.EndsWith("scrap") && !key.Contains("leather"))

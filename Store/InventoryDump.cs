@@ -52,20 +52,6 @@ namespace StoreAndCraft
                     leftovers.Add(item);
             }
 
-            // BEGIN REMOTE_DUMP — remove with Network/RemoteDump.cs
-            if (leftovers.Count > 0 && RemoteDump.TryStartFromDump(inv, leftovers))
-            {
-                if (stored > 0)
-                {
-                    player.Message(
-                        MessageHud.MessageType.TopLeft,
-                        Loc.T("Stored " + stored + " stacks locally, trying buddy…",
-                            stored + " Stapel lokal, versuche Buddy…"),
-                        0, null, false);
-                }
-                return;
-            }
-            // END REMOTE_DUMP
 
             player.Message(
                 MessageHud.MessageType.TopLeft,
@@ -102,10 +88,6 @@ namespace StoreAndCraft
 
             if (chest == null)
             {
-                // BEGIN REMOTE_DUMP
-                if (RemoteDump.TryStartOne(inv, item))
-                    return true;
-                // END REMOTE_DUMP
                 player.Message(MessageHud.MessageType.Center, Loc.T("No matching chest.", "Keine passende Truhe."), 0, null, false);
                 return false;
             }
@@ -113,10 +95,6 @@ namespace StoreAndCraft
             int fit = ChestPicker.AmountThatFits(chest.GetInventory(), item);
             if (fit <= 0)
             {
-                // BEGIN REMOTE_DUMP
-                if (RemoteDump.TryStartOne(inv, item))
-                    return true;
-                // END REMOTE_DUMP
                 player.Message(MessageHud.MessageType.Center, Loc.T("No matching chest.", "Keine passende Truhe."), 0, null, false);
                 return false;
             }

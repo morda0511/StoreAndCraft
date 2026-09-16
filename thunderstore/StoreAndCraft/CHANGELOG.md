@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.1 — Hotfix
+
+- **Removed:** experimental remote dump (buddy near base) — dump is local-range only again
+- **Perf:** Large Storage Displays — event-driven chest watch, single-pass ranking, less idle work
+- **Perf:** Auto-fill — one chest snapshot per pulse; no scan when all stations are off
+- **Perf:** Nearby chest index rescans less often while idle / walking
+- **Fix:** Surtling core shows under Boss / Rare (not Ore)
+- **Fix:** Suppress vanilla AOE “default spiky” warning spam that could hitch FPS
+
 ## 1.3.0 — Release
 
 - **Storage Displays:** Small / Medium / Large — Small shows icon, count, and item name; Large dense category bands (up to 12); Food / Ingredients / Epic Loot expandable in the type menu

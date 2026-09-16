@@ -21,9 +21,9 @@ namespace StoreAndCraft
         private static int _cacheFrame = -1;
         private static int _storeForceBudget;
         private static readonly Dictionary<string, int> CountCache = new Dictionary<string, int>();
-        private const float RescanMove = 1.5f;
-        private const float IdleRescanSeconds = 2f;
-        private const float MoveRescanSeconds = 0.75f;
+        private const float RescanMove = 2.5f;
+        private const float IdleRescanSeconds = 5f;
+        private const float MoveRescanSeconds = 1.75f;
         private const float InventoryLoadCooldown = 4f;
         private const float EmptyProbeBackoff = 20f;
         private const int MaxForceLoadsPerStorePass = 5;
@@ -105,6 +105,26 @@ namespace StoreAndCraft
             Rescan(origin, range);
             _lastOrigin = origin;
             _nextScan = Time.time + (moved ? MoveRescanSeconds : IdleRescanSeconds);
+        }
+
+        /// <summary>Bypass idle throttle — used by remote-dump buddy ping.</summary>
+        public static void ForceRescanAt(Vector3 origin, float range = -1f)
+        {
+            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
+            {
+                Cached.Clear();
+                return;
+            }
+
+            PruneDead();
+            if (Registered.Count == 0)
+                BootstrapExisting();
+
+            if (range <= 0f)
+                range = ScanRange();
+            Rescan(origin, range);
+            _lastOrigin = origin;
+            _nextScan = Time.time + IdleRescanSeconds;
         }
 
         public static float AccessRange()
@@ -234,7 +254,7 @@ namespace StoreAndCraft
 
         private static void FillFromOverlap(Vector3 origin, float range, float rangeSq, HashSet<int> seen)
         {
-            Collider[] hits = Physics.OverlapSphere(origin, range, ~0, QueryTriggerInteraction.Collide);
+            Collider[] hits = Physics.OverlapSphere(origin, range, ~0, QueryTriggerInteraction.Ignore);
             if (hits == null)
                 return;
 
@@ -313,6 +333,68 @@ namespace StoreAndCraft
         public static void InvalidateCounts()
         {
             CountCache.Clear();
+        }
+
+        private static readonly Dictionary<string, int> SnapshotScratch = new Dictionary<string, int>();
+
+        /// <summary>
+        /// One-pass chest scan for auto-fill: spendable counts by shared name (LeaveOne applied per chest).
+        /// Prefer already-loaded inventories; only ZDO-load empty/unknown chests (cooldown still applies).
+        /// </summary>
+        public static Dictionary<string, int> SnapshotSpendable(
+            Vector3 origin,
+            float range,
+            bool leaveOne)
+        {
+            var totals = new Dictionary<string, int>();
+            if (range <= 0f)
+                return totals;
+
+            float rangeSq = range * range;
+            foreach (Container c in Cached)
+            {
+                if (c == null || ChestNames.IsIgnored(c))
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, c.transform.position) > rangeSq)
+                    continue;
+
+                Inventory inv = c.GetInventory();
+                if (inv == null || inv.NrOfItems() <= 0)
+                {
+                    EnsureInventory(c);
+                    inv = c.GetInventory();
+                }
+                if (inv == null)
+                    continue;
+
+                SnapshotScratch.Clear();
+                foreach (ItemDrop.ItemData item in inv.GetAllItems())
+                {
+                    if (item?.m_shared == null || item.m_stack <= 0)
+                        continue;
+                    string key = item.m_shared.m_name;
+                    int n;
+                    SnapshotScratch.TryGetValue(key, out n);
+                    SnapshotScratch[key] = n + item.m_stack;
+                }
+
+                foreach (KeyValuePair<string, int> pair in SnapshotScratch)
+                {
+                    int n = pair.Value - PendingChestDebit.Of(c, pair.Key);
+                    if (n < 0)
+                        n = 0;
+                    if (leaveOne && n > 0)
+                        n -= 1;
+                    if (n <= 0)
+                        continue;
+                    int total;
+                    totals.TryGetValue(pair.Key, out total);
+                    totals[pair.Key] = total + n;
+                }
+            }
+
+            SnapshotScratch.Clear();
+            return totals;
         }
 
         public static int CountItem(Vector3 origin, float range, string sharedName, bool leaveOne, int quality = -1)

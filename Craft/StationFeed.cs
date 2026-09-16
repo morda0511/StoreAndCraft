@@ -48,6 +48,12 @@ namespace StoreAndCraft
             if (player == null || string.IsNullOrEmpty(shared))
                 return false;
 
+            if (_pulseActive && _pulseSpendable != null)
+            {
+                int n;
+                return _pulseSpendable.TryGetValue(shared, out n) && n > 0;
+            }
+
             return RequirementBridge.CountNearby(player, shared) > 0;
         }
 
@@ -55,6 +61,46 @@ namespace StoreAndCraft
         /// While &gt; 0, chest count / pull uses this range instead of CraftRange (auto-fill).
         /// </summary>
         public static float PullRangeOverride;
+
+        /// <summary>Auto-fill pulse: one chest snapshot, then O(1) ChestsHave.</summary>
+        private static Dictionary<string, int> _pulseSpendable;
+        private static bool _pulseActive;
+
+        public static void BeginAutoFillPulse(Player player, float range)
+        {
+            _pulseActive = false;
+            _pulseSpendable = null;
+            if (player == null || Plugin.Settings == null)
+                return;
+
+            NearbyIndex.Tick();
+            bool leaveOne = Plugin.Settings.LeaveOneItem.Value;
+            _pulseSpendable = NearbyIndex.SnapshotSpendable(
+                player.transform.position,
+                range,
+                leaveOne);
+            _pulseActive = true;
+        }
+
+        public static void EndAutoFillPulse()
+        {
+            _pulseActive = false;
+            _pulseSpendable = null;
+        }
+
+        public static void NotePulseConsumed(string shared, int amount)
+        {
+            if (!_pulseActive || _pulseSpendable == null || amount <= 0 || string.IsNullOrEmpty(shared))
+                return;
+            int n;
+            if (!_pulseSpendable.TryGetValue(shared, out n))
+                return;
+            n -= amount;
+            if (n <= 0)
+                _pulseSpendable.Remove(shared);
+            else
+                _pulseSpendable[shared] = n;
+        }
 
         public static float ActivePullRange()
         {
@@ -163,6 +209,7 @@ namespace StoreAndCraft
                     continue;
                 took += n;
                 need -= n;
+                NotePulseConsumed(shared, n);
             }
 
             return took;

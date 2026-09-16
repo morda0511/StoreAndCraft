@@ -27,11 +27,6 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - Hotbar can be skipped (`IgnoreHotbar`).
 - Favorites are never dumped / hover-stored (see below).
 
-### Remote dump (Experimental)
-- If dump finds **no matching chest near you**, it can ask a **buddy who is near matching base chests** to finish the store (they must have that area loaded).
-- Toggle `RemoteDumpEnabled` (default on). Cooldown / max stacks in config.
-- Easy kill-switch: set `RemoteDumpEnabled` to false.
-
 ### Craft & build from chests
 - Recipes and hammer pieces count nearby chest contents.
 - When you craft / upgrade / build, missing mats are **taken from chests directly** (not dumped into your backpack first — that used to fill free slots and cancel the craft).
@@ -189,9 +184,6 @@ Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `Lo
 | `LeaveOneItem` | Leave 1 in chest when pulling |
 | `IgnoreHotbar` | Dump skips hotbar row |
 | `AutoStackEnabled` | Compact stacks inside chests (off by default) |
-| `RemoteDumpEnabled` | **Experimental** remote dump via a buddy near base chests |
-| `RemoteDumpCooldown` | Seconds between remote dump attempts |
-| `RemoteDumpMaxStacks` | Max stacks per remote dump batch |
 | `PlayerDumpRange` | Dump / middle-click / pull-stack (m) |
 | `StoreRange` | Auto-store ground items (m) |
 | `StorageRange` | Take-stack / search / displays (m) |

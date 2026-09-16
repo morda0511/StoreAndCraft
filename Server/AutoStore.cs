@@ -124,7 +124,7 @@ namespace StoreAndCraftServer
             if (range <= 0f)
                 return result;
 
-            Collider[] hits = Physics.OverlapSphere(origin, range);
+            Collider[] hits = Physics.OverlapSphere(origin, range, ~0, QueryTriggerInteraction.Ignore);
             var seen = new HashSet<int>();
             foreach (Collider hit in hits)
             {
