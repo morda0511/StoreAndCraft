@@ -62,7 +62,7 @@ namespace StoreAndCraft
             if (!IsUsable(container))
                 return false;
 
-            if (ChestNames.IsIgnored(container))
+            if (ChestNames.IsFullyIgnored(container))
                 return false;
 
             if (!PrivateArea.CheckAccess(container.transform.position, 0f, false, true))

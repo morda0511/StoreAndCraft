@@ -103,7 +103,7 @@ namespace StoreAndCraft
 
             foreach (Container chest in NearbyIndex.Within(origin, range))
             {
-                if (chest == null || ChestNames.IsIgnored(chest))
+                if (chest == null || ChestNames.IsFullyIgnored(chest))
                     continue;
 
                 NearbyIndex.EnsureInventory(chest);

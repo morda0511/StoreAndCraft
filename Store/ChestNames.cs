@@ -6,8 +6,12 @@ namespace StoreAndCraft
     {
         public const string ZdoKey = "kac_label";
         public const int MaxLength = 32;
+        /// <summary>Fully ignored: dump, craft, displays, search.</summary>
         public const string IgnorePrefix = "[I]";
+        /// <summary>Hidden from dump/store/craft pull; still counted on Storage Displays.</summary>
+        public const string HiddenPrefix = "[H]";
 
+        /// <summary>Dump / auto-store / craft / auto-fill / build-grab skip these ([I] or [H]).</summary>
         public static bool IsIgnored(Container container)
         {
             return IsIgnoredName(Get(container));
@@ -15,11 +19,35 @@ namespace StoreAndCraft
 
         public static bool IsIgnoredName(string stored)
         {
+            return IsFullyIgnoredName(stored) || IsHiddenName(stored);
+        }
+
+        /// <summary>Only [I] — excluded from displays and search.</summary>
+        public static bool IsFullyIgnored(Container container)
+        {
+            return IsFullyIgnoredName(Get(container));
+        }
+
+        public static bool IsFullyIgnoredName(string stored)
+        {
             if (string.IsNullOrEmpty(stored))
                 return false;
             string t = stored.TrimStart();
-            // Only the ignore tag "[I]", not every renamed chest.
             return t.StartsWith(IgnorePrefix, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Only [H] — store/craft ignore, displays still count.</summary>
+        public static bool IsHidden(Container container)
+        {
+            return IsHiddenName(Get(container));
+        }
+
+        public static bool IsHiddenName(string stored)
+        {
+            if (string.IsNullOrEmpty(stored) || IsFullyIgnoredName(stored))
+                return false;
+            string t = stored.TrimStart();
+            return t.StartsWith(HiddenPrefix, System.StringComparison.OrdinalIgnoreCase);
         }
 
         public static string DisplayName(string stored)
@@ -29,6 +57,8 @@ namespace StoreAndCraft
             string t = stored.Trim();
             if (t.StartsWith(IgnorePrefix, System.StringComparison.OrdinalIgnoreCase))
                 t = t.Substring(IgnorePrefix.Length).TrimStart();
+            else if (t.StartsWith(HiddenPrefix, System.StringComparison.OrdinalIgnoreCase))
+                t = t.Substring(HiddenPrefix.Length).TrimStart();
             return t;
         }
 

@@ -45,7 +45,7 @@ namespace StoreAndCraft
             {
                 if (room <= 0)
                     break;
-                if (chest == null || ChestNames.IsIgnored(chest))
+                if (chest == null || ChestNames.IsFullyIgnored(chest))
                     continue;
 
                 int got = TransferService.TakeIntoExistingStack(chest, item, room);

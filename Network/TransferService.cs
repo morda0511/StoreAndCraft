@@ -124,7 +124,7 @@ namespace StoreAndCraft
         }
 
         /// <summary>
-        /// Shift+build grab: always land stacks in the player bag (inventory UI may be closed).
+        /// Hammer C+place grab: always land stacks in the player bag (inventory UI may be closed).
         /// Claims ownership when safe so we never fire RpcRemove without a verified local add.
         /// </summary>
         public static int WithdrawForGrab(Container chest, string sharedName, int amount, Player player, bool leaveOne)

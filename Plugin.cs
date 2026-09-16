@@ -12,7 +12,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.3.1";
+        public const string ModVersion = "1.3.2";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -43,14 +43,6 @@ namespace StoreAndCraft
             _harmony.PatchAll(Assembly.GetExecutingAssembly());
 
             Logger.LogInfo(ModName + " v" + ModVersion + " by " + ModAuthor + " loaded.");
-            Logger.LogInfo("Config file: " + Config.ConfigFilePath);
-            Logger.LogInfo("Ranges Dump/Store/Storage/Craft/AutoFill = "
-                + Settings.PlayerDumpRange.Value + "/"
-                + Settings.StoreRange.Value + "/"
-                + Settings.StorageRange.Value + "/"
-                + Settings.CraftRange.Value + "/"
-                + Settings.AutoFillRange.Value
-                + " (LockConfig=" + Settings.LockConfig.Value + ")");
         }
 
         private static void OnSettingChanged(object sender, SettingChangedEventArgs e)

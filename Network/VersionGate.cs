@@ -79,7 +79,7 @@ namespace StoreAndCraft
             }
 
             if (Verified.Add(peerId))
-                Plugin.Log.LogInfo("StoreAndCraft: peer " + peerId + " handshake ok.");
+                Plugin.Log.LogDebug("StoreAndCraft: peer " + peerId + " handshake ok.");
             WarnedMissing.Remove(peerId);
         }
 
@@ -178,7 +178,7 @@ namespace StoreAndCraft
             bool was = ClientVerified;
             ClientVerified = ok != 0;
             if (ClientVerified && !was)
-                Plugin.Log.LogInfo("StoreAndCraft: handshake acknowledged.");
+                Plugin.Log.LogDebug("StoreAndCraft: handshake acknowledged.");
         }
 
         internal static long ServerPeerId()

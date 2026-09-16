@@ -33,7 +33,7 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - Craft / upgrade button enables when mats are in **inventory or chests**.
 - Yellow tint on requirement text when part of the count comes from a chest.
 - `LeaveOneItem` (default on): one item stays in each chest so auto-store can keep refilling. That leftover item cannot be spent (craft, build, plant, or station [E]). Turn the setting off if you want to use the last item.
-- **Shift + place:** hold **Shift** while confirming a build to **grab** that piece’s materials from nearby chests into your inventory (nothing is placed). Each Shift-click can pull another full piece-cost set.
+- **C + place (hammer):** hold **C** while confirming a hammer build to **grab** that piece’s materials from nearby chests into your inventory (nothing is placed). Each grab-click can pull another full piece-cost set. Remap with `BuildGrabKey`. Shift stays free for vanilla no-snap.
 
 ### Epic Loot
 - **Supports Epic Loot** — chest craft/build pull and Storage Displays work with Epic Loot materials and stations.
@@ -78,9 +78,9 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - Skipped by dump and hover-store.
 - Local file: `StoreAndCraft.favorites.txt` (not server-synced).
 
-### Ignore chests
-- Prefix the chest name with **`[I]`** → no auto-store, no craft pull, not counted on displays.
-- Hover text turns **red** so ignored chests are easy to spot.
+### Ignore / hide chests
+- Prefix **`[I]`** → fully ignored: no auto-store, no craft pull, not counted on displays (hover text **red**).
+- Prefix **`[H]`** → hidden from dump / auto-store / craft / auto-fill, but **still counted on Storage Displays** (and searchable). Example: `[H] Food`. Hover text **orange**.
 - Rename with **Alt+E** (or Shift+E alt-use).
 
 ### Search
@@ -112,7 +112,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 | **N** | Toggle auto-drop on a cooking spit / iron station / stone oven (inventory closed) |
 | **Y** | Hover an inventory item and press — nearest chest with that item blinks **3×** + map ping |
 | **R** | Sort: bag open = inventory only; chest open = that chest only |
-| **Shift + place** | Grab build materials from chests (do not place) |
+| **C + place (hammer)** | Grab build materials from chests (do not place). Remap: `BuildGrabKey` |
 | **Alt + R** | Storage Display range (while looking at a display) |
 
 All hotkeys are configurable in the `.cfg` and stay **local** (not overwritten by server sync).

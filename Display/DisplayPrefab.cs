@@ -107,7 +107,7 @@ namespace StoreAndCraft
                 "Wide board with flowing category sections from nearby chests. Press [E] and click types.",
                 new Vector3(7.5f, 6.3f, 1f));
 
-            Plugin.Log.LogInfo("StoreAndCraft storage displays registered (small / medium / large).");
+            Plugin.Log.LogDebug("StoreAndCraft storage displays registered (small / medium / large).");
         }
 
         private static void BuildVariant(

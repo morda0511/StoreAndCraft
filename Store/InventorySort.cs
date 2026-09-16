@@ -48,7 +48,7 @@ namespace StoreAndCraft
 
         private static void SortOpenChest(Player player, Container chest)
         {
-            if (chest == null || ChestNames.IsIgnored(chest))
+            if (chest == null || ChestNames.IsFullyIgnored(chest))
                 return;
 
             ZNetView nv = Refs.View(chest);

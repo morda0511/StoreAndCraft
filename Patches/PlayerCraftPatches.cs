@@ -17,8 +17,8 @@ namespace StoreAndCraft
             if (__instance == null || !__instance.IsOwner() || !StagingPull.Active)
                 return;
 
-            // Shift+build grab: never destroy chest stacks; PlacePiece is cancelled separately.
-            if (BuildGrab.ShiftHeld())
+            // C+place grab (hammer): never destroy chest stacks; place is cancelled separately.
+            if (BuildGrab.ShouldGrab(__instance))
                 return;
 
             // Pay chest deficit here. Do not stage mats into the backpack first — that

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2 — Hotfix
+
+- **Change:** build grab is **C + place** with the hammer (was Shift+place; Shift stays free for no-snap). Remap: `BuildGrabKey`
+- **Feature:** chest prefix **`[H]`** — hide from dump / store / craft / auto-fill, but still count on Storage Displays (and search). `[I]` stays fully ignored
+- **Fix:** Alt+R display-range menu header shows **Display range** instead of Skills
+- **Change:** quieter BepInEx startup log (only the loaded line)
+
 ## 1.3.1 — Hotfix
 
 - **Removed:** experimental remote dump (buddy near base) — dump is local-range only again

@@ -53,7 +53,8 @@ namespace StoreAndCraft
                 return;
 
             string custom = ChestNames.Get(__instance);
-            bool ignored = ChestNames.IsIgnoredName(custom);
+            bool fullyIgnored = ChestNames.IsFullyIgnoredName(custom);
+            bool hidden = ChestNames.IsHiddenName(custom);
             if (!string.IsNullOrEmpty(custom))
             {
                 string shown = ChestNames.DisplayName(custom);
@@ -74,8 +75,10 @@ namespace StoreAndCraft
             }
 
             __result += "\n[<color=yellow><b>" + ChestRename.PromptLabel() + "</b></color>] Rename";
-            if (ignored)
+            if (fullyIgnored)
                 __result = "<color=#e74c3c>" + __result + "</color>";
+            else if (hidden)
+                __result = "<color=#e67e22>" + __result + "</color>";
         }
     }
 }

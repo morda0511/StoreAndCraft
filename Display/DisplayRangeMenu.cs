@@ -63,8 +63,8 @@ namespace StoreAndCraft
 
             panel.transform.SetAsLastSibling();
             HideVanillaRows();
-            ApplyTitle();
             RebuildRows();
+            ApplyTitle();
             IsOpen = true;
         }
 
@@ -164,6 +164,8 @@ namespace StoreAndCraft
 
             if (Time.unscaledTime < _openedAt + 0.2f)
                 return;
+            // Keep header sticky — Skills Localize can overwrite after open.
+            KeepTitle();
             if (ZInput.GetKeyDown(KeyCode.Escape, true) || ZInput.GetButtonDown("JoyButtonB"))
                 Close();
         }
@@ -366,6 +368,13 @@ namespace StoreAndCraft
         private static void ApplyTitle()
         {
             CacheTitles();
+            KeepTitle();
+        }
+
+        private static void KeepTitle()
+        {
+            if (_titleTexts.Count == 0)
+                CacheTitles();
             string title = Loc.T("Display range", "Display-Reichweite");
             for (int i = 0; i < _titleTexts.Count; i++)
             {
@@ -401,19 +410,33 @@ namespace StoreAndCraft
             _titleLocalize.Clear();
             if (_skills == null)
                 return;
+
+            Transform listRoot = _skills.m_listRoot;
             TMP_Text[] texts = _skills.GetComponentsInChildren<TMP_Text>(true);
             for (int i = 0; i < texts.Length; i++)
             {
                 TMP_Text tmp = texts[i];
-                if (tmp == null)
+                if (tmp == null || tmp == _skills.m_totalSkillText)
                     continue;
+                // Skip list rows — only header / topic chrome above the list.
+                if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
+                    continue;
+
                 string n = tmp.gameObject.name.ToLowerInvariant();
-                if (!(n.Contains("title") || n.Contains("header") || n == "text"))
+                string body = (tmp.text ?? "").Trim();
+                bool byName = n.Contains("title") || n.Contains("header") || n.Contains("topic")
+                    || n.Contains("label") || n == "text" || n.Contains("skill");
+                bool byText = body.Equals("Skills", System.StringComparison.OrdinalIgnoreCase)
+                    || body.Equals("$skills", System.StringComparison.OrdinalIgnoreCase)
+                    || body.IndexOf("Skill", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!byName && !byText)
                     continue;
+
                 Component localize = tmp.GetComponent("Localize");
                 bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
                 if (hadLocalize)
                     ((MonoBehaviour)localize).enabled = false;
+
                 _titleTexts.Add(tmp);
                 _titleBackup.Add(tmp.text ?? "");
                 _titleLocalize.Add(hadLocalize);

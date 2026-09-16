@@ -36,6 +36,7 @@ namespace StoreAndCraft
         public ConfigEntry<KeyboardShortcut> AutoDropKey { get; }
         public ConfigEntry<KeyboardShortcut> SortKey { get; }
         public ConfigEntry<KeyboardShortcut> DisplayRangeKey { get; }
+        public ConfigEntry<KeyboardShortcut> BuildGrabKey { get; }
 
         public ModConfig(ConfigFile file)
         {
@@ -82,7 +83,7 @@ namespace StoreAndCraft
             SearchKey = file.Bind("4 - Keys", "SearchKey", new KeyboardShortcut(KeyCode.Y),
                 "While inventory is open: hover an item and press to ping/blink the nearest chest that contains it (blinks 3 times).");
             RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.E, KeyCode.LeftAlt),
-                "Look at a chest to rename it, or at a kiln/smelter/grill with multiple inputs to open the chest-pull filter. Default Alt+E — remap in config if it clashes with cooking. Shift+E (Valheim alt-use) also renames chests. Prefix a chest name with [I] to ignore it.");
+                "Look at a chest to rename it, or at a kiln/smelter/grill with multiple inputs to open the chest-pull filter. Default Alt+E — remap in config if it clashes with cooking. Shift+E (Valheim alt-use) also renames chests. Prefix [I] = fully ignore; [H] = hide from dump/store/craft but still show on Storage Displays.");
             TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
             FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),
@@ -95,6 +96,8 @@ namespace StoreAndCraft
                 "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, and hotbar stay put).");
             DisplayRangeKey = file.Bind("4 - Keys", "DisplayRangeKey", new KeyboardShortcut(KeyCode.R, KeyCode.LeftAlt),
                 "Look at a Storage Display and press to set that board's chest-scan range (5–50 m). Per display.");
+            BuildGrabKey = file.Bind("4 - Keys", "BuildGrabKey", new KeyboardShortcut(KeyCode.C),
+                "Hold this key while confirming a hammer place to grab that piece's materials from nearby chests (nothing is placed). Default C — Shift stays free for no-snap. Local, not synced.");
         }
 
         public float StationPullRange()

@@ -5,42 +5,58 @@ using UnityEngine;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Shift + place: never build — pull the ghost piece's costs from nearby chests into the bag.
+    /// Hold BuildGrabKey (default C) + place while the hammer is in place mode:
+    /// never build — pull the ghost piece's costs from nearby chests into the bag.
     /// Must cancel at TryPlacePiece (not PlacePiece): UpdatePlacement calls ConsumeResources
     /// after a successful TryPlacePiece, which would eat the stacks we just withdrew.
+    /// Shift stays free for vanilla no-snap placement.
     /// </summary>
     internal static class BuildGrab
     {
         private static readonly List<Container> Scratch = new List<Container>(64);
         private static float _lastGrabMsg;
 
-        public static bool ShiftHeld()
+        /// <summary>True when the grab modifier is held (config BuildGrabKey, default C).</summary>
+        public static bool GrabHeld()
         {
-            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
-                return true;
-            try
-            {
-                if (ZInput.GetKey(KeyCode.LeftShift) || ZInput.GetKey(KeyCode.RightShift))
-                    return true;
-            }
-            catch
-            {
-                // ZInput may be unavailable very early.
-            }
-            return false;
+            if (Plugin.Settings == null)
+                return false;
+            return KeyUtil.Held(Plugin.Settings.BuildGrabKey.Value);
         }
 
-        /// <summary>Returns true if place must be cancelled (Shift held).</summary>
+        /// <summary>Hammer place mode only — not hoe/cultivator. Shift stays free for no-snap.</summary>
+        public static bool IsHammerPlaceMode(Player player)
+        {
+            if (player == null || !player.InPlaceMode())
+                return false;
+
+            PieceTable table = player.GetBuildTool();
+            if (table == null)
+                return false;
+
+            string name = table.gameObject != null ? table.gameObject.name : table.name;
+            if (string.IsNullOrEmpty(name))
+                return false;
+
+            return name.IndexOf("Hammer", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        public static bool ShouldGrab(Player player)
+        {
+            return GrabHeld() && IsHammerPlaceMode(player);
+        }
+
+        /// <summary>Returns true if place must be cancelled (grab active).</summary>
         public static bool TryInterceptPlace(Player player, Piece piece)
         {
             if (player == null || player != Player.m_localPlayer || piece == null)
                 return false;
-            if (!ShiftHeld())
+            if (!ShouldGrab(player))
                 return false;
             if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value || !Plugin.Settings.CraftEnabled.Value)
             {
                 MaybeMsg(player, Loc.T("Craft/build from chests is disabled", "Craft/Bauen aus Truhen ist aus"));
-                return true; // still block place while Shift held
+                return true; // still block place while grab is held
             }
 
             GrabIntoInventory(player, piece);
@@ -82,7 +98,7 @@ namespace StoreAndCraft
                         continue;
 
                     string shared = req.m_resItem.m_itemData.m_shared.m_name;
-                    // Always pull one full piece-cost set per Shift-click, even if the bag
+                    // Always pull one full piece-cost set per grab-click, even if the bag
                     // already has enough (so you can stockpile for several builds).
                     int still = need;
                     for (int i = 0; i < Scratch.Count; i++)
@@ -158,10 +174,10 @@ namespace StoreAndCraft
     [HarmonyPriority(Priority.First)]
     internal static class PlacePieceGrabPatch
     {
-        // Backup: if something calls PlacePiece directly while Shift is held, still skip spawn.
+        // Backup: if something calls PlacePiece directly while grab is active, still skip spawn.
         private static bool Prefix(Player __instance, Piece piece)
         {
-            if (BuildGrab.ShiftHeld() && __instance == Player.m_localPlayer)
+            if (__instance == Player.m_localPlayer && BuildGrab.ShouldGrab(__instance))
                 return false;
             return true;
         }

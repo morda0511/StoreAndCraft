@@ -29,7 +29,7 @@ namespace StoreAndCraft
                 _watcher.Changed += OnChanged;
                 _watcher.Created += OnChanged;
                 _watcher.EnableRaisingEvents = true;
-                Plugin.Log.LogInfo("StoreAndCraft config watcher: " + Path.Combine(Paths.ConfigPath, _cfgFileName));
+                Plugin.Log.LogDebug("StoreAndCraft config watcher: " + Path.Combine(Paths.ConfigPath, _cfgFileName));
             }
             catch (Exception ex)
             {
@@ -75,7 +75,7 @@ namespace StoreAndCraft
                     if (Plugin.Instance != null)
                         Plugin.Instance.Config.Reload();
                     ConfigSync.BroadcastConfig();
-                    Plugin.Log.LogInfo("StoreAndCraft server config reloaded and synced to clients."
+                    Plugin.Log.LogDebug("StoreAndCraft server config reloaded and synced to clients."
                         + " Dump=" + Plugin.Settings.PlayerDumpRange.Value
                         + " Store=" + Plugin.Settings.StoreRange.Value
                         + " Storage=" + Plugin.Settings.StorageRange.Value
@@ -87,13 +87,13 @@ namespace StoreAndCraft
                 if (Plugin.Settings != null && Plugin.Settings.LockConfig.Value && ConfigSync.HasReceivedConfig)
                 {
                     ConfigSync.RequestConfigFromServer();
-                    Plugin.Log.LogInfo("StoreAndCraft LockConfig: ignored local cfg change, re-requested server config.");
+                    Plugin.Log.LogDebug("StoreAndCraft LockConfig: ignored local cfg change, re-requested server config.");
                     return;
                 }
 
                 if (Plugin.Instance != null)
                     Plugin.Instance.Config.Reload();
-                Plugin.Log.LogInfo("StoreAndCraft local config reloaded.");
+                Plugin.Log.LogDebug("StoreAndCraft local config reloaded.");
             }
             catch (Exception ex)
             {

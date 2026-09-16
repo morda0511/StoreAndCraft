@@ -22,7 +22,7 @@ namespace StoreAndCraft
                 ZRoutedRpc.instance.Register(RpcRequestName, RPC_RequestConfig);
                 ZRoutedRpc.instance.Register<int, int>(HandshakeName, RPC_Hello);
                 Registered = true;
-                Plugin.Log.LogInfo("StoreAndCraft RPCs registered.");
+                Plugin.Log.LogDebug("StoreAndCraft RPCs registered.");
             }
 
             if (AdminUtil.IsServer())
@@ -52,7 +52,7 @@ namespace StoreAndCraft
             }
 
             if (n > 0)
-                Plugin.Log.LogInfo("StoreAndCraft synced config to " + n + " peer(s).");
+                Plugin.Log.LogDebug("StoreAndCraft synced config to " + n + " peer(s).");
         }
 
         public static void SendToPeer(long peerId)
@@ -123,7 +123,7 @@ namespace StoreAndCraft
             {
                 Plugin.Settings.ReadFromPackage(pkg);
                 HasReceivedConfig = true;
-                Plugin.Log.LogInfo("StoreAndCraft received server config. Lock="
+                Plugin.Log.LogDebug("StoreAndCraft received server config. Lock="
                     + Plugin.Settings.LockConfig.Value
                     + " Dump=" + Plugin.Settings.PlayerDumpRange.Value
                     + " Store=" + Plugin.Settings.StoreRange.Value

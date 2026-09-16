@@ -418,7 +418,7 @@ namespace StoreAndCraft
             float craftSq = useRange * useRange;
             foreach (Container c in Cached)
             {
-                if (c == null)
+                if (c == null || ChestNames.IsIgnored(c))
                     continue;
 
                 if (ContainerFilter.SqrDistance(origin, c.transform.position) > craftSq)

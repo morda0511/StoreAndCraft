@@ -1044,7 +1044,7 @@ namespace StoreAndCraft
                     continue;
                 if (!ContainerFilter.PlayerMayUse(container, origin))
                     continue;
-                if (ChestNames.IsIgnored(container))
+                if (ChestNames.IsFullyIgnored(container))
                     continue;
 
                 // Unopened chests often have null/empty inv until Load — required for displays.

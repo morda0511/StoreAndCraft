@@ -40,7 +40,7 @@ namespace StoreAndCraft
 
             if (_attempts == 1 || _attempts % 10 == 0)
             {
-                Plugin.Log.LogInfo(
+                Plugin.Log.LogDebug(
                     "StoreAndCraft: waiting for server" +
                     (VersionGate.ClientVerified ? "" : " handshake") +
                     (ConfigSync.HasReceivedConfig ? "" : " config") +
