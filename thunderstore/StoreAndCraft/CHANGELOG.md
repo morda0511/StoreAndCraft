@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.3 — Hotfix
+
+- **Epic Loot:** Enchanting Table (Sacrifice / Enchant / Upgrade / …) now sees and spends nearby chest items via Epic Loot’s inventory-provider API (custom UI does not use vanilla craft hooks)
+- **Epic Loot:** enchant spend ignores `LeaveOneItem` so a single Runestone in a chest still counts
+- **Displays:** Epic Loot type menu adds **Runestone** (incl. EtchedRunestone); runestones no longer sit under Boss / Rare
+
 ## 1.3.2 — Hotfix
 
 - **Change:** build grab is **C + place** with the hammer (was Shift+place; Shift stays free for no-snap). Remap: `BuildGrabKey`

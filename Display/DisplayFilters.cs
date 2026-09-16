@@ -37,11 +37,12 @@ namespace StoreAndCraft
         public const int ElEssenceFilterId = 32;
         public const int ElReagentFilterId = 33;
         public const int ElShardFilterId = 34;
+        public const int ElRunestoneFilterId = 35;
         public const int MaxCategories = 12;
 
         public static readonly int[] EpicLootSubFilterIds =
         {
-            ElDustFilterId, ElEssenceFilterId, ElReagentFilterId, ElShardFilterId
+            ElDustFilterId, ElEssenceFilterId, ElReagentFilterId, ElShardFilterId, ElRunestoneFilterId
         };
 
         private static readonly string[] ElRarities =
@@ -56,13 +57,14 @@ namespace StoreAndCraft
                 || filterId == EpicLootGroupId;
         }
 
-        /// <summary>Dust/Essence/Reagent/Shard — shown only under Epic Loot expand, not as top-level rows.</summary>
+        /// <summary>Dust/Essence/Reagent/Shard/Runestone — under Epic Loot expand only, not top-level.</summary>
         public static bool IsEpicLootSubFilter(int filterId)
         {
             return filterId == ElDustFilterId
                 || filterId == ElEssenceFilterId
                 || filterId == ElReagentFilterId
-                || filterId == ElShardFilterId;
+                || filterId == ElShardFilterId
+                || filterId == ElRunestoneFilterId;
         }
 
         // Wood
@@ -215,6 +217,8 @@ namespace StoreAndCraft
             Typed(33, "Reagent", "Reagent", false,
                 ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Misc),
             Typed(34, "Shard", "Shard", false,
+                ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Misc),
+            Typed(35, "Runestone", "Runestone", false,
                 ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Misc)
         };
 
@@ -480,8 +484,7 @@ namespace StoreAndCraft
             string key = Key(item);
 
             // Epic Loot items routed into existing vanilla-style categories.
-            if (filterId == BossRareFilterId && SoftElRunestone(key))
-                return true;
+            // Runestones live under Epic Loot → Runestone (not Boss / Rare).
             if (filterId == GemsCoinsFilterId && SoftElToken(key))
                 return true;
             if (filterId == UtilityFilterId && SoftElUtility(key))
@@ -501,8 +504,6 @@ namespace StoreAndCraft
                 if (found.Id == 17 && SoftPartsMatch(key))
                     return true;
                 if (found.Id == GemsCoinsFilterId && SoftElToken(key))
-                    return true;
-                if (found.Id == BossRareFilterId && SoftElRunestone(key))
                     return true;
                 return false;
             }
@@ -554,12 +555,16 @@ namespace StoreAndCraft
                 return SoftElTyped(key, "reagent");
             if (filterId == ElShardFilterId)
                 return SoftElTyped(key, "shard");
+            if (filterId == ElRunestoneFilterId)
+                return SoftElTyped(key, "runestone") || SoftElTyped(key, "etchedrunestone");
             if (filterId == EpicLootGroupId)
             {
                 return SoftElTyped(key, "dust")
                     || SoftElTyped(key, "essence")
                     || SoftElTyped(key, "reagent")
-                    || SoftElTyped(key, "shard");
+                    || SoftElTyped(key, "shard")
+                    || SoftElTyped(key, "runestone")
+                    || SoftElTyped(key, "etchedrunestone");
             }
             return false;
         }

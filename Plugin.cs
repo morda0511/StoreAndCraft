@@ -8,11 +8,12 @@ using UnityEngine;
 namespace StoreAndCraft
 {
     [BepInPlugin(ModGuid, ModName, ModVersion)]
+    [BepInDependency("randyknapp.mods.epicloot", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.3.2";
+        public const string ModVersion = "1.3.3";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -41,6 +42,7 @@ namespace StoreAndCraft
 
             _harmony = new Harmony(ModGuid);
             _harmony.PatchAll(Assembly.GetExecutingAssembly());
+            EpicLootBridge.TryRegister();
 
             Logger.LogInfo(ModName + " v" + ModVersion + " by " + ModAuthor + " loaded.");
         }
@@ -98,6 +100,7 @@ namespace StoreAndCraft
         private void OnDestroy()
         {
             Config.SettingChanged -= OnSettingChanged;
+            EpicLootBridge.TryUnregister();
             _harmony?.UnpatchSelf();
             if (Instance == this)
                 Instance = null;

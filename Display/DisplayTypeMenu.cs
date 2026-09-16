@@ -224,7 +224,7 @@ namespace StoreAndCraft
             {
                 DisplayFilter choice = DisplayFilters.Choices[i];
                 int id = choice.Id;
-                // Dust / Essence / Reagent / Shard only appear under Epic Loot.
+                // Dust / Essence / Reagent / Shard / Runestone only under Epic Loot.
                 if (DisplayFilters.IsEpicLootSubFilter(id))
                     continue;
 

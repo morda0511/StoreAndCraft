@@ -178,6 +178,37 @@ namespace StoreAndCraft
             return take;
         }
 
+        /// <summary>
+        /// Destroy a specific ItemData instance in a chest (Epic Loot sacrifice / exact spend).
+        /// Owner path removes by reference; remote falls back to name consume (no leave-one).
+        /// </summary>
+        public static int ConsumeExact(Container chest, ItemDrop.ItemData item, int amount)
+        {
+            if (chest == null || item?.m_shared == null || amount <= 0)
+                return 0;
+
+            if (IsChestOwner(chest))
+                return ConsumeExactLocal(chest, item, amount);
+
+            string shared = item.m_shared.m_name;
+            return Consume(chest, shared, amount, leaveOne: false, quality: item.m_quality);
+        }
+
+        private static int ConsumeExactLocal(Container chest, ItemDrop.ItemData item, int amount)
+        {
+            Inventory inv = chest.GetInventory();
+            if (inv == null || !inv.ContainsItem(item))
+                return 0;
+
+            int take = Mathf.Min(amount, item.m_stack);
+            if (take <= 0)
+                return 0;
+
+            inv.RemoveItem(item, take);
+            ContainerFilter.SaveInventory(chest);
+            return take;
+        }
+
         private static int PeekConsumeAmount(Container chest, string sharedName, int amount, bool leaveOne, int quality)
         {
             Inventory inv = chest != null ? chest.GetInventory() : null;

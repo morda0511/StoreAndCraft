@@ -36,7 +36,8 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - **C + place (hammer):** hold **C** while confirming a hammer build to **grab** that piece’s materials from nearby chests into your inventory (nothing is placed). Each grab-click can pull another full piece-cost set. Remap with `BuildGrabKey`. Shift stays free for vanilla no-snap.
 
 ### Epic Loot
-- **Supports Epic Loot** — chest craft/build pull and Storage Displays work with Epic Loot materials and stations.
+- **Supports Epic Loot** — chest craft/build pull, Storage Displays (Dust / Essence / Reagent / Shard / Runestone), and the Enchanting Table (Sacrifice / Enchant / Upgrade / …) use nearby chest stock.
+- Enchanting Table spend does not apply `LeaveOneItem` (a single Runestone in a chest still counts). Vanilla craft / smelter leave-one is unchanged.
 
 ### Station refill `[E]`
 Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters, turrets, etc.:
@@ -164,7 +165,7 @@ Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `Lo
 
 **Resources:** Wood · Ore · Metals · Stone · Fuel · Hides · Parts · Crops & Seeds · Raw Food · Ingredients · Gems & Coins · Boss / Rare · Other materials  
 
-**Epic Loot (expandable):** Dust · Essence · Reagent · Shard  
+**Epic Loot (expandable):** Dust · Essence · Reagent · Shard · Runestone  
 
 **Other:** Food · Fish · Trophy · Ammo · Tools · Weapons · Armor · Utility · Misc  
 
