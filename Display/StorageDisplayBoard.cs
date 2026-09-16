@@ -50,6 +50,7 @@ namespace StoreAndCraft
         {
             public Image Icon;
             public TextMeshProUGUI Amount;
+            public TextMeshProUGUI Name;
         }
 
         public DisplayKind Kind
@@ -74,8 +75,8 @@ namespace StoreAndCraft
                     _rows = 1;
                     _headerColumns = 0;
                     _itemsPerGroup = 1;
-                    // Original sign scale: keep count readable next to the icon.
-                    _fontFactor = 0.28f;
+                    // Slightly larger count than before; icon size is handled in CreateSlotCell.
+                    _fontFactor = 0.34f;
                     _titleFactor = 0.16f;
                     _columnMajor = false;
                     _columnHeaders = false;
@@ -86,7 +87,8 @@ namespace StoreAndCraft
                     // Fixed 12-row table (label | items). Do not rebuild when filter count changes.
                     _headerColumns = 0;
                     _itemsPerGroup = 1;
-                    _columns = 10;
+                    // Dense row: ~13 icons fit on the board; overflow uses last cell as "+".
+                    _columns = 13;
                     _rows = DisplayFilters.MaxCategories; // 12
                     _slotCount = _columns * _rows;
                     _fontFactor = 0.18f / 3f;
@@ -95,7 +97,8 @@ namespace StoreAndCraft
                     _columnHeaders = false;
                     _tightSlots = true;
                     _flowSections = true;
-                    _labelWidth = 0.12f;
+                    // Room for WEAPONS; label X nudge is BuildLargeUi offsetMin (-2).
+                    _labelWidth = 0.10f;
                     break;
                 default:
                     // Category title strip + denser item cells; sort grouped by category.
@@ -453,8 +456,25 @@ namespace StoreAndCraft
                 // Whole category selected: drop fine-grained picks under it.
                 if (DisplayFilters.IsExpandable(id))
                     items = RemoveCategoryItems(items, id);
+                // Epic Loot "All" replaces Dust/Essence/Reagent/Shard bands.
+                if (id == DisplayFilters.EpicLootGroupId)
+                    RemoveEpicLootSubFilters(ids);
+                // A subtype band replaces the Epic Loot "All" parent label.
+                if (DisplayFilters.IsEpicLootSubFilter(id))
+                    ids.Remove(DisplayFilters.EpicLootGroupId);
             }
             WriteSelection(ids, items);
+        }
+
+        private static void RemoveEpicLootSubFilters(List<int> ids)
+        {
+            if (ids == null)
+                return;
+            for (int i = ids.Count - 1; i >= 0; i--)
+            {
+                if (DisplayFilters.IsEpicLootSubFilter(ids[i]))
+                    ids.RemoveAt(i);
+            }
         }
 
         public void ToggleItemToken(string shared, int parentFilterId)
@@ -578,7 +598,8 @@ namespace StoreAndCraft
                     || _slots.Length != _columns * DisplayFilters.MaxCategories))
                 _slots = null;
             if (_slots != null && _kind == DisplayKind.Small && _slots.Length == 1
-                && _slots[0].Amount != null && _slots[0].Amount.fontSize < 1f)
+                && (_slots[0].Name == null
+                    || (_slots[0].Amount != null && _slots[0].Amount.fontSize < 1f)))
                 _slots = null;
             if (_slots == null)
                 TryBuild();
@@ -736,10 +757,10 @@ namespace StoreAndCraft
                 _headers = null;
             }
 
-            float iconMax = _tightSlots ? 0.40f : (_kind == DisplayKind.Small ? 0.42f : 0.46f);
+            float iconMax = _tightSlots ? 0.40f : (_kind == DisplayKind.Small ? 0.40f : 0.46f);
             float textMin = _tightSlots ? 0.36f : (_kind == DisplayKind.Small ? 0.40f : 0.46f);
-            float padX = _tightSlots ? 0.006f : 0.012f;
-            float padY = _tightSlots ? 0.012f : 0.018f;
+            float padX = _tightSlots ? 0.006f : (_kind == DisplayKind.Small ? 0.04f : 0.012f);
+            float padY = _tightSlots ? 0.012f : (_kind == DisplayKind.Small ? 0.06f : 0.018f);
 
             _slots = new SlotUi[_slotCount];
             for (int i = 0; i < _slotCount; i++)
@@ -769,12 +790,12 @@ namespace StoreAndCraft
             _slotCount = rows * itemCols;
             _builtBandCount = rows;
 
-            float labelW = Mathf.Clamp(_labelWidth, 0.10f, 0.16f);
-            float padX = 0.0025f;
+            float labelW = Mathf.Clamp(_labelWidth, 0.08f, 0.16f);
+            float padX = 0.0015f;
             float padY = 0.006f;
-            // Icon + room for 4-digit counts (e.g. 9999) without eating the next cell.
-            float iconMax = 0.34f;
-            float textMin = 0.30f;
+            // Narrower cells (13 cols): keep icon readable, leave room for 3–4 digit counts.
+            float iconMax = 0.40f;
+            float textMin = 0.36f;
 
             _bandLabels = new TextMeshProUGUI[rows];
             for (int r = 0; r < rows; r++)
@@ -785,9 +806,10 @@ namespace StoreAndCraft
                 RectTransform labelRt = labelGo.GetComponent<RectTransform>();
                 float y0 = 1f - (r + 1) / (float)rows;
                 float y1 = 1f - r / (float)rows;
-                labelRt.anchorMin = new Vector2(0.004f, y0 + padY);
-                labelRt.anchorMax = new Vector2(labelW - 0.006f, y1 - padY);
-                labelRt.offsetMin = Vector2.zero;
+                labelRt.anchorMin = new Vector2(0f, y0 + padY);
+                labelRt.anchorMax = new Vector2(labelW, y1 - padY);
+                // -0.3 canvas units left of the grid edge (soft nudge).
+                labelRt.offsetMin = new Vector2(-0.3f, 0f);
                 labelRt.offsetMax = Vector2.zero;
                 labelRt.localScale = Vector3.one;
                 labelRt.localRotation = Quaternion.identity;
@@ -801,7 +823,8 @@ namespace StoreAndCraft
                 label.enabled = true;
                 label.alignment = TextAlignmentOptions.MidlineLeft;
                 label.textWrappingMode = TextWrappingModes.NoWrap;
-                label.overflowMode = TextOverflowModes.Ellipsis;
+                label.overflowMode = TextOverflowModes.Overflow;
+                label.margin = Vector4.zero;
                 label.enableAutoSizing = false;
                 label.fontSize = font;
                 label.color = new Color(1f, 0.92f, 0.55f, 1f);
@@ -856,8 +879,17 @@ namespace StoreAndCraft
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             iconGo.transform.SetParent(cell.transform, false);
             RectTransform iconRt = iconGo.GetComponent<RectTransform>();
-            iconRt.anchorMin = new Vector2(0.00f, 0.10f);
-            iconRt.anchorMax = new Vector2(iconMax, 0.92f);
+            if (_kind == DisplayKind.Small)
+            {
+                // Top: centered icon + count. Bottom: localized item name.
+                iconRt.anchorMin = new Vector2(0.28f, 0.38f);
+                iconRt.anchorMax = new Vector2(0.50f, 0.92f);
+            }
+            else
+            {
+                iconRt.anchorMin = new Vector2(0.00f, 0.10f);
+                iconRt.anchorMax = new Vector2(iconMax, 0.92f);
+            }
             iconRt.offsetMin = Vector2.zero;
             iconRt.offsetMax = Vector2.zero;
             Image icon = iconGo.GetComponent<Image>();
@@ -871,9 +903,18 @@ namespace StoreAndCraft
             textGo.SetActive(true);
             textGo.transform.SetAsLastSibling();
             RectTransform textRt = textGo.GetComponent<RectTransform>();
-            textRt.anchorMin = new Vector2(textMin, 0.08f);
-            textRt.anchorMax = new Vector2(1.00f, 0.92f);
-            textRt.pivot = new Vector2(0f, 0.5f);
+            if (_kind == DisplayKind.Small)
+            {
+                textRt.anchorMin = new Vector2(0.52f, 0.38f);
+                textRt.anchorMax = new Vector2(0.78f, 0.92f);
+                textRt.pivot = new Vector2(0f, 0.5f);
+            }
+            else
+            {
+                textRt.anchorMin = new Vector2(textMin, 0.08f);
+                textRt.anchorMax = new Vector2(1.00f, 0.92f);
+                textRt.pivot = new Vector2(0f, 0.5f);
+            }
             textRt.offsetMin = Vector2.zero;
             textRt.offsetMax = Vector2.zero;
             textRt.anchoredPosition = Vector2.zero;
@@ -894,15 +935,54 @@ namespace StoreAndCraft
             amount.enableAutoSizing = false;
             amount.fontSize = font;
             if (_kind == DisplayKind.Small)
-                amount.fontSize = Mathf.Max(font, template.fontSize * 0.22f);
+                amount.fontSize = Mathf.Max(font, template.fontSize * 0.30f);
             amount.color = new Color(1f, 0.95f, 0.75f, 1f);
             amount.faceColor = new Color32(255, 242, 191, 255);
             amount.outlineWidth = 0f;
             amount.raycastTarget = false;
             amount.text = "";
 
+            TextMeshProUGUI nameLabel = null;
+            if (_kind == DisplayKind.Small)
+            {
+                GameObject nameGo = Object.Instantiate(template.gameObject, cell.transform);
+                nameGo.name = "ItemName";
+                nameGo.SetActive(true);
+                nameGo.transform.SetAsLastSibling();
+                RectTransform nameRt = nameGo.GetComponent<RectTransform>();
+                nameRt.anchorMin = new Vector2(0.08f, 0.04f);
+                nameRt.anchorMax = new Vector2(0.92f, 0.34f);
+                nameRt.pivot = new Vector2(0.5f, 0.5f);
+                nameRt.offsetMin = Vector2.zero;
+                nameRt.offsetMax = Vector2.zero;
+                nameRt.anchoredPosition = Vector2.zero;
+                nameRt.sizeDelta = Vector2.zero;
+                nameRt.localScale = Vector3.one;
+                nameRt.localRotation = Quaternion.identity;
+
+                nameLabel = nameGo.GetComponent<TextMeshProUGUI>();
+                nameLabel.enabled = true;
+                var localizeName = nameGo.GetComponent("Localize") as MonoBehaviour;
+                if (localizeName != null)
+                    Object.Destroy(localizeName);
+                if (template.font != null)
+                    nameLabel.font = template.font;
+                nameLabel.alignment = TextAlignmentOptions.Center;
+                nameLabel.textWrappingMode = TextWrappingModes.NoWrap;
+                nameLabel.overflowMode = TextOverflowModes.Ellipsis;
+                nameLabel.margin = Vector4.zero;
+                nameLabel.enableAutoSizing = false;
+                nameLabel.fontSize = Mathf.Max(font * 0.55f, template.fontSize * 0.16f);
+                nameLabel.color = new Color(1f, 0.92f, 0.55f, 1f);
+                nameLabel.faceColor = new Color32(255, 235, 140, 255);
+                nameLabel.outlineWidth = 0f;
+                nameLabel.raycastTarget = false;
+                nameLabel.text = "";
+            }
+
             _slots[index].Icon = icon;
             _slots[index].Amount = amount;
+            _slots[index].Name = nameLabel;
         }
 
         private void SlotCoord(int index, out int col, out int row)
@@ -1215,6 +1295,7 @@ namespace StoreAndCraft
                     _slots[i].Icon.enabled = _slots[i].Icon.sprite != null;
                     _slots[i].Icon.color = Color.white;
                     SetAmount(i, FormatCount(total));
+                    SetItemName(i, ItemLabel(sample.m_shared != null ? sample.m_shared.m_name : token));
                 }
                 else
                 {
@@ -1310,7 +1391,8 @@ namespace StoreAndCraft
                     if (overflowSlot < _slotCount)
                     {
                         ClearSlot(overflowSlot);
-                        SetAmount(overflowSlot, "+" + (ranked.Count - show),
+                        // Only "+" — same color/font as before, no leftover count.
+                        SetAmount(overflowSlot, "+",
                             new Color(1f, 0.85f, 0.45f, 1f));
                     }
                 }
@@ -1329,8 +1411,9 @@ namespace StoreAndCraft
             int space = label.IndexOf(' ');
             if (space > 0 && label.Length > 10)
                 label = label.Substring(0, space);
-            if (label.Length > 12)
-                label = label.Substring(0, 12);
+            // Allow full single words like WEAPONS / UTILITY / INGREDIENTS.
+            if (label.Length > 14)
+                label = label.Substring(0, 14);
             return label.ToUpperInvariant();
         }
 
@@ -1619,6 +1702,21 @@ namespace StoreAndCraft
                 _slots[i].Icon.sprite = null;
             }
             SetAmount(i, "");
+            SetItemName(i, "");
+        }
+
+        private void SetItemName(int i, string text)
+        {
+            if (_slots == null || i < 0 || i >= _slots.Length)
+                return;
+            TextMeshProUGUI label = _slots[i].Name;
+            if (label == null)
+                return;
+            string next = text ?? "";
+            if (label.text == next)
+                return;
+            label.enabled = true;
+            label.text = next;
         }
 
         private void SetAmount(int i, string text)

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0 — Release
+
+- **Storage Displays:** Small / Medium / Large — Small shows icon, count, and item name; Large dense category bands (up to 12); Food / Ingredients / Epic Loot expandable in the type menu
+- **Shift+build grab:** hold Shift while placing to pull piece costs from nearby chests (no place); restock each click
+- **Pull Stack:** Ctrl + Middle mouse fills the hovered inventory stack from nearby chests
+- **Epic Loot:** supported (chest craft/build pull + displays)
+- **Remote dump (Experimental):** dump can finish via a buddy near matching base chests (`RemoteDumpEnabled`)
+- **Sort:** never packs items into the hotbar
+- **Alt+R:** per-display chest scan range
+- Fixes for Large label layout and Shift+build mats vanishing after grab
+
 ## 1.2.8 — Pre-release hotfix
 
 - **Fix:** Shift+build grab — mats no longer vanish (cancel at `TryPlacePiece` so `ConsumeResources` does not eat the bag right after withdraw)

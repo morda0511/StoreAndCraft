@@ -1,7 +1,7 @@
 # StoreAndCraft
 
 **Your base runs with you.**  
-Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]** — or toggle **auto-fill with B**. Cooking stations can **auto-drop finished food with N** so chests pick it up. Tell each station which wood or ore it’s allowed to take. Storage Displays track your stock by type (pick several at once). Mark favorites with **F**, find a stack with **Y**, sort with **R**, skip a chest with **`[I]`**. Carts and ships count too.
+Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]** — or toggle **auto-fill with B**. Cooking stations can **auto-drop finished food with N** so chests pick it up. Tell each station which wood or ore it’s allowed to take. **Small / Medium / Large Storage Displays** track your stock by type. Mark favorites with **F**, fill a stack with **Ctrl + Middle mouse**, find a stack with **Y**, sort with **R**, skip a chest with **`[I]`**. Carts and ships count too.
 
 **Required on the dedicated / hosted server and every PC client** (same version). Valheim 1.0 · BepInExPack 5.4.2350+. Console players via crossplay cannot load the mod.
 
@@ -23,9 +23,14 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 ### Dump & quick store
 - **`.`** — dump allowed inventory stacks into matching nearby **player-built** chests. If the chest cannot take the whole stack, it fills what fits and leaves the rest.
 - **Middle mouse** (inventory open) — store only the hovered item.
+- **Ctrl + Middle mouse** (inventory open) — **Pull Stack**: fill the hovered stack from matching items in nearby chests.
 - Hotbar can be skipped (`IgnoreHotbar`).
 - Favorites are never dumped / hover-stored (see below).
-- **Remote dump (experimental):** if nothing matches near you, dump can ask a **buddy who is near matching base chests** to finish the store (they must have that area loaded). Toggle `RemoteDumpEnabled` (default on). Cooldown / max stacks in config. Easy kill-switch — set false or remove `Network/RemoteDump.cs` + `BEGIN REMOTE_DUMP` blocks.
+
+### Remote dump (Experimental)
+- If dump finds **no matching chest near you**, it can ask a **buddy who is near matching base chests** to finish the store (they must have that area loaded).
+- Toggle `RemoteDumpEnabled` (default on). Cooldown / max stacks in config.
+- Easy kill-switch: set `RemoteDumpEnabled` to false.
 
 ### Craft & build from chests
 - Recipes and hammer pieces count nearby chest contents.
@@ -33,8 +38,10 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - Craft / upgrade button enables when mats are in **inventory or chests**.
 - Yellow tint on requirement text when part of the count comes from a chest.
 - `LeaveOneItem` (default on): one item stays in each chest so auto-store can keep refilling. That leftover item cannot be spent (craft, build, plant, or station [E]). Turn the setting off if you want to use the last item.
-- **Shift + place:** hold **Shift** while confirming a build to **grab** that piece’s materials from nearby chests into your inventory (nothing is placed).
-- **Epic Loot:** works alongside Epic Loot — craft/enchant chest-pull uses the same requirement path when the station checks mats; Storage Displays soft-match EL reagents/hides.
+- **Shift + place:** hold **Shift** while confirming a build to **grab** that piece’s materials from nearby chests into your inventory (nothing is placed). Each Shift-click can pull another full piece-cost set.
+
+### Epic Loot
+- **Supports Epic Loot** — chest craft/build pull and Storage Displays work with Epic Loot materials and stations.
 
 ### Station refill `[E]`
 Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters, turrets, etc.:
@@ -54,16 +61,20 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - Pair with **B** auto-fill for hands-off cooking / baking (fire under the stone oven still required to cook).
 
 ### Kiln / smelter pull filter
-- Look at a kiln, multi-input smelter, or grill → **Alt+E** (remap in config if needed).
+- Look at a kiln, multi-input smelter, cooking station, or similar → **Alt+E**.
 - Skills-style list with **[+]** / **[-]** toggles.
-- Choose which wood / ore types may be auto-pulled (e.g. turn **Wood** OFF, leave **Core wood** ON).
+- Choose which wood / ore / food types may be auto-pulled (e.g. turn **Wood** OFF, leave **Core wood** ON).
 - Saved per station (ZDO). Manual use from inventory is not blocked for types you hold yourself; auto-select / chest pull respects the filter.
 
 ### Storage Display (Hammer)
-- Build **Small / Medium / Large Storage Display**.
-- **[E]** → type menu (**[+]** / **[-]**). Up to **12 categories** per board (yellow message if you try more).
-- Large: one band per category, labels left, items wrap under the item columns (not under the name). Band height scales with how many categories you pick.
+- Build **Small**, **Medium**, or **Large Storage Display**.
+- **Small:** one item from hotbar (1–8 while looking at it). Shows icon, count, and item name.
+- **Medium / Large:** **[E]** → type menu (**[+]** / **[-]**). Pick several types at once.
+- **Food** and **Ingredients** expand for single items.
+- Up to **12 categories** per Large board (yellow message if you try more).
+- Large: category bands with labels on the left and dense item rows; overflow shows **+** when there are more stacks than fit.
 - Chests named with **`[I]`** are ignored.
+- Place several displays with the same selection next to each other → shared pages `(1/2)`, `(2/2)`, …
 - **Alt+R** → per-display chest scan range (5–50 m).
 
 ### Favorites
@@ -75,7 +86,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 ### Ignore chests
 - Prefix the chest name with **`[I]`** → no auto-store, no craft pull, not counted on displays.
 - Hover text turns **red** so ignored chests are easy to spot.
-- Rename with **Alt+E** (or Shift+E alt-use; remap in config if needed).
+- Rename with **Alt+E** (or Shift+E alt-use).
 
 ### Search
 - Inventory open → hover an item → press **Y**.
@@ -84,7 +95,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 ### Sort
 - Inventory open → **R**.
 - Bag only: sorts your inventory. Open chest: sorts **that chest only** (not both).
-- Favorites and the **hotbar stay put** — sort never packs items into hotbar slots.
+- Favorites stay put. Sort **never moves items into the hotbar** (even when `IgnoreHotbar` is off).
 
 ### Multiplayer
 - Install on **server + all clients**, same version.
@@ -99,15 +110,15 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 |---|---|
 | **.** | Dump inventory into matching nearby chests |
 | **Middle mouse** | Store hovered inventory item (inventory open) |
-| **Ctrl + Middle mouse** | Fill hovered stack from nearby chests |
-| **Alt + E** | Rename looked-at chest **or** open kiln/smelter pull filter |
+| **Ctrl + Middle mouse** | **Pull Stack** — fill hovered stack from nearby chests |
+| **Alt + E** | Rename looked-at chest **or** open station pull filter |
 | **F** | Favorite / unfavorite hovered inventory item |
 | **B** | Toggle auto-fill on the station you are looking at (inventory closed) |
 | **N** | Toggle auto-drop on a cooking spit / iron station / stone oven (inventory closed) |
 | **Y** | Hover an inventory item and press — nearest chest with that item blinks **3×** + map ping |
 | **R** | Sort: bag open = inventory only; chest open = that chest only |
 | **Shift + place** | Grab build materials from chests (do not place) |
-| **Alt + R** | Storage Display range |
+| **Alt + R** | Storage Display range (while looking at a display) |
 
 All hotkeys are configurable in the `.cfg` and stay **local** (not overwritten by server sync).
 
@@ -156,7 +167,9 @@ Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `Lo
 
 ## Storage Display types
 
-**Resources:** Wood · Ore · Metals · Stone · Fuel · Hides · Parts · Crops & Seeds · Raw Food · Gems & Coins · Boss / Rare  
+**Resources:** Wood · Ore · Metals · Stone · Fuel · Hides · Parts · Crops & Seeds · Raw Food · Ingredients · Gems & Coins · Boss / Rare · Other materials  
+
+**Epic Loot (expandable):** Dust · Essence · Reagent · Shard  
 
 **Other:** Food · Fish · Trophy · Ammo · Tools · Weapons · Armor · Utility · Misc  
 
@@ -176,13 +189,16 @@ Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `Lo
 | `LeaveOneItem` | Leave 1 in chest when pulling |
 | `IgnoreHotbar` | Dump skips hotbar row |
 | `AutoStackEnabled` | Compact stacks inside chests (off by default) |
-| `PlayerDumpRange` | Dump / middle-click (m) |
+| `RemoteDumpEnabled` | **Experimental** remote dump via a buddy near base chests |
+| `RemoteDumpCooldown` | Seconds between remote dump attempts |
+| `RemoteDumpMaxStacks` | Max stacks per remote dump batch |
+| `PlayerDumpRange` | Dump / middle-click / pull-stack (m) |
 | `StoreRange` | Auto-store ground items (m) |
 | `StorageRange` | Take-stack / search / displays (m) |
 | `CraftRange` | Craft / build / station `[E]` (m) |
 | `AutoFillRange` | Auto-fill: player → station and player → chests (m). Default 20 |
 | `IntakeInterval` | Seconds between ground-item scans |
-| Hotkeys (`DumpKey`, `FavoriteKey`, `AutoFillKey`, `SortKey`, …) | Local only |
+| Hotkeys (`DumpKey`, `TakeStackKey`, `FavoriteKey`, `AutoFillKey`, `SortKey`, …) | Local only |
 
 **Dedicated:** edit the `.cfg` on the **server**, save — it reloads and syncs. Client gameplay edits are ignored while `LockConfig` is on.
 

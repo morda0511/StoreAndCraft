@@ -27,11 +27,42 @@ namespace StoreAndCraft
         public const int FoodFilterId = 2;
         public const int IngredientsFilterId = 22;
         public const int OtherMaterialsFilterId = 23;
+        public const int BossRareFilterId = 21;
+        public const int GemsCoinsFilterId = 20;
+        public const int UtilityFilterId = 10;
+        public const int MiscFilterId = 5;
+        /// <summary>Menu group only; "All" selects every Epic Loot craft-mat subtype.</summary>
+        public const int EpicLootGroupId = 30;
+        public const int ElDustFilterId = 31;
+        public const int ElEssenceFilterId = 32;
+        public const int ElReagentFilterId = 33;
+        public const int ElShardFilterId = 34;
         public const int MaxCategories = 12;
+
+        public static readonly int[] EpicLootSubFilterIds =
+        {
+            ElDustFilterId, ElEssenceFilterId, ElReagentFilterId, ElShardFilterId
+        };
+
+        private static readonly string[] ElRarities =
+        {
+            "magic", "rare", "epic", "legendary", "mythic"
+        };
 
         public static bool IsExpandable(int filterId)
         {
-            return filterId == FoodFilterId || filterId == IngredientsFilterId;
+            return filterId == FoodFilterId
+                || filterId == IngredientsFilterId
+                || filterId == EpicLootGroupId;
+        }
+
+        /// <summary>Dust/Essence/Reagent/Shard — shown only under Epic Loot expand, not as top-level rows.</summary>
+        public static bool IsEpicLootSubFilter(int filterId)
+        {
+            return filterId == ElDustFilterId
+                || filterId == ElEssenceFilterId
+                || filterId == ElReagentFilterId
+                || filterId == ElShardFilterId;
         }
 
         // Wood
@@ -108,7 +139,8 @@ namespace StoreAndCraft
 
         private static readonly string[] GemNames =
         {
-            "coins", "amber", "amberpearl", "ruby", "silvernecklace"
+            "coins", "amber", "amberpearl", "ruby", "silvernecklace",
+            "foresttoken", "ironbountytoken", "goldbountytoken"
         };
 
         private static readonly string[] BossNames =
@@ -117,6 +149,11 @@ namespace StoreAndCraft
             "yagluthdrop", "vegvisirshard_bonemass", "dvergrkeyfragment", "dvergrextractorkey",
             "mechanicalspring", "blackcore", "seekerchitin", "carapace", "refinedeitr",
             "gemstone_red", "gemstone_blue", "gemstone_green"
+        };
+
+        private static readonly string[] ElUtilityNames =
+        {
+            "leatherbelt", "silverring", "goldrubyring", "andvaranaut"
         };
 
         public static readonly DisplayFilter[] Choices =
@@ -135,7 +172,7 @@ namespace StoreAndCraft
                 ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Consumable),
             Named(20, "Gems & Coins", "Edelsteine & Münzen", GemNames, ItemDrop.ItemData.ItemType.Material),
             Named(21, "Boss / Rare", "Boss / Selten", BossNames, ItemDrop.ItemData.ItemType.Material),
-            // Catch-all for mod materials (Epic Loot reagents, etc.) not in named lists.
+            // Catch-all for leftover mod materials (not Epic Loot craft mats).
             Other(23, "Other materials", "Andere Materialien"),
             // All Food = cooked consumables only (ingredients / raw claimed elsewhere).
             Typed(2, "Food", "Essen", true,
@@ -167,7 +204,18 @@ namespace StoreAndCraft
                 ItemDrop.ItemData.ItemType.Shoulder,
                 ItemDrop.ItemData.ItemType.Trinket),
             Typed(10, "Utility", "Nutzen", false,
-                ItemDrop.ItemData.ItemType.Utility)
+                ItemDrop.ItemData.ItemType.Utility),
+            // Epic Loot at the bottom: parent expands; subs are real categories on the board.
+            Typed(30, "Epic Loot", "Epic Loot", false,
+                ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Misc),
+            Typed(31, "Dust", "Dust", false,
+                ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Misc),
+            Typed(32, "Essence", "Essence", false,
+                ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Misc),
+            Typed(33, "Reagent", "Reagent", false,
+                ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Misc),
+            Typed(34, "Shard", "Shard", false,
+                ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Misc)
         };
 
         private static DisplayFilter Named(int id, string en, string de, string[] names, params ItemDrop.ItemData.ItemType[] types)
@@ -307,10 +355,16 @@ namespace StoreAndCraft
                 return IngredientsFilterId;
             if (Matches(item, FoodFilterId))
                 return FoodFilterId;
+            // Epic Loot subtypes before the Epic Loot "All" group.
+            for (int i = 0; i < EpicLootSubFilterIds.Length; i++)
+            {
+                if (Matches(item, EpicLootSubFilterIds[i]))
+                    return EpicLootSubFilterIds[i];
+            }
             for (int i = 0; i < Choices.Length; i++)
             {
                 int id = Choices[i].Id;
-                if (id == FoodFilterId || id == IngredientsFilterId)
+                if (id == FoodFilterId || id == IngredientsFilterId || IsEpicLootSubFilter(id))
                     continue;
                 if (Matches(item, id))
                     return id;
@@ -420,10 +474,24 @@ namespace StoreAndCraft
             if (filterId == OtherMaterialsFilterId)
                 return MatchesOtherMaterials(item);
 
+            if (filterId == EpicLootGroupId || IsEpicLootSubFilter(filterId))
+                return MatchesEpicLootCraftMat(item, filterId);
+
+            string key = Key(item);
+
+            // Epic Loot items routed into existing vanilla-style categories.
+            if (filterId == BossRareFilterId && SoftElRunestone(key))
+                return true;
+            if (filterId == GemsCoinsFilterId && SoftElToken(key))
+                return true;
+            if (filterId == UtilityFilterId && SoftElUtility(key))
+                return true;
+            if (filterId == MiscFilterId && SoftElUnidentified(key))
+                return true;
+
             if (!TypeAllowed(item.m_shared.m_itemType, found.Types))
                 return false;
 
-            string key = Key(item);
             if (found.Names != null && found.Names.Length > 0)
             {
                 if (NameInList(key, found.Names) || ExtraOreWoodMatch(key, found.Id))
@@ -431,6 +499,10 @@ namespace StoreAndCraft
                 if (found.Id == 16 && SoftHideMatch(key))
                     return true;
                 if (found.Id == 17 && SoftPartsMatch(key))
+                    return true;
+                if (found.Id == GemsCoinsFilterId && SoftElToken(key))
+                    return true;
+                if (found.Id == BossRareFilterId && SoftElRunestone(key))
                     return true;
                 return false;
             }
@@ -451,8 +523,8 @@ namespace StoreAndCraft
                 return false;
 
             string key = Key(item);
-            // Prefer hide/parts soft rules over dumping into Other.
-            if (SoftHideMatch(key) || SoftPartsMatch(key))
+            // Prefer hide/parts / Epic Loot routes over dumping into Other.
+            if (SoftHideMatch(key) || SoftPartsMatch(key) || SoftElRoutedElsewhere(key))
                 return false;
 
             for (int i = 0; i < Choices.Length; i++)
@@ -460,16 +532,36 @@ namespace StoreAndCraft
                 int id = Choices[i].Id;
                 if (id == OtherMaterialsFilterId)
                     continue;
-                if (id == 5 || id == FoodFilterId)
+                if (id == MiscFilterId || id == FoodFilterId)
+                    continue;
+                if (id == EpicLootGroupId)
                     continue;
                 if (Matches(item, id))
                     return false;
             }
 
-            // Epic Loot enchant mats land here deliberately.
-            if (SoftEpicLootMaterial(key))
-                return true;
             return true;
+        }
+
+        private static bool MatchesEpicLootCraftMat(ItemDrop.ItemData item, int filterId)
+        {
+            string key = Key(item);
+            if (filterId == ElDustFilterId)
+                return SoftElTyped(key, "dust");
+            if (filterId == ElEssenceFilterId)
+                return SoftElTyped(key, "essence");
+            if (filterId == ElReagentFilterId)
+                return SoftElTyped(key, "reagent");
+            if (filterId == ElShardFilterId)
+                return SoftElTyped(key, "shard");
+            if (filterId == EpicLootGroupId)
+            {
+                return SoftElTyped(key, "dust")
+                    || SoftElTyped(key, "essence")
+                    || SoftElTyped(key, "reagent")
+                    || SoftElTyped(key, "shard");
+            }
+            return false;
         }
 
         public static bool MatchesAny(ItemDrop.ItemData item, IReadOnlyList<int> filterIds)
@@ -732,6 +824,7 @@ namespace StoreAndCraft
                 || SoftPartsMatch(key)
                 || NameInList(key, GemNames)
                 || NameInList(key, BossNames)
+                || SoftElRoutedElsewhere(key)
                 || ExtraOreWoodMatch(key, 11)
                 || ExtraOreWoodMatch(key, 12);
         }
@@ -773,14 +866,61 @@ namespace StoreAndCraft
                 || key.Contains("bloodbag") || key.Contains("bonefragment");
         }
 
-        /// <summary>Epic Loot enchant mats and similar mod reagents.</summary>
-        public static bool SoftEpicLootMaterial(string key)
+        /// <summary>Epic Loot Dust/Essence/Reagent/Shard prefabs: DustMagic, EssenceRare, …</summary>
+        public static bool SoftElTyped(string key, string typePrefix)
+        {
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(typePrefix))
+                return false;
+            for (int i = 0; i < ElRarities.Length; i++)
+            {
+                if (key == typePrefix + ElRarities[i])
+                    return true;
+            }
+            return false;
+        }
+
+        public static bool SoftElRunestone(string key)
+        {
+            return SoftElTyped(key, "runestone") || SoftElTyped(key, "etchedrunestone");
+        }
+
+        public static bool SoftElToken(string key)
         {
             if (string.IsNullOrEmpty(key))
                 return false;
-            return key.Contains("essence") || key.Contains("reagent") || key.Contains("shard")
-                || key.Contains("dust") || key.Contains("runestone") || key.Contains("magic")
-                || key.Contains("epicloot") || key.Contains("augment");
+            return key == "foresttoken" || key == "ironbountytoken" || key == "goldbountytoken"
+                || key.EndsWith("bountytoken");
+        }
+
+        public static bool SoftElUtility(string key)
+        {
+            return NameInList(key, ElUtilityNames);
+        }
+
+        public static bool SoftElUnidentified(string key)
+        {
+            return !string.IsNullOrEmpty(key) && key.Contains("unidentified");
+        }
+
+        /// <summary>Any Epic Loot item that belongs in a dedicated route (not Other).</summary>
+        public static bool SoftElRoutedElsewhere(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                return false;
+            return SoftElTyped(key, "dust")
+                || SoftElTyped(key, "essence")
+                || SoftElTyped(key, "reagent")
+                || SoftElTyped(key, "shard")
+                || SoftElRunestone(key)
+                || SoftElToken(key)
+                || SoftElUtility(key)
+                || SoftElUnidentified(key);
+        }
+
+        /// <summary>Legacy broad match — prefer SoftElRoutedElsewhere / SoftElTyped.</summary>
+        public static bool SoftEpicLootMaterial(string key)
+        {
+            return SoftElRoutedElsewhere(key);
         }
 
         private static bool NameInList(string key, string[] names)

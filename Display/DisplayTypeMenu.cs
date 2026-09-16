@@ -224,11 +224,26 @@ namespace StoreAndCraft
             {
                 DisplayFilter choice = DisplayFilters.Choices[i];
                 int id = choice.Id;
+                // Dust / Essence / Reagent / Shard only appear under Epic Loot.
+                if (DisplayFilters.IsEpicLootSubFilter(id))
+                    continue;
+
                 bool expandable = DisplayFilters.IsExpandable(id);
                 bool expanded = expandable && Expanded.Contains(id);
                 bool categoryOn = selected.Contains(id);
                 bool anyChildOn = false;
-                if (expandable)
+                if (id == DisplayFilters.EpicLootGroupId)
+                {
+                    for (int s = 0; s < DisplayFilters.EpicLootSubFilterIds.Length; s++)
+                    {
+                        if (selected.Contains(DisplayFilters.EpicLootSubFilterIds[s]))
+                        {
+                            anyChildOn = true;
+                            break;
+                        }
+                    }
+                }
+                else if (expandable)
                 {
                     List<string> subs = DisplayFilters.SubItems(id);
                     for (int s = 0; s < subs.Count; s++)
@@ -250,10 +265,31 @@ namespace StoreAndCraft
                 if (!expanded)
                     continue;
 
-                string allLabel = "    " + (categoryOn ? "[+]" : "[-]") + "  "
+                if (id == DisplayFilters.EpicLootGroupId)
+                {
+                    string allLabel = "    " + (categoryOn ? "[+]" : "[-]") + "  "
+                        + Loc.T("All", "Alle") + " " + choice.Label();
+                    int capturedGroup = id;
+                    AddToggleRow(rowIndex++, () => PickAll(capturedGroup), allLabel, categoryOn);
+
+                    for (int s = 0; s < DisplayFilters.EpicLootSubFilterIds.Length; s++)
+                    {
+                        int subId = DisplayFilters.EpicLootSubFilterIds[s];
+                        DisplayFilter sub;
+                        if (!DisplayFilters.TryGet(subId, out sub))
+                            continue;
+                        bool on = selected.Contains(subId);
+                        string subLabel = "    " + (on ? "[+]" : "[-]") + "  " + sub.Label();
+                        int capturedSub = subId;
+                        AddToggleRow(rowIndex++, () => PickEpicLootSub(capturedSub), subLabel, on);
+                    }
+                    continue;
+                }
+
+                string foodAllLabel = "    " + (categoryOn ? "[+]" : "[-]") + "  "
                     + Loc.T("All", "Alle") + " " + choice.Label();
                 int capturedId = id;
-                AddToggleRow(rowIndex++, () => PickAll(capturedId), allLabel, categoryOn);
+                AddToggleRow(rowIndex++, () => PickAll(capturedId), foodAllLabel, categoryOn);
 
                 List<string> items = DisplayFilters.SubItems(id);
                 for (int s = 0; s < items.Count; s++)
@@ -276,9 +312,19 @@ namespace StoreAndCraft
             if (_skills.m_totalSkillText != null)
             {
                 _skills.m_totalSkillText.text = Loc.T(
-                    "Food / Ingredients: expand for items. All = whole type. Done closes.",
-                    "Essen / Zutaten: aufklappen für Items. Alle = ganzer Typ. Fertig schließt.");
+                    "Food / Ingredients / Epic Loot: expand for subs. Done closes.",
+                    "Essen / Zutaten / Epic Loot: aufklappen für Subs. Fertig schließt.");
             }
+        }
+
+        private static void PickEpicLootSub(int subFilterId)
+        {
+            StorageDisplayBoard board = _board;
+            if (board == null || !DisplayFilters.IsEpicLootSubFilter(subFilterId))
+                return;
+            // ToggleFilter clears Epic Loot "All" so the board band is Dust/Essence/… not the parent.
+            board.ToggleFilter(subFilterId);
+            RebuildRows();
         }
 
         private static void AddToggleRow(int index, UnityEngine.Events.UnityAction action, string label, bool selected)
