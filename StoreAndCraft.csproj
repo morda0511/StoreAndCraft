@@ -10,8 +10,8 @@
     <AssemblyName>StoreAndCraft</AssemblyName>
     <RootNamespace>StoreAndCraft</RootNamespace>
     <Product>StoreAndCraft</Product>
-    <Version>1.3.5-pre</Version>
-    <ModVersion>1.3.5-pre</ModVersion>
+    <Version>1.3.6</Version>
+    <ModVersion>1.3.6</ModVersion>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <DebugType>portable</DebugType>
   </PropertyGroup>
@@ -89,6 +89,7 @@
     <PropertyGroup>
       <DeployDir>$(BepInExDir)\plugins\StoreAndCraft</DeployDir>
       <ThunderstorePackRoot>$(MSBuildThisFileDirectory)thunderstore\StoreAndCraft</ThunderstorePackRoot>
+      <DesktopModPackDir>C:\Users\morda\Desktop\Valheim mods\StoreAndCraft</DesktopModPackDir>
     </PropertyGroup>
     <MakeDir Directories="$(DeployDir)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(DeployDir)" OverwriteReadOnlyFiles="true" />
@@ -97,6 +98,7 @@
   </Target>
   <Target Name="PackThunderstore" AfterTargets="Deploy" Condition="'$(Configuration)' == 'Release'">
     <MakeDir Directories="$(MSBuildThisFileDirectory)thunderstore\packs" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)pack-thunderstore.ps1&quot; -Version &quot;$(ModVersion)&quot; -PackRoot &quot;$(MSBuildThisFileDirectory)thunderstore\StoreAndCraft&quot; -OutputDir &quot;$(MSBuildThisFileDirectory)thunderstore\packs&quot; -PackageName &quot;StoreAndCraft&quot;" />
+    <MakeDir Directories="$(DesktopModPackDir)" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)pack-thunderstore.ps1&quot; -Version &quot;$(ModVersion)&quot; -PackRoot &quot;$(MSBuildThisFileDirectory)thunderstore\StoreAndCraft&quot; -OutputDir &quot;$(DesktopModPackDir)&quot; -PackageName &quot;StoreAndCraft&quot;" />
   </Target>
 </Project>

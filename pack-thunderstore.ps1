@@ -28,30 +28,47 @@ if (-not (Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir | Out-Null
 }
 
-$zipName = "$PackageName-$Version.zip"
-$zipPath = Join-Path $OutputDir $zipName
-if (Test-Path $zipPath) {
-    Remove-Item $zipPath -Force
-}
-
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$zip = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Create)
-try {
-    [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $iconPath, "icon.png")
-    [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $manifestPath, "manifest.json")
-    [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $readmePath, "README.md")
-    if (Test-Path $changelogPath) {
-        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $changelogPath, "CHANGELOG.md")
+function New-ModZip {
+    param(
+        [string]$ZipPath,
+        [string[]]$EntryPaths,
+        [string[]]$EntryNames
+    )
+    if (Test-Path $ZipPath) {
+        Remove-Item $ZipPath -Force
     }
-    [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-        $zip,
-        $pluginDll,
-        "plugins/$PackageName/$PackageName.dll")
-}
-finally {
-    $zip.Dispose()
+    $zip = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        for ($i = 0; $i -lt $EntryPaths.Count; $i++) {
+            if (-not (Test-Path $EntryPaths[$i])) { continue }
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zip, $EntryPaths[$i], $EntryNames[$i])
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+    Write-Host "Pack created: $ZipPath"
 }
 
-Write-Host "Thunderstore pack created: $zipPath"
+$dllEntry = "plugins/$PackageName/$PackageName.dll"
+
+# Thunderstore (manifest + icon)
+$tsZip = Join-Path $OutputDir "$PackageName-$Version.zip"
+New-ModZip -ZipPath $tsZip `
+    -EntryPaths @($iconPath, $manifestPath, $readmePath, $changelogPath, $pluginDll) `
+    -EntryNames @("icon.png", "manifest.json", "README.md", "CHANGELOG.md", $dllEntry)
+
+# Hexium (Thunderstore-compatible layout)
+$hxZip = Join-Path $OutputDir "$PackageName-$Version-Hexium.zip"
+Copy-Item $tsZip $hxZip -Force
+Write-Host "Pack created: $hxZip"
+
+# Nexus / Vortex (no Thunderstore manifest/icon)
+$nxZip = Join-Path $OutputDir "$PackageName-$Version-Nexus.zip"
+New-ModZip -ZipPath $nxZip `
+    -EntryPaths @($readmePath, $changelogPath, $pluginDll) `
+    -EntryNames @("README.md", "CHANGELOG.md", $dllEntry)

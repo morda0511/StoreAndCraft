@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3.5-pre — UI improvements (pre-release)
+## 1.3.6 — UI improvements
 
 - **UI:** Custom rename panel — Ignore / Show-on-display toggles + link grid (embedded PNG assets)
 - **UI:** Station pull-filter menu uses the same link grid chrome; Done on the footer button
