@@ -1222,6 +1222,7 @@ namespace StoreAndCraft
             if (__instance == null)
                 return;
             StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
+            StationLink.PrependHover(ref __result, StationLink.Get(__instance), chest: false);
         }
     }
 

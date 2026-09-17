@@ -27,6 +27,13 @@ namespace StoreAndCraft
         private static readonly List<string> _titleBackup = new List<string>();
         private static readonly List<bool> _titleLocalize = new List<bool>();
         private static bool _closing;
+        private static GameObject _linkGrid;
+        private static Button _footerButton;
+        private static bool _footerButtonAdded;
+        private static readonly List<TMP_Text> _footerTexts = new List<TMP_Text>();
+        private static readonly List<string> _footerTextBackups = new List<string>();
+        private static readonly List<bool> _footerLocalize = new List<bool>();
+        private static readonly List<bool> _footerRaycast = new List<bool>();
 
         public static bool AnySkillsMenuOpen
         {
@@ -100,6 +107,8 @@ namespace StoreAndCraft
                 _suppressMenuFrame = Time.frameCount;
 
                 ClearOurRows();
+                DestroyLinkGrid();
+                UnbindFooterDone();
                 RestoreVanillaRows();
                 RestoreTitle();
 
@@ -186,8 +195,10 @@ namespace StoreAndCraft
             Component station = (Component)_smelter ?? _cook;
             if (station == null)
                 return;
-            StationLink.Set(station, linkId);
-            RebuildRows();
+            // Same id again clears (uncheck).
+            StationLink.Toggle(station, linkId);
+            if (_linkGrid != null)
+                UiLinkGrid.RefreshSelection(_linkGrid, StationLink.Get(station));
         }
 
         private static void AllowAll()
@@ -237,6 +248,289 @@ namespace StoreAndCraft
             _rows.Clear();
         }
 
+        private static void DestroyLinkGrid()
+        {
+            if (_linkGrid != null)
+            {
+                Object.Destroy(_linkGrid);
+                _linkGrid = null;
+            }
+        }
+
+        private static void RefreshLinkGrid()
+        {
+            Component station = (Component)_smelter ?? _cook;
+            int currentLink = StationLink.Get(station);
+            if (_linkGrid == null)
+                BuildLinkGrid(currentLink);
+            else
+                UiLinkGrid.RefreshSelection(_linkGrid, currentLink);
+        }
+
+        private static Transform LinkGridHost()
+        {
+            if (_skills == null)
+                return null;
+            // Same chrome as the bottom "Chest pull filter" label — not the scroll list.
+            if (_skills.m_totalSkillText != null && _skills.m_totalSkillText.transform.parent != null)
+                return _skills.m_totalSkillText.transform.parent;
+            if (_skills.m_listRoot != null && _skills.m_listRoot.parent != null)
+                return _skills.m_listRoot.parent;
+            return _skills.transform;
+        }
+
+        private static void BuildLinkGrid(int currentLink)
+        {
+            DestroyLinkGrid();
+            Transform host = LinkGridHost();
+            if (host == null)
+                return;
+
+            _linkGrid = UiLinkGrid.Build(host, "SAC_StationLinks", currentLink, id => SetLink(id));
+            RectTransform rt = _linkGrid.transform as RectTransform;
+            rt.anchorMin = new Vector2(0f, 0f);
+            rt.anchorMax = new Vector2(0f, 0f);
+            rt.pivot = new Vector2(0f, 0f);
+            // Bottom-left of the parchment, beside the footer label (see mockup).
+            rt.anchoredPosition = new Vector2(14f, 10f);
+            rt.SetAsLastSibling();
+        }
+
+        private static void BindFooterDone()
+        {
+            if (_skills == null)
+                return;
+
+            string done = Loc.T("Done", "Fertig");
+            string title = Loc.T("Chest pull filter", "Truhen-Zug Filter");
+            CollectFooterTexts();
+
+            // Demote every non-header copy of the filter title to Done (bottom button).
+            Transform listRoot = _skills.m_listRoot;
+            TMP_Text header = null;
+            float headerY = float.NegativeInfinity;
+            TMP_Text[] texts = _skills.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TMP_Text tmp = texts[i];
+                if (tmp == null)
+                    continue;
+                if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
+                    continue;
+                if (tmp.text != title && !_titleTexts.Contains(tmp))
+                    continue;
+                float y = tmp.transform.position.y;
+                if (y > headerY)
+                {
+                    headerY = y;
+                    header = tmp;
+                }
+            }
+
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TMP_Text tmp = texts[i];
+                if (tmp == null || tmp == header)
+                    continue;
+                if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
+                    continue;
+                bool match = tmp == _skills.m_totalSkillText
+                    || tmp.text == title
+                    || IsFooterText(tmp, listRoot);
+                if (!match)
+                    continue;
+                if (!_footerTexts.Contains(tmp))
+                {
+                    Component localize = tmp.GetComponent("Localize");
+                    bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
+                    if (hadLocalize)
+                        ((MonoBehaviour)localize).enabled = false;
+                    _footerTexts.Add(tmp);
+                    _footerTextBackups.Add(tmp.text ?? "");
+                    _footerLocalize.Add(hadLocalize);
+                    _footerRaycast.Add(tmp.raycastTarget);
+                }
+            }
+
+            for (int i = 0; i < _footerTexts.Count; i++)
+            {
+                TMP_Text tmp = _footerTexts[i];
+                if (tmp == null || tmp == header)
+                    continue;
+                tmp.text = done;
+            }
+
+            TMP_Text primary = null;
+            for (int i = 0; i < _footerTexts.Count; i++)
+            {
+                if (_footerTexts[i] != null && _footerTexts[i] != header)
+                {
+                    primary = _footerTexts[i];
+                    break;
+                }
+            }
+            if (primary == null)
+                primary = _skills.m_totalSkillText;
+            if (primary == null)
+                return;
+
+            if (_footerButton == null)
+            {
+                _footerButton = primary.GetComponentInParent<Button>();
+                if (_footerButton == null)
+                {
+                    primary.raycastTarget = true;
+                    _footerButton = primary.gameObject.GetComponent<Button>();
+                    if (_footerButton == null)
+                    {
+                        _footerButton = primary.gameObject.AddComponent<Button>();
+                        _footerButton.transition = Selectable.Transition.None;
+                        _footerButtonAdded = true;
+                    }
+                }
+            }
+
+            _footerButton.onClick.RemoveListener(OnFooterDone);
+            _footerButton.onClick.AddListener(OnFooterDone);
+
+            UIInputHandler input = _footerButton.GetComponent<UIInputHandler>()
+                ?? _footerButton.GetComponentInChildren<UIInputHandler>(true)
+                ?? primary.GetComponentInParent<UIInputHandler>();
+            if (input != null)
+                input.m_onLeftClick = go => OnFooterDone();
+        }
+
+        private static void CollectFooterTexts()
+        {
+            if (_footerTexts.Count > 0 || _skills == null)
+                return;
+
+            Transform listRoot = _skills.m_listRoot;
+            TMP_Text[] texts = _skills.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TMP_Text tmp = texts[i];
+                if (tmp == null || !IsFooterText(tmp, listRoot))
+                    continue;
+
+                Component localize = tmp.GetComponent("Localize");
+                bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
+                if (hadLocalize)
+                    ((MonoBehaviour)localize).enabled = false;
+
+                _footerTexts.Add(tmp);
+                _footerTextBackups.Add(tmp.text ?? "");
+                _footerLocalize.Add(hadLocalize);
+                _footerRaycast.Add(tmp.raycastTarget);
+            }
+
+            // Always include total skill text even if heuristics miss it.
+            if (_skills.m_totalSkillText != null && !_footerTexts.Contains(_skills.m_totalSkillText))
+            {
+                TMP_Text tmp = _skills.m_totalSkillText;
+                Component localize = tmp.GetComponent("Localize");
+                bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
+                if (hadLocalize)
+                    ((MonoBehaviour)localize).enabled = false;
+                _footerTexts.Add(tmp);
+                _footerTextBackups.Add(tmp.text ?? "");
+                _footerLocalize.Add(hadLocalize);
+                _footerRaycast.Add(tmp.raycastTarget);
+            }
+        }
+
+        private static bool IsFooterText(TMP_Text tmp, Transform listRoot)
+        {
+            if (tmp == null)
+                return false;
+            if (_skills != null && tmp == _skills.m_totalSkillText)
+                return true;
+            if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
+                return false;
+
+            RectTransform rt = tmp.rectTransform;
+            if (rt != null && rt.anchorMax.y <= 0.35f && rt.anchorMin.y <= 0.35f)
+                return true;
+
+            string n = tmp.gameObject.name.ToLowerInvariant();
+            if (n.Contains("total") || n.Contains("ok") || n.Contains("close") || n.Contains("done"))
+                return true;
+
+            // World-space: anything in the bottom band of the skills panel (the brown Done button).
+            if (IsInBottomBand(tmp))
+                return true;
+
+            return false;
+        }
+
+        private static bool IsInBottomBand(TMP_Text tmp)
+        {
+            if (_skills == null || tmp == null)
+                return false;
+            RectTransform skillsRt = _skills.transform as RectTransform;
+            RectTransform rt = tmp.rectTransform;
+            if (skillsRt == null || rt == null)
+                return false;
+
+            Vector3[] sc = new Vector3[4];
+            Vector3[] tc = new Vector3[4];
+            skillsRt.GetWorldCorners(sc);
+            rt.GetWorldCorners(tc);
+            float midY = (tc[0].y + tc[1].y) * 0.5f;
+            float bottom = sc[0].y;
+            float top = sc[1].y;
+            float span = top - bottom;
+            if (span < 0.01f)
+                return false;
+            float t = (midY - bottom) / span;
+            return t < 0.30f;
+        }
+
+        private static void OnFooterDone()
+        {
+            Close();
+        }
+
+        private static void UnbindFooterDone()
+        {
+            if (_footerButton != null)
+            {
+                _footerButton.onClick.RemoveListener(OnFooterDone);
+                UIInputHandler input = _footerButton.GetComponent<UIInputHandler>()
+                    ?? _footerButton.GetComponentInChildren<UIInputHandler>(true);
+                if (input != null)
+                    input.m_onLeftClick = null;
+
+                if (_footerButtonAdded)
+                {
+                    Object.Destroy(_footerButton);
+                    _footerButtonAdded = false;
+                }
+                _footerButton = null;
+            }
+
+            for (int i = 0; i < _footerTexts.Count; i++)
+            {
+                TMP_Text tmp = _footerTexts[i];
+                if (tmp == null)
+                    continue;
+                if (i < _footerTextBackups.Count)
+                    tmp.text = _footerTextBackups[i];
+                if (i < _footerRaycast.Count)
+                    tmp.raycastTarget = _footerRaycast[i];
+                if (i < _footerLocalize.Count && _footerLocalize[i])
+                {
+                    Component localize = tmp.GetComponent("Localize");
+                    if (localize is MonoBehaviour mb)
+                        mb.enabled = true;
+                }
+            }
+            _footerTexts.Clear();
+            _footerTextBackups.Clear();
+            _footerLocalize.Clear();
+            _footerRaycast.Clear();
+        }
+
         private static void RebuildRows()
         {
             if (_skills == null || _skills.m_elementPrefab == null || _skills.m_listRoot == null)
@@ -247,23 +541,9 @@ namespace StoreAndCraft
                 ? StationPullFilter.FoodChoices(_cook)
                 : (_smelter != null ? StationPullFilter.OreChoices(_smelter) : new List<string>());
 
-            Component station = (Component)_smelter ?? _cook;
-            int currentLink = StationLink.Get(station);
-            // Link none + link1..9 + ore/food rows + Allow all + Done
-            int linkRows = StationLink.MaxId + 1;
-            int count = linkRows + choices.Count + 2;
+            // Ore/food rows + Allow all. Footer button is Done; link grid sits beside it.
+            int count = choices.Count + 1;
             int rowIndex = 0;
-
-            for (int link = 0; link <= StationLink.MaxId; link++)
-            {
-                GameObject row = SpawnRow(rowIndex++);
-                bool on = currentLink == link;
-                string mark = on ? "[+]" : "[-]";
-                string label = mark + "  " + StationLink.Label(link);
-                int captured = link;
-                BindLinkRow(row, label, on, () => SetLink(captured));
-                _rows.Add(row);
-            }
 
             for (int i = 0; i < choices.Count; i++)
             {
@@ -283,21 +563,12 @@ namespace StoreAndCraft
                 BindActionRow(row, Loc.T("Allow all inputs", "Alle Inputs erlauben"), AllowAll);
                 _rows.Add(row);
             }
-            {
-                GameObject row = SpawnRow(rowIndex++);
-                BindActionRow(row, Loc.T("Done", "Fertig"), Close);
-                _rows.Add(row);
-            }
 
             float height = Mathf.Max(_skills.m_listRoot.rect.height, count * _skills.m_spacing);
             _skills.m_listRoot.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
 
-            if (_skills.m_totalSkillText != null)
-            {
-                _skills.m_totalSkillText.text = Loc.T(
-                    "Link 1-9 = only chests named [linkN]. Link none = untagged chests. Then input toggles.",
-                    "Link 1-9 = nur Kisten mit [linkN]. Link keiner = Kisten ohne Tag. Dann Input-Toggles.");
-            }
+            RefreshLinkGrid();
+            BindFooterDone();
         }
 
         private static GameObject SpawnRow(int index)
@@ -312,23 +583,6 @@ namespace StoreAndCraft
             if (rt != null)
                 rt.anchoredPosition = new Vector2(0f, -index * _skills.m_spacing);
             return row;
-        }
-
-        private static void BindLinkRow(GameObject row, string label, bool on, UnityEngine.Events.UnityAction action)
-        {
-            Transform t = row.transform;
-            Color color = on ? new Color(0.35f, 0.85f, 1f, 1f) : new Color(0.75f, 0.75f, 0.8f, 1f);
-            SetChildText(t, "name", label, color);
-            SetChildText(t, "leveltext", on ? "ON" : "", color);
-            StripSkillChrome(t);
-
-            Button button = EnsureButton(row);
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(action);
-
-            UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
-            if (input != null)
-                input.m_onLeftClick = go => action();
         }
 
         private static void BindToggleRow(GameObject row, string shared, string label, bool allowed)
@@ -453,7 +707,7 @@ namespace StoreAndCraft
             for (int i = 0; i < texts.Length; i++)
             {
                 TMP_Text tmp = texts[i];
-                if (tmp == null || tmp == _skills.m_totalSkillText)
+                if (tmp == null || IsFooterText(tmp, listRoot))
                     continue;
                 if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
                     continue;

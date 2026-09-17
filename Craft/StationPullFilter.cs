@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using HarmonyLib;
 using UnityEngine;
 
 namespace StoreAndCraft
@@ -132,27 +133,23 @@ namespace StoreAndCraft
         {
             if (smelter == null)
                 return;
-            AppendFilterLine(ref text, smelter);
+            AppendFilterLine(ref text);
+            StationLink.PrependHover(ref text, StationLink.Get(smelter), chest: false);
         }
 
         public static void AppendFilterHover(ref string text, CookingStation cook)
         {
             if (cook == null)
                 return;
-            AppendFilterLine(ref text, cook);
+            AppendFilterLine(ref text);
+            StationLink.PrependHover(ref text, StationLink.Get(cook), chest: false);
         }
 
-        private static void AppendFilterLine(ref string text, Component station)
+        private static void AppendFilterLine(ref string text)
         {
             string key = PromptLabel();
             text += "\n[<color=yellow><b>" + key + "</b></color>] "
                 + Loc.T("Chest pull filter", "Truhen-Zug Filter");
-            int link = StationLink.Get(station);
-            if (link > 0)
-            {
-                text += "\n" + Loc.T("Station link", "Stations-Link") + ": "
-                    + "<color=cyan>[link" + link + "]</color>";
-            }
         }
 
         public static bool TryOpen(bool warnIfMissing = true)
@@ -285,6 +282,29 @@ namespace StoreAndCraft
                 sb.Append(s);
             }
             return sb.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Alt+E (RenameKey) opens the chest-pull filter via Hotkeys, but vanilla still
+    /// fires Switch.Interact on E and inserts wood. Block that while the chord modifiers are held.
+    /// </summary>
+    [HarmonyPatch(typeof(Switch), nameof(Switch.Interact))]
+    internal static class SwitchInteractBlockFilterChordPatch
+    {
+        private static bool Prefix(Switch __instance, Humanoid character, bool hold)
+        {
+            if (hold || character != Player.m_localPlayer || __instance == null)
+                return true;
+            if (!ChestRename.BlocksStationUse())
+                return true;
+
+            if (__instance.GetComponentInParent<Smelter>() != null)
+                return false;
+            if (__instance.GetComponentInParent<CookingStation>() != null)
+                return false;
+
+            return true;
         }
     }
 }

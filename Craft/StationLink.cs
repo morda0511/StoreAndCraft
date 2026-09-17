@@ -3,11 +3,9 @@ using UnityEngine;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Optional chest↔station channels [link1]…[link9].
-    /// Station: pick Link in Alt+E filter menu (ZDO).
-    /// Chest: put [linkN] in the rename label (same as [I]/[H]).
-    /// Station Link N only pulls chests tagged [linkN].
-    /// Station with no link only pulls chests that have no [linkN] tag.
+    /// Optional chest↔station channels [l1]…[l9] (lowercase L).
+    /// Station: toggle in Alt+E filter (3×3). Chest: tag in rename label.
+    /// Legacy [link1]…[link9] still parsed.
     /// </summary>
     internal static class StationLink
     {
@@ -17,16 +15,44 @@ namespace StoreAndCraft
         /// <summary>
         /// Pull context: -1 = no link filter (craft / EL / default).
         /// 0 = station with no link (untagged chests only).
-        /// 1–9 = only matching [linkN] chests.
+        /// 1–9 = only matching [lN] chests.
         /// </summary>
         public static int ActiveId { get; private set; } = -1;
+
+        // Bright colors — no red / orange (those are [I] / [H]).
+        private static readonly string[] ColorHex =
+        {
+            null,
+            "#5CDBFF", // 1 cyan
+            "#7CFF6B", // 2 green
+            "#FFE66D", // 3 yellow
+            "#C77DFF", // 4 purple
+            "#FF6BCB", // 5 pink
+            "#6BFFD1", // 6 mint
+            "#6B9FFF", // 7 blue
+            "#B8FF6B", // 8 lime
+            "#E8B8FF"  // 9 lilac
+        };
+
+        private static readonly Color[] ColorRgb =
+        {
+            Color.white,
+            Hex(0x5CDBFF),
+            Hex(0x7CFF6B),
+            Hex(0xFFE66D),
+            Hex(0xC77DFF),
+            Hex(0xFF6BCB),
+            Hex(0x6BFFD1),
+            Hex(0x6B9FFF),
+            Hex(0xB8FF6B),
+            Hex(0xE8B8FF)
+        };
 
         public static void Push(int linkId)
         {
             ActiveId = Clamp(linkId);
         }
 
-        /// <summary>Enter station pull context (0–9). Use for autofill / [E].</summary>
         public static void PushStation(Component station)
         {
             ActiveId = Get(station);
@@ -73,8 +99,21 @@ namespace StoreAndCraft
             nv.GetZDO().Set(ZdoKey, Clamp(linkId));
         }
 
+        /// <summary>Toggle: same id again clears to none.</summary>
+        public static void Toggle(Component station, int linkId)
+        {
+            linkId = Clamp(linkId);
+            if (linkId <= 0)
+            {
+                Set(station, 0);
+                return;
+            }
+
+            Set(station, Get(station) == linkId ? 0 : linkId);
+        }
+
         /// <summary>
-        /// First [link1]…[link9] in the label (case-insensitive). 0 if none.
+        /// First [l1]…[l9] or legacy [link1]…[link9] in the label. 0 if none.
         /// </summary>
         public static int ParseFromName(string stored)
         {
@@ -86,21 +125,25 @@ namespace StoreAndCraft
             {
                 if (s[i] != '[')
                     continue;
-                if (i + 6 >= s.Length)
-                    break;
 
-                // [linkN]
+                // [lN]
+                if (i + 3 < s.Length
+                    && (s[i + 1] == 'l' || s[i + 1] == 'L')
+                    && s[i + 2] >= '1' && s[i + 2] <= '9'
+                    && s[i + 3] == ']')
+                {
+                    return s[i + 2] - '0';
+                }
+
+                // Legacy [linkN]
                 if (!StartsWithIgnoreCase(s, i + 1, "link"))
                     continue;
                 int digitAt = i + 5;
-                if (digitAt >= s.Length)
+                if (digitAt + 1 >= s.Length)
                     continue;
                 char d = s[digitAt];
-                if (d < '1' || d > '9')
+                if (d < '1' || d > '9' || s[digitAt + 1] != ']')
                     continue;
-                if (digitAt + 1 >= s.Length || s[digitAt + 1] != ']')
-                    continue;
-                // Reject [link10] etc.: digit must be followed by ].
                 return d - '0';
             }
 
@@ -112,10 +155,6 @@ namespace StoreAndCraft
             return ParseFromName(ChestNames.Get(chest));
         }
 
-        /// <summary>
-        /// Whether this chest may feed the given station link context.
-        /// linkId &lt; 0: any non-ignored chest. 0: untagged only. 1–9: matching tag only.
-        /// </summary>
         public static bool ChestAllowed(Container chest, int stationLinkId)
         {
             if (chest == null || ChestNames.IsIgnored(chest))
@@ -137,20 +176,147 @@ namespace StoreAndCraft
             return ChestAllowed(chest, ActiveId);
         }
 
+        /// <summary>Short token without brackets, e.g. l3.</summary>
+        public static string ShortToken(int linkId)
+        {
+            linkId = Clamp(linkId);
+            if (linkId <= 0)
+                return Loc.T("none", "keiner");
+            return "l" + linkId;
+        }
+
+        /// <summary>Bracket tag for names / hover, e.g. [l3].</summary>
+        public static string Tag(int linkId)
+        {
+            linkId = Clamp(linkId);
+            if (linkId <= 0)
+                return "";
+            return "[l" + linkId + "]";
+        }
+
+        /// <summary>Put colored link line above the rest of the hover text.</summary>
+        public static void PrependHover(ref string text, int linkId, bool chest)
+        {
+            linkId = Clamp(linkId);
+            if (linkId <= 0 || string.IsNullOrEmpty(text))
+                return;
+
+            string line = Loc.T("Link: ", "Link: ") + linkId;
+            text = Colorize(linkId, line) + "\n" + text;
+        }
+
+        /// <summary>Remove [lN] / legacy [linkN] tags from a chest label.</summary>
+        public static string StripTags(string stored)
+        {
+            if (string.IsNullOrEmpty(stored))
+                return string.Empty;
+
+            var sb = new System.Text.StringBuilder(stored.Length);
+            for (int i = 0; i < stored.Length; i++)
+            {
+                if (stored[i] != '[')
+                {
+                    sb.Append(stored[i]);
+                    continue;
+                }
+
+                // [lN]
+                if (i + 3 < stored.Length
+                    && (stored[i + 1] == 'l' || stored[i + 1] == 'L')
+                    && stored[i + 2] >= '1' && stored[i + 2] <= '9'
+                    && stored[i + 3] == ']')
+                {
+                    i += 3;
+                    continue;
+                }
+
+                // [linkN]
+                if (StartsWithIgnoreCase(stored, i + 1, "link")
+                    && i + 6 < stored.Length
+                    && stored[i + 5] >= '1' && stored[i + 5] <= '9'
+                    && stored[i + 6] == ']')
+                {
+                    i += 6;
+                    continue;
+                }
+
+                sb.Append(stored[i]);
+            }
+
+            return sb.ToString().Trim();
+        }
+
+        /// <summary>
+        /// Set or clear link tag in a chest name. Same id again clears. Keeps [I]/[H] and the rest.
+        /// </summary>
+        public static string ApplyToName(string stored, int linkId)
+        {
+            linkId = Clamp(linkId);
+            int current = ParseFromName(stored);
+            if (linkId > 0 && current == linkId)
+                linkId = 0;
+
+            string prefix = "";
+            string work;
+            string trimmed = (stored ?? "").TrimStart();
+            if (trimmed.StartsWith("[I]", System.StringComparison.OrdinalIgnoreCase))
+            {
+                prefix = "[I] ";
+                work = StripTags(trimmed.Substring(3)).TrimStart();
+            }
+            else if (trimmed.StartsWith("[H]", System.StringComparison.OrdinalIgnoreCase))
+            {
+                prefix = "[H] ";
+                work = StripTags(trimmed.Substring(3)).TrimStart();
+            }
+            else
+            {
+                work = StripTags(stored);
+            }
+
+            if (linkId <= 0)
+                return (prefix + work).Trim();
+
+            return (prefix + Tag(linkId) + (string.IsNullOrEmpty(work) ? "" : " " + work)).Trim();
+        }
+
+        public static string HexColor(int linkId)
+        {
+            linkId = Clamp(linkId);
+            if (linkId <= 0 || linkId >= ColorHex.Length)
+                return "#FFFFFF";
+            return ColorHex[linkId];
+        }
+
+        public static Color UiColor(int linkId)
+        {
+            linkId = Clamp(linkId);
+            if (linkId <= 0 || linkId >= ColorRgb.Length)
+                return new Color(0.75f, 0.75f, 0.8f, 1f);
+            return ColorRgb[linkId];
+        }
+
+        public static string Colorize(int linkId, string inner)
+        {
+            if (string.IsNullOrEmpty(inner) || linkId <= 0)
+                return inner;
+            return "<color=" + HexColor(linkId) + ">" + inner + "</color>";
+        }
+
         public static string Label(int linkId)
         {
             linkId = Clamp(linkId);
             if (linkId == 0)
-                return Loc.T("Link: none", "Link: keiner");
-            return Loc.T("Link " + linkId, "Link " + linkId);
+                return Loc.T("l: none", "l: keiner");
+            return ShortToken(linkId);
         }
 
-        public static string HoverSuffix(int linkId)
+        private static Color Hex(int rgb)
         {
-            linkId = Clamp(linkId);
-            if (linkId <= 0)
-                return null;
-            return "[link" + linkId + "]";
+            float r = ((rgb >> 16) & 0xFF) / 255f;
+            float g = ((rgb >> 8) & 0xFF) / 255f;
+            float b = (rgb & 0xFF) / 255f;
+            return new Color(r, g, b, 1f);
         }
 
         private static bool StartsWithIgnoreCase(string s, int index, string token)

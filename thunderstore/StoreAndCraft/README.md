@@ -82,7 +82,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 ### Ignore / hide chests
 - Prefix **`[I]`** → fully ignored: no auto-store, no craft pull, not counted on displays (hover text **red**).
 - Prefix **`[H]`** → hidden from dump / auto-store / craft / auto-fill, but **still counted on Storage Displays** (and searchable). Example: `[H] Food`. Hover text **orange**.
-- Tag **`[link1]`…`[link9]`** in the chest name → only stations with that **Link** (Alt+E on kiln/smelter/cook) pull from it. Station **Link: none** uses untagged chests only. Example: chest `[link2] Wood`, kiln set to Link 2.
+- Tag **`[l1]`…`[l9]`** (small L) in the chest name → only stations with that link (Alt+E → 3×3 on kiln/smelter/cook) pull from it. Station **l: none** = untagged chests only. Example: `[l2] Wood`. Same bright color on chest + station hover (not red/orange).
 - Rename with **Alt+E** (or Shift+E alt-use).
 
 ### Search

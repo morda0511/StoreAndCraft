@@ -61,6 +61,7 @@ namespace StoreAndCraft
                 return false;
 
             TextInput.instance.RequestText(receiver, "Rename chest", ChestNames.MaxLength);
+            ChestRenameLinkBar.Show(container);
             return true;
         }
 
@@ -70,6 +71,33 @@ namespace StoreAndCraft
                 return "Alt+E";
             string label = KeyUtil.Format(Plugin.Settings.RenameKey.Value);
             return string.IsNullOrEmpty(label) ? "Shift+E" : label;
+        }
+
+        /// <summary>
+        /// True while RenameKey modifiers are held (e.g. Alt for Alt+E).
+        /// Used to block kiln/smelter [E] add so the filter chord does not also insert wood.
+        /// </summary>
+        public static bool BlocksStationUse()
+        {
+            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
+                return false;
+
+            KeyboardShortcut shortcut = Plugin.Settings.RenameKey.Value;
+            if (shortcut.MainKey == KeyCode.None)
+                return false;
+
+            bool hasModifier = false;
+            foreach (KeyCode unused in shortcut.Modifiers)
+            {
+                hasModifier = true;
+                break;
+            }
+
+            // Alone-E as rename key must not suppress every station interact.
+            if (!hasModifier)
+                return false;
+
+            return KeyUtil.ModifiersHeld(shortcut);
         }
     }
 }

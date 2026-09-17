@@ -1,8 +1,16 @@
 # Changelog
 
+## 1.3.5-pre — UI improvements (pre-release)
+
+- **UI:** Custom rename panel — Ignore / Show-on-display toggles + link grid (embedded PNG assets)
+- **UI:** Station pull-filter menu uses the same link grid chrome; Done on the footer button
+- **Hover:** Chest status lines (Ignore / Display ✓ / Link: N); station hover shows Link: N
+- **Logic:** Ignore and link are mutually exclusive (Ignore clears link; links dim while Ignore is on)
+- **Fix:** Dump after raids — refresh chest inventory before deposit so “Stored” / ping match reality
+
 ## 1.3.4-test — Pre-release
 
-- **Feature (test):** Station **Link 1–9** in Alt+E filter menu (kiln / smelter / cook). Chests tagged `[linkN]` in their rename label only feed stations with that link. Station **Link: none** uses untagged chests only. Craft / build / Epic Loot unchanged (all chests except `[I]`/`[H]`).
+- **Feature (test):** Station links **l1–l9** (Alt+E, 3×3 toggles on kiln/smelter/cook). Chests tagged `[lN]` (legacy `[linkN]` still works). **l: none** = untagged chests only. Bright per-link colors on chest + station hover (not red/orange). Craft / build / Epic Loot unchanged.
 
 ## 1.3.3 — Hotfix
 

@@ -19,6 +19,12 @@ namespace StoreAndCraft
                 return;
 
             NearbyIndex.Tick();
+            // One-shot user action: force-Load every chest in dump range so we do not
+            // trust a stale/empty view after returning from a raid / unloaded area.
+            float range = Plugin.Settings.PlayerDumpRange.Value;
+            foreach (Container nearby in NearbyIndex.Within(player.transform.position, range))
+                NearbyIndex.EnsureInventory(nearby, force: true);
+
             var items = new List<ItemDrop.ItemData>(inv.GetAllItems());
             int stored = 0;
             var leftovers = new List<ItemDrop.ItemData>();
@@ -46,7 +52,9 @@ namespace StoreAndCraft
                     continue;
                 }
 
-                if (TransferService.StoreItem(chest, inv, item, fit))
+                int stackBefore = item.m_stack;
+                if (TransferService.StoreItem(chest, inv, item, fit)
+                    && (!inv.ContainsItem(item) || item.m_stack < stackBefore))
                     stored++;
                 else
                     leftovers.Add(item);
@@ -81,6 +89,10 @@ namespace StoreAndCraft
             }
 
             NearbyIndex.Tick();
+            float range = Plugin.Settings.PlayerDumpRange.Value;
+            foreach (Container nearby in NearbyIndex.Within(player.transform.position, range))
+                NearbyIndex.EnsureInventory(nearby, force: true);
+
             Container chest = ChestPicker.FindStoreTarget(
                 player.transform.position,
                 item,

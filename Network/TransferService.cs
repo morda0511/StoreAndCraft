@@ -64,11 +64,20 @@ namespace StoreAndCraft
             if (!ContainerFilter.IsPlayerBuiltStorage(chest))
                 return false;
 
-            // Already owner: write locally. Otherwise RPC the owner — do NOT ClaimOwnership
-            // (stealing ownership closes the chest for whoever has it open).
-            if (IsChestOwner(chest))
-                return DepositLocal(chest, from, item, amount);
+            // Prefer a real local deposit: after travel / unload the client inventory view
+            // is often empty or stale. Remote Deposit then "succeeds" (items removed + RPC)
+            // and the owner refunds — TopLeft says stored, bag still has items, no ping.
+            ZNetView nv = Refs.View(chest);
+            if (nv != null && nv.IsValid() && !nv.IsOwner() && !chest.IsInUse())
+                nv.ClaimOwnership();
 
+            if (IsChestOwner(chest))
+            {
+                ContainerFilter.RefreshInventory(chest);
+                return DepositLocal(chest, from, item, amount);
+            }
+
+            NearbyIndex.EnsureInventory(chest, force: true);
             return DepositRemote(chest, from, item, amount);
         }
 
@@ -565,15 +574,16 @@ namespace StoreAndCraft
             if (take <= 0)
                 return false;
 
-            // Best-effort room check on our view of the chest. Owner re-checks and refunds.
+            // Always re-check room on a fresh Load — stale empty views caused false deposits.
+            NearbyIndex.EnsureInventory(chest, force: true);
             Inventory chestInv = chest.GetInventory();
-            if (chestInv != null)
-            {
-                int fit = ChestPicker.AmountThatFits(chestInv, item);
-                take = Mathf.Min(take, fit);
-                if (take <= 0)
-                    return false;
-            }
+            if (chestInv == null)
+                return false;
+
+            int fit = ChestPicker.AmountThatFits(chestInv, item);
+            take = Mathf.Min(take, fit);
+            if (take <= 0)
+                return false;
 
             string prefabName = ItemIds.PrefabName(item) ?? ItemIds.SharedName(item) ?? "";
             if (string.IsNullOrEmpty(prefabName))
@@ -604,6 +614,8 @@ namespace StoreAndCraft
             }
 
             nv.InvokeRPC(RpcDeposit, pkg);
+            // Visual feedback only when we actually handed items off (owner may still refund).
+            Highlight(chest);
             return true;
         }
 
@@ -685,6 +697,9 @@ namespace StoreAndCraft
 
         private static bool DepositLocal(Container chest, Inventory from, ItemDrop.ItemData item, int amount)
         {
+            // Fresh ZDO Load — stale in-memory inventories after leaving the area were the
+            // main "Stored N stacks" / items still in bag / no ping bug.
+            ContainerFilter.RefreshInventory(chest);
             Inventory inv = chest.GetInventory();
             if (inv == null || item == null || item.m_shared == null)
                 return false;

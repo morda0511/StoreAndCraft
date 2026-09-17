@@ -10,8 +10,8 @@
     <AssemblyName>StoreAndCraft</AssemblyName>
     <RootNamespace>StoreAndCraft</RootNamespace>
     <Product>StoreAndCraft</Product>
-    <Version>1.3.4-test</Version>
-    <ModVersion>1.3.4-test</ModVersion>
+    <Version>1.3.5-pre</Version>
+    <ModVersion>1.3.5-pre</ModVersion>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <DebugType>portable</DebugType>
   </PropertyGroup>
@@ -20,6 +20,10 @@
     <Compile Remove="Server\**" />
     <EmbeddedResource Remove="Server\**" />
     <None Remove="Server\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Content\UI\*.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -84,20 +88,12 @@
   <Target Name="Deploy" AfterTargets="Build">
     <PropertyGroup>
       <DeployDir>$(BepInExDir)\plugins\StoreAndCraft</DeployDir>
-      <DeployDirAlt>$(USERPROFILE)\AppData\Roaming\Thunderstore Mod Manager\DataFolder\Valheim\profiles\Forged By The Ancients Storage Test\BepInEx\plugins\StoreAndCraft</DeployDirAlt>
       <ThunderstorePackRoot>$(MSBuildThisFileDirectory)thunderstore\StoreAndCraft</ThunderstorePackRoot>
     </PropertyGroup>
     <MakeDir Directories="$(DeployDir)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(DeployDir)" OverwriteReadOnlyFiles="true" />
-    <MakeDir Directories="$(DeployDirAlt)" Condition="Exists('$(USERPROFILE)\AppData\Roaming\Thunderstore Mod Manager\DataFolder\Valheim\profiles\Forged By The Ancients Storage Test\BepInEx\plugins')" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(DeployDirAlt)" OverwriteReadOnlyFiles="true" Condition="Exists('$(USERPROFILE)\AppData\Roaming\Thunderstore Mod Manager\DataFolder\Valheim\profiles\Forged By The Ancients Storage Test\BepInEx\plugins')" />
     <MakeDir Directories="$(ThunderstorePackRoot)\plugins\StoreAndCraft" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ThunderstorePackRoot)\plugins\StoreAndCraft" OverwriteReadOnlyFiles="true" />
-    <PropertyGroup>
-      <DedicatedPluginDir>D:\SteamLibrary\steamapps\common\Valheim dedicated server\BepInEx\plugins\StoreAndCraft</DedicatedPluginDir>
-    </PropertyGroup>
-    <MakeDir Directories="$(DedicatedPluginDir)" Condition="Exists('D:\SteamLibrary\steamapps\common\Valheim dedicated server\BepInEx\plugins')" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(DedicatedPluginDir)" OverwriteReadOnlyFiles="true" Condition="Exists('D:\SteamLibrary\steamapps\common\Valheim dedicated server\BepInEx\plugins')" />
   </Target>
   <Target Name="PackThunderstore" AfterTargets="Deploy" Condition="'$(Configuration)' == 'Release'">
     <MakeDir Directories="$(MSBuildThisFileDirectory)thunderstore\packs" />
