@@ -331,8 +331,24 @@ namespace StoreAndCraft
             StorageDisplayBoard board = __instance.GetComponent<StorageDisplayBoard>();
             if (board == null)
                 return true;
-            __result = board.TryOpenMenu(character);
+            __result = board.TryOpenMenu(character, alt);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Shift + hover display: block the swing. Scale/mode cycle runs on mouse-down in TickCycleInput only.
+    /// </summary>
+    [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.StartAttack))]
+    internal static class HumanoidDisplayScaleAttackPatch
+    {
+        private static bool Prefix(Humanoid __instance, bool secondaryAttack)
+        {
+            if (__instance == null || __instance != Player.m_localPlayer)
+                return true;
+            if (secondaryAttack)
+                return true;
+            return !StorageDisplayBoard.ShouldBlockAttackForCycle();
         }
     }
 

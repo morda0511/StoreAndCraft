@@ -16,6 +16,8 @@ namespace StoreAndCraft
         public static Sprite Track => Get("track.png");
         public static Sprite KnobOff => Get("knob_off.png");
         public static Sprite KnobOn => Get("knob_on.png");
+        public static Sprite ToggleOn => Get("toggle_button_on.png");
+        public static Sprite ToggleOff => Get("toggle_button_off.png");
         public static Sprite LinkSelected => Get("link_selected.png");
         public static Sprite ShowDisplayDisabled => Get("show_display_disabled.png");
 
@@ -71,7 +73,9 @@ namespace StoreAndCraft
                             continue;
                         tex.wrapMode = TextureWrapMode.Clamp;
                         tex.filterMode = FilterMode.Bilinear;
-                        MakeNearBlackTransparent(tex);
+                        // Toggle buttons keep their dark chrome — do not punch near-black to alpha.
+                        if (!file.StartsWith("toggle_button_"))
+                            MakeNearBlackTransparent(tex);
                         // Link / outline sprites are padded in a wide canvas — crop tight.
                         Rect rect = (file.StartsWith("link") || file == "link_selected.png")
                             ? OpaqueBounds(tex)

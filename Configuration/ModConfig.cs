@@ -5,12 +5,13 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        // Bump when package layout changes. v9 = removed experimental remote dump.
-        public const int ProtocolVersion = 9;
+        // Bump when package layout changes. v11 = AutoIntakeEnabled separate from StoreEnabled.
+        public const int ProtocolVersion = 11;
 
         public ConfigEntry<bool> LockConfig { get; }
         public ConfigEntry<bool> ModEnabled { get; }
         public ConfigEntry<bool> StoreEnabled { get; }
+        public ConfigEntry<bool> AutoIntakeEnabled { get; }
         public ConfigEntry<bool> CraftEnabled { get; }
         public ConfigEntry<bool> MustHaveExisting { get; }
         public ConfigEntry<bool> LeaveOneItem { get; }
@@ -37,6 +38,8 @@ namespace StoreAndCraft
         public ConfigEntry<KeyboardShortcut> SortKey { get; }
         public ConfigEntry<KeyboardShortcut> DisplayRangeKey { get; }
         public ConfigEntry<KeyboardShortcut> BuildGrabKey { get; }
+        public ConfigEntry<bool> FeedTroughEnabled { get; }
+        public ConfigEntry<float> FeedTroughRange { get; }
 
         public ModConfig(ConfigFile file)
         {
@@ -45,7 +48,9 @@ namespace StoreAndCraft
             ModEnabled = file.Bind("1 - General", "ModEnabled", true,
                 "Turns the whole mod on or off without uninstalling.");
             StoreEnabled = file.Bind("2 - Store", "StoreEnabled", true,
-                "If enabled, ground items can be auto-stored and dump / middle-click store works.");
+                "If enabled, dump / middle-click store, take-stack, and auto-stack work. Ground auto-store is controlled separately by AutoIntakeEnabled.");
+            AutoIntakeEnabled = file.Bind("2 - Store", "AutoIntakeEnabled", true,
+                "If enabled, ground items are pulled into nearby matching chests automatically. Turn off to leave drops on the ground (feed pets, trade) while dump / middle-click still work. Synced from server when LockConfig is on. Chat: /store enable|disable.");
             CraftEnabled = file.Bind("3 - Craft", "CraftEnabled", true,
                 "If enabled, crafting, building, station refill ([E] on smelters, kilns, ovens, torches, fires, fermenters, turrets), and kiln/smelter/torch auto-fill can use items stored in nearby chests.");
             MustHaveExisting = file.Bind("2 - Store", "MustHaveExisting", true,
@@ -83,7 +88,7 @@ namespace StoreAndCraft
             SearchKey = file.Bind("4 - Keys", "SearchKey", new KeyboardShortcut(KeyCode.Y),
                 "While inventory is open: hover an item and press to ping/blink the nearest chest that contains it (blinks 3 times).");
             RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.E, KeyCode.LeftAlt),
-                "Look at a chest to rename it, or at a kiln/smelter/grill with multiple inputs to open the chest-pull filter. Default Alt+E — remap in config if it clashes with cooking. Shift+E (Valheim alt-use) also renames chests. Prefix [I] = fully ignore; [H] = hide from dump/store/craft but still show on Storage Displays.");
+                "Look at a chest to rename it, a small Storage Display for name/amount toggles, or at a kiln/smelter/grill with multiple inputs to open the chest-pull filter. Default Alt+E — remap in config if it clashes with cooking. Shift+E (Valheim alt-use) also renames chests. Prefix [I] = fully ignore; [H] = hide from dump/store/craft but still show on Storage Displays.");
             TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
             FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),
@@ -98,6 +103,10 @@ namespace StoreAndCraft
                 "Look at a Storage Display and press to set that board's chest-scan range (5–50 m). Per display.");
             BuildGrabKey = file.Bind("4 - Keys", "BuildGrabKey", new KeyboardShortcut(KeyCode.C),
                 "Hold this key while confirming a hammer place to grab that piece's materials from nearby chests (nothing is placed). Default C — Shift stays free for no-snap. Local, not synced.");
+            FeedTroughEnabled = file.Bind("5 - Feed Trough", "FeedTroughEnabled", true,
+                "If enabled, the Feed Trough hammer piece is available and nearby hungry tameables eat matching food from it. Synced from server when LockConfig is on.");
+            FeedTroughRange = file.Bind("5 - Feed Trough", "FeedTroughRange", 8f,
+                "How far (meters) a Feed Trough looks for hungry animals. Synced from server when LockConfig is on.");
         }
 
         public float StationPullRange()
@@ -107,7 +116,7 @@ namespace StoreAndCraft
 
         public float MaxGameplayRange()
         {
-            return Mathf.Max(PlayerDumpRange.Value, StoreRange.Value, StorageRange.Value, DisplayRange.Value, CraftRange.Value, AutoFillRange.Value);
+            return Mathf.Max(PlayerDumpRange.Value, StoreRange.Value, StorageRange.Value, DisplayRange.Value, CraftRange.Value, AutoFillRange.Value, FeedTroughRange.Value);
         }
 
         public void WriteToPackage(ZPackage pkg)
@@ -115,6 +124,7 @@ namespace StoreAndCraft
             pkg.Write(LockConfig.Value);
             pkg.Write(ModEnabled.Value);
             pkg.Write(StoreEnabled.Value);
+            pkg.Write(AutoIntakeEnabled.Value);
             pkg.Write(CraftEnabled.Value);
             pkg.Write(MustHaveExisting.Value);
             pkg.Write(LeaveOneItem.Value);
@@ -127,6 +137,8 @@ namespace StoreAndCraft
             pkg.Write(AutoFillRange.Value);
             pkg.Write(IntakeInterval.Value);
             pkg.Write(MaxTransfersPerTick.Value);
+            pkg.Write(FeedTroughEnabled.Value);
+            pkg.Write(FeedTroughRange.Value);
         }
 
         public void ReadFromPackage(ZPackage pkg)
@@ -134,6 +146,7 @@ namespace StoreAndCraft
             LockConfig.Value = pkg.ReadBool();
             ModEnabled.Value = pkg.ReadBool();
             StoreEnabled.Value = pkg.ReadBool();
+            AutoIntakeEnabled.Value = pkg.ReadBool();
             CraftEnabled.Value = pkg.ReadBool();
             MustHaveExisting.Value = pkg.ReadBool();
             LeaveOneItem.Value = pkg.ReadBool();
@@ -146,6 +159,8 @@ namespace StoreAndCraft
             AutoFillRange.Value = pkg.ReadSingle();
             IntakeInterval.Value = pkg.ReadSingle();
             MaxTransfersPerTick.Value = pkg.ReadInt();
+            FeedTroughEnabled.Value = pkg.ReadBool();
+            FeedTroughRange.Value = pkg.ReadSingle();
         }
     }
 }

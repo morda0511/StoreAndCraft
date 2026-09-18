@@ -26,7 +26,8 @@ namespace StoreAndCraft
         {
             return Plugin.Settings != null
                 && Plugin.Settings.ModEnabled.Value
-                && Plugin.Settings.StoreEnabled.Value;
+                && Plugin.Settings.StoreEnabled.Value
+                && ConfigCommands.IsAutoIntakeActive();
         }
 
         private static void Run()

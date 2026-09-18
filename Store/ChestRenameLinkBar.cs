@@ -40,7 +40,7 @@ namespace StoreAndCraft
             if (panelRt == null)
                 return;
 
-            _font = ResolveFont(ti);
+            _font = UiFonts.ThinNorse() ?? ResolveFont(ti);
 
             string current = ReadFieldText();
             bool ignore = ChestNames.IsIgnoredName(current);
@@ -56,16 +56,18 @@ namespace StoreAndCraft
             ignoreRt.anchorMax = new Vector2(0f, 1f);
             ignoreRt.pivot = new Vector2(0f, 1f);
             ignoreRt.anchoredPosition = new Vector2(10f, -6f);
-            ignoreRt.sizeDelta = new Vector2(UiToggle.Width + 8f, UiToggle.Height + 18f);
+            ignoreRt.sizeDelta = new Vector2(UiToggle.CompactWidth + 8f, UiToggle.CompactHeight + 20f);
             Owned.Add(ignoreBlock);
-            AddLabel(ignoreRt, Loc.T("Ignore", "Ignorieren"), new Vector2(0f, -2f));
+            AddLabel(ignoreRt, Loc.T("Ignore", "Ignorieren"), new Vector2(0f, -1f));
             _ignoreToggle = UiToggle.Create(
                 ignoreRt,
                 "SAC_IgnoreToggle",
                 ignore,
                 true,
                 OnIgnoreClicked,
-                _font);
+                _font,
+                UiToggle.CompactWidth,
+                UiToggle.CompactHeight);
             PlaceToggle(_ignoreToggle, new Vector2(0f, -16f));
 
             // Show on display — only when Ignore is on
@@ -76,16 +78,18 @@ namespace StoreAndCraft
             showRt.anchorMax = new Vector2(1f, 1f);
             showRt.pivot = new Vector2(1f, 1f);
             showRt.anchoredPosition = new Vector2(-10f, -6f);
-            showRt.sizeDelta = new Vector2(UiToggle.Width + 8f, UiToggle.Height + 18f);
+            showRt.sizeDelta = new Vector2(UiToggle.CompactWidth + 8f, UiToggle.CompactHeight + 20f);
             Owned.Add(showBlock);
-            AddLabel(showRt, Loc.T("Show on display", "Auf Display zeigen"), new Vector2(0f, -2f), true);
+            AddLabel(showRt, Loc.T("Show on display", "Auf Display zeigen"), new Vector2(0f, -1f), true);
             _showToggle = UiToggle.Create(
                 showRt,
                 "SAC_ShowToggle",
                 showOk && showOnDisplay,
                 showOk,
                 OnShowClicked,
-                _font);
+                _font,
+                UiToggle.CompactWidth,
+                UiToggle.CompactHeight);
             PlaceToggle(_showToggle, new Vector2(0f, -16f), true);
 
             // Link grid — bottom-left (dimmed while Ignore is on, still clickable)
@@ -133,7 +137,7 @@ namespace StoreAndCraft
 
         private static void AddLabel(RectTransform parent, string text, Vector2 pos, bool fromRight = false)
         {
-            var go = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            var go = new GameObject("Label", typeof(RectTransform));
             go.transform.SetParent(parent, false);
             RectTransform rt = go.transform as RectTransform;
             if (fromRight)
@@ -149,16 +153,15 @@ namespace StoreAndCraft
                 rt.pivot = new Vector2(0f, 1f);
             }
             rt.anchoredPosition = pos;
-            rt.sizeDelta = new Vector2(120f, 16f);
+            rt.sizeDelta = new Vector2(160f, 18f);
 
-            TextMeshProUGUI tmp = go.GetComponent<TextMeshProUGUI>();
-            tmp.text = text;
-            tmp.fontSize = 12f;
-            tmp.color = new Color(0.95f, 0.75f, 0.35f, 1f);
-            tmp.alignment = fromRight ? TextAlignmentOptions.Right : TextAlignmentOptions.Left;
-            tmp.raycastTarget = false;
-            if (_font != null)
-                tmp.font = _font;
+            TextMeshProUGUI label = go.AddComponent<TextMeshProUGUI>();
+            UiFonts.StyleThinLabel(label, 13f);
+            label.text = text;
+            label.color = new Color(1f, 0.85f, 0.4f, 1f);
+            label.alignment = fromRight ? TextAlignmentOptions.TopRight : TextAlignmentOptions.TopLeft;
+            label.textWrappingMode = TextWrappingModes.NoWrap;
+            label.overflowMode = TextOverflowModes.Overflow;
         }
 
         private static void OnIgnoreClicked()
@@ -247,8 +250,8 @@ namespace StoreAndCraft
 
         private static TMP_FontAsset ResolveFont(TextInput ti)
         {
-            TMP_Text sample = ti != null ? ti.GetComponentInChildren<TMP_Text>(true) : null;
-            return sample != null ? sample.font : null;
+            return UiFonts.ThinNorse()
+                ?? (ti != null ? ti.GetComponentInChildren<TMP_Text>(true)?.font : null);
         }
 
         private static string GetFieldText(object field)

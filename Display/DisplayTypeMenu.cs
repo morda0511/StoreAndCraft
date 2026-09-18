@@ -36,6 +36,8 @@ namespace StoreAndCraft
                 Close();
             if (DisplayRangeMenu.IsOpen)
                 DisplayRangeMenu.Close();
+            if (DisplaySmallOptions.IsOpen)
+                DisplaySmallOptions.Close();
 
             DisplayFilters.InvalidateSubItemCache();
             _board = board;

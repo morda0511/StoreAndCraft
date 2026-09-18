@@ -58,7 +58,10 @@ namespace StoreAndCraft
             if (!nv.IsOwner())
                 return;
 
-            NearbyIndex.EnsureInventory(chest, force: true);
+            // Open chests are owned by the viewer — still guard against stale empty Load.
+            if (!ContainerFilter.TryReadyForWrite(chest))
+                return;
+
             Inventory inv = chest.GetInventory();
             if (inv == null)
                 return;

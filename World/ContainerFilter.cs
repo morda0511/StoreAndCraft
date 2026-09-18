@@ -9,6 +9,9 @@ namespace StoreAndCraft
         private static readonly MethodInfo LoadInventory = AccessTools.Method(typeof(Container), "Load");
         private static readonly MethodInfo SaveInventoryMethod = AccessTools.Method(typeof(Container), "Save");
         private static readonly FieldInfo LastRevision = AccessTools.Field(typeof(Container), "m_lastRevision");
+        // Valheim serializes chest contents under ZDOVars.s_items.
+        private static readonly FieldInfo ItemsHash = AccessTools.Field(typeof(ZDOVars), "s_items");
+        private static float _nextEmptyWriteLog;
 
         public static bool IsUsable(Container container)
         {
@@ -81,6 +84,10 @@ namespace StoreAndCraft
             if (container == null)
                 return false;
 
+            // Feed troughs are animal food only — not dump / auto-store / craft targets.
+            if (FeedTrough.IsTrough(container))
+                return false;
+
             if (container.GetComponentInParent<Vagon>() != null)
                 return true;
             if (container.GetComponentInParent<Ship>() != null)
@@ -111,6 +118,38 @@ namespace StoreAndCraft
             }
         }
 
+        /// <summary>
+        /// Force-Load before mutating a chest. Returns false when the local inventory looks
+        /// empty while the ZDO still has an item payload — writing in that state can wipe the chest.
+        /// </summary>
+        public static bool TryReadyForWrite(Container container)
+        {
+            if (container == null)
+                return false;
+
+            ZNetView nv = Refs.View(container);
+            if (nv == null || !nv.IsValid() || !nv.IsOwner())
+                return false;
+
+            RefreshInventory(container);
+            Inventory inv = container.GetInventory();
+            if (inv == null)
+                return false;
+
+            if (inv.NrOfItems() <= 0 && ZdoHasItemPayload(nv.GetZDO()))
+            {
+                if (Plugin.Log != null && Time.unscaledTime >= _nextEmptyWriteLog)
+                {
+                    _nextEmptyWriteLog = Time.unscaledTime + 10f;
+                    Plugin.Log.LogWarning(
+                        "Skipped chest write: local inventory empty but ZDO still has items (load race).");
+                }
+                return false;
+            }
+
+            return true;
+        }
+
         public static void SaveInventory(Container container)
         {
             ZNetView nv = Refs.View(container);
@@ -125,6 +164,36 @@ namespace StoreAndCraft
             }
             catch
             {
+            }
+        }
+
+        /// <summary>
+        /// True when the ZDO still carries a serialized inventory larger than an empty package.
+        /// Used to detect stale empty local views after ClaimOwnership / early Load.
+        /// </summary>
+        public static bool ZdoHasItemPayload(ZDO zdo)
+        {
+            if (zdo == null || ItemsHash == null)
+                return false;
+
+            try
+            {
+                object key = ItemsHash.GetValue(null);
+                if (key == null)
+                    return false;
+
+                byte[] data = null;
+                if (key is int hash)
+                    data = zdo.GetByteArray(hash);
+                else if (key is string name)
+                    data = zdo.GetByteArray(name);
+
+                // Empty inventories serialize to a tiny header; real contents are larger.
+                return data != null && data.Length > 8;
+            }
+            catch
+            {
+                return false;
             }
         }
 

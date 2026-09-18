@@ -12,6 +12,21 @@ namespace StoreAndCraft
         public const string RpcAdminResult = "KAC_AdminResult";
         private static bool _rpcRegistered;
 
+        /// <summary>
+        /// Session override for ground auto-intake. null = follow AutoIntakeEnabled config.
+        /// Anyone can toggle via /store enable|disable without admin.
+        /// </summary>
+        private static bool? _sessionAutoIntake;
+
+        public static bool IsAutoIntakeActive()
+        {
+            if (Plugin.Settings == null)
+                return false;
+            if (_sessionAutoIntake.HasValue)
+                return _sessionAutoIntake.Value;
+            return Plugin.Settings.AutoIntakeEnabled.Value;
+        }
+
         public static void RegisterRpc()
         {
             if (_rpcRegistered || ZRoutedRpc.instance == null)
@@ -77,6 +92,8 @@ namespace StoreAndCraft
                 || lower.StartsWith("/storagerange")
                 || lower.StartsWith("/autofillrange")
                 || lower.StartsWith("/sac")
+                || lower == "/store"
+                || lower.StartsWith("/store ")
                 || lower == "/storehelp"
                 || lower.StartsWith("/storehelp ");
         }
@@ -103,6 +120,13 @@ namespace StoreAndCraft
             {
                 Tell(StatusText());
                 PrintLine(StatusText());
+                return;
+            }
+
+            // Ground auto-intake toggle — anyone (local). Host/admin also saves + syncs config.
+            if (cmd == "store")
+            {
+                HandleStoreToggle(parts);
                 return;
             }
 
@@ -147,6 +171,70 @@ namespace StoreAndCraft
                 return;
             Tell(message);
             PrintLine(message);
+        }
+
+        private static void HandleStoreToggle(string[] parts)
+        {
+            if (Plugin.Settings == null)
+            {
+                Tell("Settings not loaded.");
+                return;
+            }
+
+            string sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "status";
+
+            if (sub == "status" || sub == "?")
+            {
+                string msg = AutoIntakeStatusText();
+                Tell(msg);
+                PrintLine(msg);
+                return;
+            }
+
+            bool enable;
+            if (sub == "enable" || sub == "on" || sub == "1" || sub == "true")
+                enable = true;
+            else if (sub == "disable" || sub == "off" || sub == "0" || sub == "false")
+                enable = false;
+            else
+            {
+                Tell("Usage: /store enable | /store disable | /store status");
+                PrintLine("Usage: /store enable | /store disable | /store status");
+                return;
+            }
+
+            _sessionAutoIntake = enable;
+
+            string result;
+            if (CanIssue())
+            {
+                Plugin.Settings.AutoIntakeEnabled.Value = enable;
+                // Clear session so everyone follows the saved config after sync.
+                _sessionAutoIntake = null;
+                SaveAndSync();
+                result = enable
+                    ? "Ground auto-store ON (saved + synced). Middle-click / dump unchanged."
+                    : "Ground auto-store OFF (saved + synced). Middle-click / dump still work.";
+            }
+            else
+            {
+                result = enable
+                    ? "Ground auto-store ON for you (session). Middle-click / dump unchanged."
+                    : "Ground auto-store OFF for you (session). Drops stay on the ground; middle-click / dump still work.";
+            }
+
+            Tell(result);
+            PrintLine(result);
+        }
+
+        private static string AutoIntakeStatusText()
+        {
+            bool active = IsAutoIntakeActive();
+            bool cfg = Plugin.Settings != null && Plugin.Settings.AutoIntakeEnabled.Value;
+            string scope = _sessionAutoIntake.HasValue ? "session" : "config";
+            return "Ground auto-store: " + (active ? "ON" : "OFF")
+                + " (" + scope + "; config=" + (cfg ? "on" : "off") + ")"
+                + " | StoreEnabled=" + (Plugin.Settings != null && Plugin.Settings.StoreEnabled.Value ? "on" : "off");
         }
 
         private static bool IsHelpRequest(string cmd, string[] parts)
@@ -345,19 +433,23 @@ namespace StoreAndCraft
             return new[]
             {
                 "========== StoreAndCraft ==========",
-                "Chat (host/admin):",
+                "Chat (anyone):",
                 "  /help store                 — this help",
+                "  /store enable|disable       — ground auto-store on/off (middle-click stays)",
+                "  /store status               — ground auto-store state",
+                "  /sac status                 — show current ranges",
+                "Chat (host/admin):",
                 "  /dumprange <m>              — dump / middle-click range",
                 "  /storerange <m>             — auto-store range (ground → chest)",
                 "  /storagerange <m>           — take-stack / search / displays",
                 "  /craftrange <m>             — craft / build / station [E] pull",
                 "  /autofillrange <m>          — auto-fill station + chest range",
-                "  /sac status                 — show current ranges",
                 "  /sac dump|store|storage|craft|autofill <m>",
                 "Console (F5), same ideas:",
                 "  help store   |  sac help  |  sac status",
+                "  store enable |  store disable |  store status",
                 "  dumprange 50 |  storerange 50 |  craftrange 50 |  storagerange 50 |  autofillrange 40",
-                "Changes save to com.morda.storeandcraft.cfg and sync to clients.",
+                "Host /store enable|disable also saves AutoIntakeEnabled and syncs.",
                 "==================================="
             };
         }
@@ -371,6 +463,7 @@ namespace StoreAndCraft
                 + " Storage=" + Plugin.Settings.StorageRange.Value
                 + " Craft=" + Plugin.Settings.CraftRange.Value
                 + " AutoFill=" + Plugin.Settings.AutoFillRange.Value
+                + " AutoIntake=" + (IsAutoIntakeActive() ? "on" : "off")
                 + " Lock=" + Plugin.Settings.LockConfig.Value;
         }
 

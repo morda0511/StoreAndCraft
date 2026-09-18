@@ -9,7 +9,8 @@ namespace StoreAndCraft
             if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
                 return;
             if (Console.IsVisible() || (Chat.instance != null && Chat.instance.HasFocus()) || TextInput.IsVisible()
-                || DisplayTypeMenu.IsOpen || StationFilterMenu.IsOpen || DisplayRangeMenu.IsOpen)
+                || DisplayTypeMenu.IsOpen || StationFilterMenu.IsOpen || DisplayRangeMenu.IsOpen
+                || DisplaySmallOptions.IsOpen)
                 return;
 
             if (KeyUtil.Down(Plugin.Settings.DumpKey.Value))
@@ -46,9 +47,12 @@ namespace StoreAndCraft
 
             if (KeyUtil.Down(Plugin.Settings.RenameKey.Value))
             {
+                // Small storage display: Name / Amount toggles.
+                if (DisplaySmallOptions.TryOpenHovered())
+                { }
                 // Same key: kiln/smelter pull-filter when looking at a multi-input station,
                 // otherwise chest rename.
-                if (!StationPullFilter.TryOpen(warnIfMissing: false))
+                else if (!StationPullFilter.TryOpen(warnIfMissing: false))
                     ChestRename.TryOpen(null, true);
             }
         }

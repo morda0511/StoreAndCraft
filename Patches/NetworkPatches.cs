@@ -122,6 +122,12 @@ namespace StoreAndCraft
                 false, false, false, false, false, false, null, false, false, true);
 
             new Terminal.ConsoleCommand(
+                "store",
+                "StoreAndCraft: store enable|disable|status — ground auto-store (middle-click stays).",
+                ConfigCommands.OnConsole,
+                false, false, false, false, false, false, null, false, false, false);
+
+            new Terminal.ConsoleCommand(
                 "storerange",
                 "StoreAndCraft: set auto-store range (meters). Host/admin.",
                 ConfigCommands.OnConsole,

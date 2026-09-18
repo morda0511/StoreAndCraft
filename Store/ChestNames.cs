@@ -201,10 +201,13 @@ namespace StoreAndCraft
             if (!nv.IsOwner())
                 nv.ClaimOwnership();
 
-            ContainerFilter.RefreshInventory(container);
-            Inventory inv = container.GetInventory();
-            if (inv != null && inv.NrOfItems() > 0)
-                ContainerFilter.SaveInventory(container);
+            // Only touch inventory Save when Load looks consistent — never write empty over a full ZDO.
+            if (ContainerFilter.TryReadyForWrite(container))
+            {
+                Inventory inv = container.GetInventory();
+                if (inv != null && inv.NrOfItems() > 0)
+                    ContainerFilter.SaveInventory(container);
+            }
 
             nv.GetZDO().Set(ZdoKey, Sanitize(name));
             return true;

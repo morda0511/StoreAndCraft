@@ -9,6 +9,11 @@ namespace StoreAndCraft
     {
         public const string ZdoItemKey = "sac_item";
         public const string ZdoRangeKey = "sac_display_range";
+        public const string ZdoScaleKey = "sac_ui_scale";
+        public const string ZdoShowNameKey = "sac_show_name";
+        public const string ZdoShowAmountKey = "sac_show_amount";
+        public const int ScaleMin = -10;
+        public const int ScaleMax = 10;
 
         private static readonly List<StorageDisplayBoard> All = new List<StorageDisplayBoard>();
 
@@ -16,6 +21,8 @@ namespace StoreAndCraft
         private int _slotCount = 12;
         private int _columns = 4;
         private int _rows = 3;
+        private int _baseColumns = 4;
+        private int _baseRows = 3;
         private int _headerColumns;
         private int _itemsPerGroup = 1;
         private float _fontFactor = 0.22f;
@@ -26,6 +33,9 @@ namespace StoreAndCraft
         private bool _flowSections;
         private float _labelWidth;
         private int _builtBandCount = -1;
+        private int _builtScaleStep = int.MinValue;
+        private int _builtShowName = int.MinValue;
+        private int _builtShowAmount = int.MinValue;
         private TextMeshProUGUI[] _bandLabels;
         private RectTransform _gridRoot;
 
@@ -89,7 +99,7 @@ namespace StoreAndCraft
                     // Fixed 12-row table (label | items). Do not rebuild when filter count changes.
                     _headerColumns = 0;
                     _itemsPerGroup = 1;
-                    // Dense row: ~13 icons fit on the board; overflow uses last cell as "+".
+                    // Dense row at scale 0; higher scale → fewer, bigger cells (down to 4).
                     _columns = 13;
                     _rows = DisplayFilters.MaxCategories; // 12
                     _slotCount = _columns * _rows;
@@ -99,7 +109,7 @@ namespace StoreAndCraft
                     _columnHeaders = false;
                     _tightSlots = true;
                     _flowSections = true;
-                    // Room for WEAPONS; label X nudge is BuildLargeUi offsetMin (-2).
+                    // Room for WEAPONS; label X nudge is BuildLargeUi offsetMin (-0.3).
                     _labelWidth = 0.10f;
                     break;
                 default:
@@ -118,6 +128,327 @@ namespace StoreAndCraft
                     _kind = DisplayKind.Medium;
                     break;
             }
+
+            _baseColumns = _columns;
+            _baseRows = _rows;
+            ApplyScaleToLayout();
+        }
+
+        public int ContentScaleStep()
+        {
+            ZNetView nv = GetComponent<ZNetView>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return 0;
+            return Mathf.Clamp(zdo.GetInt(ZdoScaleKey, 0), ScaleMin, ScaleMax);
+        }
+
+        public float ContentScaleMul()
+        {
+            // −10…+10 → 0.2…1.8 (readable at the extremes).
+            return 1f + ContentScaleStep() * 0.08f;
+        }
+
+        public void SetContentScaleStep(int step)
+        {
+            step = Mathf.Clamp(step, ScaleMin, ScaleMax);
+            ZNetView nv = GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid() || !nv.IsOwner())
+                nv?.ClaimOwnership();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return;
+            if (zdo.GetInt(ZdoScaleKey, 0) == step)
+                return;
+            zdo.Set(ZdoScaleKey, step);
+            InvalidateUi();
+            // Drop the live grid immediately so Update/TryBuild rebuilds with the new columns.
+            if (_gridRoot != null)
+            {
+                Destroy(_gridRoot.gameObject);
+                _gridRoot = null;
+            }
+            _slots = null;
+            MarkDirty();
+        }
+
+        /// <summary>
+        /// Cycle 0 → +1…+10 → −10…−1 → 0 → … (this board only).
+        /// </summary>
+        public void CycleContentScaleStep()
+        {
+            if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
+                return;
+            int step = ContentScaleStep();
+            int next = step >= ScaleMax ? ScaleMin : step + 1;
+            SetContentScaleStep(next);
+        }
+
+        /// <summary>Hover: only the current step, e.g. <c>Display Scale : +3</c>.</summary>
+        public string FormatHoverScaleLine()
+        {
+            return Loc.T("Display Scale", "Display Scale") + " : "
+                + "<color=yellow><b>" + FormatScaleStep(ContentScaleStep()) + "</b></color>";
+        }
+
+        /// <summary>
+        /// Small: All → no name → icon only → All.
+        /// </summary>
+        public void CycleSmallDisplayMode()
+        {
+            if (_kind != DisplayKind.Small)
+                return;
+
+            bool name = ShowName();
+            bool amount = ShowAmount();
+            if (name && amount)
+                WriteShowFlags(false, true);   // name off
+            else if (!name && amount)
+                WriteShowFlags(false, false);  // icon only
+            else
+                WriteShowFlags(true, true);    // all on
+        }
+
+        public string FormatHoverSmallModeLine()
+        {
+            string mode;
+            if (ShowName() && ShowAmount())
+                mode = Loc.T("Name + Amount", "Name + Anzahl");
+            else if (!ShowName() && ShowAmount())
+                mode = Loc.T("No name", "Name weg");
+            else
+                mode = Loc.T("Icon only", "Nur Icon");
+            return Loc.T("Display", "Display") + " : "
+                + "<color=yellow><b>" + mode + "</b></color>";
+        }
+
+        /// <summary>
+        /// Shift+LMB: exactly one cycle on mouse/attack button <b>down</b> (not while held, not on release).
+        /// StartAttack only blocks the swing — it must not cycle (fires many times per click).
+        /// </summary>
+        private static int _cycleFrame = -1;
+
+        public static void TickCycleInput()
+        {
+            if (!IsScaleChordHeld())
+                return;
+
+            bool pressed = Input.GetMouseButtonDown(0);
+            try
+            {
+                if (ZInput.GetButtonDown("Attack"))
+                    pressed = true;
+            }
+            catch
+            {
+            }
+
+            if (!pressed)
+                return;
+
+            // Same frame can see both mouse and Attack down — only once.
+            if (_cycleFrame == Time.frameCount)
+                return;
+            _cycleFrame = Time.frameCount;
+
+            TryCycleHovered();
+        }
+
+        public static bool TryCycleHovered()
+        {
+            if (!IsScaleChordHeld())
+                return false;
+
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return false;
+
+            StorageDisplayBoard board = HoveredBoard();
+            if (board == null)
+                return false;
+
+            if (!PrivateArea.CheckAccess(board.transform.position, 0f, false, true))
+            {
+                player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                return true;
+            }
+
+            // Scale / mode is always per hovered board ZDO only (never the cluster).
+            if (board.Kind == DisplayKind.Small)
+                board.CycleSmallDisplayMode();
+            else if (board.Kind == DisplayKind.Medium || board.Kind == DisplayKind.Large)
+                board.CycleContentScaleStep();
+            else
+                return false;
+
+            return true;
+        }
+
+        public static bool IsScaleChordHeld()
+        {
+            return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        }
+
+        /// <summary>True when Shift is held over a display that uses the cycle chord.</summary>
+        public static bool ShouldBlockAttackForCycle()
+        {
+            if (!IsScaleChordHeld())
+                return false;
+            StorageDisplayBoard board = HoveredBoard();
+            if (board == null)
+                return false;
+            return board.Kind == DisplayKind.Small
+                || board.Kind == DisplayKind.Medium
+                || board.Kind == DisplayKind.Large;
+        }
+
+        private static StorageDisplayBoard HoveredBoard()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return null;
+
+            GameObject hover = player.GetHoverObject();
+            StorageDisplayBoard fromHover = hover != null
+                ? hover.GetComponentInParent<StorageDisplayBoard>()
+                : null;
+            if (fromHover != null)
+                return fromHover;
+
+            Piece piece = player.GetHoveringPiece();
+            return piece != null ? piece.GetComponent<StorageDisplayBoard>() : null;
+        }
+
+        public bool ShowName()
+        {
+            ZNetView nv = GetComponent<ZNetView>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return true;
+            return zdo.GetInt(ZdoShowNameKey, 1) != 0;
+        }
+
+        public bool ShowAmount()
+        {
+            ZNetView nv = GetComponent<ZNetView>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return true;
+            return zdo.GetInt(ZdoShowAmountKey, 1) != 0;
+        }
+
+        public void SetShowName(bool on)
+        {
+            WriteShowFlags(on, ShowAmount());
+        }
+
+        public void SetShowAmount(bool on)
+        {
+            WriteShowFlags(ShowName(), on);
+        }
+
+        private void WriteShowFlags(bool name, bool amount)
+        {
+            ZNetView nv = GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid() || !nv.IsOwner())
+                nv?.ClaimOwnership();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return;
+
+            int nameV = name ? 1 : 0;
+            int amountV = amount ? 1 : 0;
+            bool changed = false;
+            if (zdo.GetInt(ZdoShowNameKey, 1) != nameV)
+            {
+                zdo.Set(ZdoShowNameKey, nameV);
+                changed = true;
+            }
+            if (zdo.GetInt(ZdoShowAmountKey, 1) != amountV)
+            {
+                zdo.Set(ZdoShowAmountKey, amountV);
+                changed = true;
+            }
+            if (!changed)
+                return;
+
+            // Layout (icon position) depends on flags — rebuild, don't only hide labels.
+            InvalidateUi();
+            if (_gridRoot != null)
+            {
+                Destroy(_gridRoot.gameObject);
+                _gridRoot = null;
+            }
+            _slots = null;
+            MarkDirty();
+        }
+
+        public void InvalidateUi()
+        {
+            _slots = null;
+            _headers = null;
+            _bandLabels = null;
+            _builtScaleStep = int.MinValue;
+            _builtShowName = int.MinValue;
+            _builtShowAmount = int.MinValue;
+            _builtBandCount = -1;
+        }
+
+        private void ApplyScaleToLayout()
+        {
+            float mul = ContentScaleMul();
+            if (_kind == DisplayKind.Medium)
+            {
+                // Keep changing density across the full −10…+10 range (old −step hit the floor at +2/+5).
+                _columns = Mathf.Clamp(Mathf.RoundToInt(_baseColumns / mul), 2, 8);
+                _rows = _baseRows;
+                _slotCount = _columns * _rows;
+                _itemsPerGroup = _columns;
+            }
+            else if (_kind == DisplayKind.Large)
+            {
+                // Min 4 so +6…+10 still grows cells (was floored at 8 → icons froze, only fonts grew).
+                _columns = Mathf.Clamp(Mathf.RoundToInt(_baseColumns / mul), 4, 18);
+                _rows = DisplayFilters.MaxCategories;
+                _slotCount = _columns * _rows;
+            }
+            // Small: no content scale.
+        }
+
+        /// <summary>
+        /// Font / icon sizing vs default — tracks the scale step across the full −10…+10 range.
+        /// </summary>
+        private float CellSizeScale()
+        {
+            if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
+                return 1f;
+            return Mathf.Clamp(ContentScaleMul(), 0.35f, 1.85f);
+        }
+
+        /// <summary>How much of each cell the icon may own (rest is the count).</summary>
+        private void SlotIconShare(out float iconMax, out float textMin)
+        {
+            float cell = CellSizeScale();
+            if (_kind == DisplayKind.Small)
+            {
+                iconMax = 0.40f;
+                textMin = 0.40f;
+                return;
+            }
+
+            float baseIcon = _tightSlots ? 0.40f : 0.46f;
+            // Grow icon share with scale so sprites keep up with amount font past +5.
+            float t = Mathf.InverseLerp(1f, 1.85f, Mathf.Max(1f, cell));
+            iconMax = Mathf.Lerp(baseIcon, 0.72f, t);
+            textMin = Mathf.Min(0.78f, iconMax + 0.03f);
+        }
+
+        public static string FormatScaleStep(int step)
+        {
+            step = Mathf.Clamp(step, ScaleMin, ScaleMax);
+            if (step > 0)
+                return "+" + step;
+            return step.ToString();
         }
 
         private void Awake()
@@ -174,6 +505,7 @@ namespace StoreAndCraft
         {
             DisplayTypeMenu.CloseIf(this);
             DisplayRangeMenu.CloseIf(this);
+            DisplaySmallOptions.CloseIf(this);
             All.Remove(this);
             Unwatch();
             InvalidateClusters();
@@ -204,24 +536,27 @@ namespace StoreAndCraft
             {
                 string hotbar = "[<color=yellow><b>1-8</b></color>] "
                     + Loc.T("Set item from hotbar", "Item aus Hotbar setzen");
+                string modeLine = "[<color=yellow><b>Shift+LMB</b></color>] " + FormatHoverSmallModeLine();
                 string token = ItemToken();
                 if (string.IsNullOrEmpty(token))
-                    return BoardTitle() + "\n" + hotbar + "\n" + rangeLine;
-                return BoardTitle() + " (" + ItemLabel(token) + ")\n" + hotbar + "\n" + rangeLine;
+                    return BoardTitle() + "\n" + hotbar + "\n" + modeLine + "\n" + rangeLine;
+                return BoardTitle() + " (" + ItemLabel(token) + ")\n" + hotbar + "\n" + modeLine + "\n" + rangeLine;
             }
 
             List<int> filters = FilterIds();
             List<string> items = ItemTokens();
             string name = DisplayFilters.Label(filters, items);
             string use = "[<color=yellow><b>E</b></color>] " + Loc.T("Select type", "Typ wählen");
+            string scaleKey = "[<color=yellow><b>Shift+LMB</b></color>] ";
+            string scaleLine = scaleKey + FormatHoverScaleLine();
             if (filters.Count == 0 && items.Count == 0)
-                return BoardTitle() + "\n" + use + "\n" + rangeLine;
+                return BoardTitle() + "\n" + use + "\n" + scaleLine + "\n" + rangeLine;
 
             RefreshClusterPages();
             string title = BoardTitle() + " (" + name + ")";
             if (_pages > 1)
                 title += " (" + (_page + 1) + "/" + _pages + ")";
-            return title + "\n" + use + "\n" + rangeLine;
+            return title + "\n" + use + "\n" + scaleLine + "\n" + rangeLine;
         }
 
         public string ItemToken()
@@ -318,7 +653,8 @@ namespace StoreAndCraft
         {
             if (player == null || player != Player.m_localPlayer)
                 return false;
-            if (InventoryGui.IsVisible() || DisplayTypeMenu.IsOpen || StationFilterMenu.IsOpen || DisplayRangeMenu.IsOpen)
+            if (InventoryGui.IsVisible() || DisplayTypeMenu.IsOpen || StationFilterMenu.IsOpen
+                || DisplayRangeMenu.IsOpen || DisplaySmallOptions.IsOpen)
                 return false;
             // Vanilla Player.UseHotbarItem(index) uses 1..8, then GetItemAt(index - 1, 0).
             if (hotbarIndex < 1 || hotbarIndex > 8)
@@ -562,7 +898,7 @@ namespace StoreAndCraft
             WriteSelection(ids, new List<string>());
         }
 
-        public bool TryOpenMenu(Humanoid user)
+        public bool TryOpenMenu(Humanoid user, bool alt = false)
         {
             Player player = user as Player;
             if (player == null || player != Player.m_localPlayer)
@@ -573,12 +909,12 @@ namespace StoreAndCraft
                 return true;
             }
 
-            // Small: no category menu — assign with hotbar 1-8 while looking at it.
+            // Small: Alt+E (alt use) opens Name / Amount toggles. Plain E does nothing special
+            // (hotbar 1-8 while looking at it still assigns — see hover text).
             if (_kind == DisplayKind.Small)
             {
-                player.Message(MessageHud.MessageType.Center,
-                    Loc.T("Press 1-8 to set item from hotbar", "1-8 drücken: Item aus Hotbar setzen"),
-                    0, null, false);
+                if (alt)
+                    DisplaySmallOptions.Open(this);
                 return true;
             }
 
@@ -590,6 +926,14 @@ namespace StoreAndCraft
         {
             // Force UI rebuild when switching to small layout tweaks / slot count changes.
             if (_slots != null && _slots.Length != _slotCount)
+                _slots = null;
+            // Content scale changed (Medium / Large columns + font).
+            if (_slots != null && (_kind == DisplayKind.Medium || _kind == DisplayKind.Large)
+                && ContentScaleStep() != _builtScaleStep)
+                _slots = null;
+            // Small name/amount layout changed — rebuild so icon can recenter.
+            if (_slots != null && _kind == DisplayKind.Small
+                && ((ShowName() ? 1 : 0) != _builtShowName || (ShowAmount() ? 1 : 0) != _builtShowAmount))
                 _slots = null;
             // Medium layout gained a category header strip — rebuild old grids.
             if (_slots != null && _kind == DisplayKind.Medium && _columnHeaders && _headers == null)
@@ -648,9 +992,15 @@ namespace StoreAndCraft
             ZNetView nv = GetComponent<ZNetView>();
             if (nv == null || !nv.IsValid())
                 return;
+            ApplyScaleToLayout();
             BuildUi();
             if (_slots != null)
+            {
+                _builtScaleStep = ContentScaleStep();
+                _builtShowName = ShowName() ? 1 : 0;
+                _builtShowAmount = ShowAmount() ? 1 : 0;
                 _dirty = true;
+            }
         }
 
         private void SilenceSignText()
@@ -703,7 +1053,7 @@ namespace StoreAndCraft
                 return;
 
             _signText = template;
-            _titleFont = template.fontSize * _titleFactor;
+            _titleFont = template.fontSize * _titleFactor * CellSizeScale();
             SilenceSignText();
 
             Transform existing = board.parent.Find("SacDisplayGrid");
@@ -723,11 +1073,13 @@ namespace StoreAndCraft
             rt.localScale = board.localScale;
             rt.localRotation = board.localRotation;
 
-            float font = template.fontSize * _fontFactor;
+            // Font follows cell size + scale step so icons and amounts grow together.
+            float font = template.fontSize * _fontFactor * CellSizeScale();
+            float bandFont = template.fontSize * _fontFactor; // category labels stay stable
 
             if (_kind == DisplayKind.Large && _flowSections)
             {
-                BuildLargeUi(root, template, font);
+                BuildLargeUi(root, template, font, bandFont);
                 return;
             }
 
@@ -776,8 +1128,10 @@ namespace StoreAndCraft
                 _headers = null;
             }
 
-            float iconMax = _tightSlots ? 0.40f : (_kind == DisplayKind.Small ? 0.40f : 0.46f);
-            float textMin = _tightSlots ? 0.36f : (_kind == DisplayKind.Small ? 0.40f : 0.46f);
+            float iconMax;
+            float textMin;
+            SlotIconShare(out iconMax, out textMin);
+
             float padX = _tightSlots ? 0.006f : (_kind == DisplayKind.Small ? 0.04f : 0.012f);
             float padY = _tightSlots ? 0.012f : (_kind == DisplayKind.Small ? 0.06f : 0.018f);
 
@@ -798,7 +1152,7 @@ namespace StoreAndCraft
             _gridRoot = rt;
         }
 
-        private void BuildLargeUi(GameObject root, TextMeshProUGUI template, float font)
+        private void BuildLargeUi(GameObject root, TextMeshProUGUI template, float font, float bandFont)
         {
             _headers = null;
             _gridRoot = root.GetComponent<RectTransform>();
@@ -812,9 +1166,9 @@ namespace StoreAndCraft
             float labelW = Mathf.Clamp(_labelWidth, 0.08f, 0.16f);
             float padX = 0.0015f;
             float padY = 0.006f;
-            // Narrower cells (13 cols): keep icon readable, leave room for 3–4 digit counts.
-            float iconMax = 0.40f;
-            float textMin = 0.36f;
+            float iconMax;
+            float textMin;
+            SlotIconShare(out iconMax, out textMin);
 
             _bandLabels = new TextMeshProUGUI[rows];
             for (int r = 0; r < rows; r++)
@@ -842,10 +1196,10 @@ namespace StoreAndCraft
                 label.enabled = true;
                 label.alignment = TextAlignmentOptions.MidlineLeft;
                 label.textWrappingMode = TextWrappingModes.NoWrap;
-                label.overflowMode = TextOverflowModes.Overflow;
+                label.overflowMode = TextOverflowModes.Ellipsis;
                 label.margin = Vector4.zero;
                 label.enableAutoSizing = false;
-                label.fontSize = font;
+                label.fontSize = bandFont;
                 label.color = new Color(1f, 0.92f, 0.55f, 1f);
                 label.faceColor = new Color32(255, 235, 140, 255);
                 label.outlineWidth = 0f;
@@ -898,13 +1252,7 @@ namespace StoreAndCraft
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             iconGo.transform.SetParent(cell.transform, false);
             RectTransform iconRt = iconGo.GetComponent<RectTransform>();
-            if (_kind == DisplayKind.Small)
-            {
-                // Top: centered icon + count. Bottom: localized item name.
-                iconRt.anchorMin = new Vector2(0.28f, 0.38f);
-                iconRt.anchorMax = new Vector2(0.50f, 0.92f);
-            }
-            else
+            if (_kind != DisplayKind.Small)
             {
                 iconRt.anchorMin = new Vector2(0.00f, 0.10f);
                 iconRt.anchorMax = new Vector2(iconMax, 0.92f);
@@ -924,9 +1272,7 @@ namespace StoreAndCraft
             RectTransform textRt = textGo.GetComponent<RectTransform>();
             if (_kind == DisplayKind.Small)
             {
-                textRt.anchorMin = new Vector2(0.52f, 0.38f);
-                textRt.anchorMax = new Vector2(0.78f, 0.92f);
-                textRt.pivot = new Vector2(0f, 0.5f);
+                // Filled in by LayoutSmallIconAndLabels after name exists.
             }
             else
             {
@@ -962,15 +1308,14 @@ namespace StoreAndCraft
             amount.text = "";
 
             TextMeshProUGUI nameLabel = null;
+            RectTransform nameRt = null;
             if (_kind == DisplayKind.Small)
             {
                 GameObject nameGo = Object.Instantiate(template.gameObject, cell.transform);
                 nameGo.name = "ItemName";
                 nameGo.SetActive(true);
                 nameGo.transform.SetAsLastSibling();
-                RectTransform nameRt = nameGo.GetComponent<RectTransform>();
-                nameRt.anchorMin = new Vector2(0.08f, 0.04f);
-                nameRt.anchorMax = new Vector2(0.92f, 0.34f);
+                nameRt = nameGo.GetComponent<RectTransform>();
                 nameRt.pivot = new Vector2(0.5f, 0.5f);
                 nameRt.offsetMin = Vector2.zero;
                 nameRt.offsetMax = Vector2.zero;
@@ -997,11 +1342,97 @@ namespace StoreAndCraft
                 nameLabel.outlineWidth = 0f;
                 nameLabel.raycastTarget = false;
                 nameLabel.text = "";
+
+                LayoutSmallIconAndLabels(iconRt, textRt, nameRt);
             }
 
             _slots[index].Icon = icon;
             _slots[index].Amount = amount;
             _slots[index].Name = nameLabel;
+        }
+
+        /// <summary>
+        /// Small layouts: All (icon+amount+name) | No name (icon+amount) | Icon only (centered).
+        /// </summary>
+        private void LayoutSmallIconAndLabels(RectTransform iconRt, RectTransform amountRt, RectTransform nameRt)
+        {
+            if (iconRt == null)
+                return;
+
+            bool showName = ShowName();
+            bool showAmount = ShowAmount();
+
+            if (!showName && !showAmount)
+            {
+                // Icon only — true center (no ghost slot for the count).
+                iconRt.anchorMin = new Vector2(0.22f, 0.18f);
+                iconRt.anchorMax = new Vector2(0.78f, 0.82f);
+                if (amountRt != null)
+                {
+                    amountRt.anchorMin = Vector2.zero;
+                    amountRt.anchorMax = Vector2.zero;
+                    amountRt.gameObject.SetActive(false);
+                }
+                if (nameRt != null)
+                {
+                    nameRt.anchorMin = Vector2.zero;
+                    nameRt.anchorMax = Vector2.zero;
+                    nameRt.gameObject.SetActive(false);
+                }
+                return;
+            }
+
+            if (!showName && showAmount)
+            {
+                // Name off: icon + count, full height, slightly more centered pair.
+                iconRt.anchorMin = new Vector2(0.26f, 0.18f);
+                iconRt.anchorMax = new Vector2(0.50f, 0.88f);
+                if (amountRt != null)
+                {
+                    amountRt.gameObject.SetActive(true);
+                    amountRt.anchorMin = new Vector2(0.52f, 0.18f);
+                    amountRt.anchorMax = new Vector2(0.80f, 0.88f);
+                    amountRt.pivot = new Vector2(0f, 0.5f);
+                }
+                if (nameRt != null)
+                {
+                    nameRt.anchorMin = Vector2.zero;
+                    nameRt.anchorMax = Vector2.zero;
+                    nameRt.gameObject.SetActive(false);
+                }
+                return;
+            }
+
+            // All on (or name-only from Alt+E): icon + count top, name bottom.
+            iconRt.anchorMin = new Vector2(0.28f, 0.38f);
+            iconRt.anchorMax = new Vector2(0.50f, 0.92f);
+            if (amountRt != null)
+            {
+                amountRt.gameObject.SetActive(showAmount);
+                if (showAmount)
+                {
+                    amountRt.anchorMin = new Vector2(0.52f, 0.38f);
+                    amountRt.anchorMax = new Vector2(0.78f, 0.92f);
+                    amountRt.pivot = new Vector2(0f, 0.5f);
+                }
+                else
+                {
+                    // Name on, amount off: center icon above the name.
+                    iconRt.anchorMin = new Vector2(0.30f, 0.38f);
+                    iconRt.anchorMax = new Vector2(0.70f, 0.92f);
+                    amountRt.anchorMin = Vector2.zero;
+                    amountRt.anchorMax = Vector2.zero;
+                }
+            }
+            if (nameRt != null)
+            {
+                nameRt.gameObject.SetActive(showName);
+                if (showName)
+                {
+                    nameRt.anchorMin = new Vector2(0.08f, 0.04f);
+                    nameRt.anchorMax = new Vector2(0.92f, 0.34f);
+                }
+            }
         }
 
         private void SlotCoord(int index, out int col, out int row)
@@ -1750,8 +2181,17 @@ namespace StoreAndCraft
             TextMeshProUGUI label = _slots[i].Name;
             if (label == null)
                 return;
+            if (!ShowName())
+            {
+                if (label.enabled || !string.IsNullOrEmpty(label.text))
+                {
+                    label.enabled = false;
+                    label.text = "";
+                }
+                return;
+            }
             string next = text ?? "";
-            if (label.text == next)
+            if (label.text == next && label.enabled)
                 return;
             label.enabled = true;
             label.text = next;
@@ -1769,6 +2209,15 @@ namespace StoreAndCraft
             TextMeshProUGUI amount = _slots[i].Amount;
             if (amount == null)
                 return;
+            if (!ShowAmount())
+            {
+                if (amount.enabled || !string.IsNullOrEmpty(amount.text))
+                {
+                    amount.enabled = false;
+                    amount.text = "";
+                }
+                return;
+            }
             string next = text ?? "";
             amount.enabled = true;
             amount.color = color;

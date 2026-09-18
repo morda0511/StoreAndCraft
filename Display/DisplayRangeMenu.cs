@@ -40,6 +40,8 @@ namespace StoreAndCraft
 
             if (DisplayTypeMenu.IsOpen)
                 DisplayTypeMenu.Close();
+            if (DisplaySmallOptions.IsOpen)
+                DisplaySmallOptions.Close();
             if (StationFilterMenu.IsOpen)
                 StationFilterMenu.Close();
             if (IsOpen)

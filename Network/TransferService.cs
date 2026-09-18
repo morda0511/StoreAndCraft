@@ -73,7 +73,8 @@ namespace StoreAndCraft
 
             if (IsChestOwner(chest))
             {
-                ContainerFilter.RefreshInventory(chest);
+                if (!ContainerFilter.TryReadyForWrite(chest))
+                    return false;
                 return DepositLocal(chest, from, item, amount);
             }
 
@@ -158,7 +159,8 @@ namespace StoreAndCraft
                 nv.ClaimOwnership();
             }
 
-            ContainerFilter.RefreshInventory(chest);
+            if (!ContainerFilter.TryReadyForWrite(chest))
+                return 0;
             return WithdrawLocal(chest, sharedName, amount, playerInv, leaveOne);
         }
 
@@ -273,7 +275,9 @@ namespace StoreAndCraft
                     Plugin.Settings != null ? Plugin.Settings.StationPullRange() : 20f))
                 return;
 
-            ContainerFilter.RefreshInventory(container);
+            if (!ContainerFilter.TryReadyForWrite(container))
+                return;
+
             Inventory inv = container.GetInventory();
             if (inv == null)
                 return;
@@ -355,6 +359,13 @@ namespace StoreAndCraft
             string crafterName = pkg.ReadString();
             if (stack <= 0)
                 return;
+
+            // Never Add+Save over a stale empty local view — that permanently wipes the chest.
+            if (!ContainerFilter.TryReadyForWrite(container))
+            {
+                RefundDeposit(sender, name, stack, quality, variant, crafterId, crafterName);
+                return;
+            }
 
             Inventory inv = container.GetInventory();
             if (inv == null)
@@ -699,7 +710,9 @@ namespace StoreAndCraft
         {
             // Fresh ZDO Load — stale in-memory inventories after leaving the area were the
             // main "Stored N stacks" / items still in bag / no ping bug.
-            ContainerFilter.RefreshInventory(chest);
+            // TryReadyForWrite also blocks the empty-local / full-ZDO wipe race.
+            if (!ContainerFilter.TryReadyForWrite(chest))
+                return false;
             Inventory inv = chest.GetInventory();
             if (inv == null || item == null || item.m_shared == null)
                 return false;
@@ -738,7 +751,8 @@ namespace StoreAndCraft
             // Do not steal ownership from someone using the chest.
             if (IsChestOwner(chest))
             {
-                ContainerFilter.RefreshInventory(chest);
+                if (!ContainerFilter.TryReadyForWrite(chest))
+                    return 0;
                 return TakeIntoExistingStackLocal(chest, dest, amount);
             }
 
@@ -800,6 +814,7 @@ namespace StoreAndCraft
             if (player != null)
                 Refs.NotifyChanged(player.GetInventory());
             Refs.NotifyChanged(inv);
+            ContainerFilter.SaveInventory(chest);
             Highlight(chest);
             return taken;
         }
@@ -868,6 +883,9 @@ namespace StoreAndCraft
 
             ZNetView dropView = Refs.View(drop);
             if (dropView == null || !dropView.IsValid() || !dropView.IsOwner())
+                return false;
+
+            if (!ContainerFilter.TryReadyForWrite(chest))
                 return false;
 
             Inventory inv = chest.GetInventory();
@@ -999,7 +1017,9 @@ namespace StoreAndCraft
             if (chest == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
                 return 0;
 
-            ContainerFilter.RefreshInventory(chest);
+            if (!ContainerFilter.TryReadyForWrite(chest))
+                return 0;
+
             Inventory inv = chest.GetInventory();
             if (inv == null)
                 return 0;

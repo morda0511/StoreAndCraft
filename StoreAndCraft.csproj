@@ -10,8 +10,8 @@
     <AssemblyName>StoreAndCraft</AssemblyName>
     <RootNamespace>StoreAndCraft</RootNamespace>
     <Product>StoreAndCraft</Product>
-    <Version>1.3.6</Version>
-    <ModVersion>1.3.6</ModVersion>
+    <Version>1.3.30</Version>
+    <ModVersion>1.3.30</ModVersion>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <DebugType>portable</DebugType>
   </PropertyGroup>
@@ -96,7 +96,7 @@
     <MakeDir Directories="$(ThunderstorePackRoot)\plugins\StoreAndCraft" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ThunderstorePackRoot)\plugins\StoreAndCraft" OverwriteReadOnlyFiles="true" />
   </Target>
-  <Target Name="PackThunderstore" AfterTargets="Deploy" Condition="'$(Configuration)' == 'Release'">
+  <Target Name="PackThunderstore" AfterTargets="Deploy" Condition="'$(Configuration)' == 'Release' AND '$(Pack)' == 'true'">
     <MakeDir Directories="$(MSBuildThisFileDirectory)thunderstore\packs" />
     <MakeDir Directories="$(DesktopModPackDir)" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)pack-thunderstore.ps1&quot; -Version &quot;$(ModVersion)&quot; -PackRoot &quot;$(MSBuildThisFileDirectory)thunderstore\StoreAndCraft&quot; -OutputDir &quot;$(DesktopModPackDir)&quot; -PackageName &quot;StoreAndCraft&quot;" />
