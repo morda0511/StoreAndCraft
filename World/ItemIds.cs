@@ -1,9 +1,14 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace StoreAndCraft
 {
     internal static class ItemIds
     {
+        private static readonly Dictionary<string, GameObject> PrefabCache =
+            new Dictionary<string, GameObject>(System.StringComparer.OrdinalIgnoreCase);
+        private static int _odbCount = -1;
+
         public static string PrefabName(ItemDrop.ItemData item)
         {
             if (item == null)
@@ -100,10 +105,27 @@ namespace StoreAndCraft
             if (string.IsNullOrEmpty(token) || ObjectDB.instance == null)
                 return null;
 
+            EnsurePrefabIndex();
+
+            GameObject cached;
+            if (PrefabCache.TryGetValue(token, out cached))
+                return cached;
+
+            string norm = Normalize(token);
+            if (!string.IsNullOrEmpty(norm) && PrefabCache.TryGetValue(norm, out cached))
+            {
+                PrefabCache[token] = cached;
+                return cached;
+            }
+
             GameObject byName = ObjectDB.instance.GetItemPrefab(token);
             if (byName != null)
+            {
+                PrefabCache[token] = byName;
                 return byName;
+            }
 
+            // Index miss: one linear pass by shared name only (no Localize per item).
             foreach (GameObject go in ObjectDB.instance.m_items)
             {
                 if (go == null)
@@ -111,17 +133,56 @@ namespace StoreAndCraft
                 ItemDrop drop = go.GetComponent<ItemDrop>();
                 if (drop?.m_itemData?.m_shared == null)
                     continue;
-                if (string.Equals(drop.m_itemData.m_shared.m_name, token, System.StringComparison.OrdinalIgnoreCase))
-                    return go;
-                if (global::Localization.instance != null)
+                string shared = drop.m_itemData.m_shared.m_name;
+                if (string.Equals(shared, token, System.StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(Normalize(shared), norm, System.StringComparison.Ordinal))
                 {
-                    string localized = global::Localization.instance.Localize(drop.m_itemData.m_shared.m_name);
-                    if (string.Equals(localized, token, System.StringComparison.OrdinalIgnoreCase))
-                        return go;
+                    PrefabCache[token] = go;
+                    return go;
                 }
             }
 
+            PrefabCache[token] = null;
             return null;
+        }
+
+        /// <summary>Build token→prefab map once per ObjectDB load (shared name + prefab name).</summary>
+        private static void EnsurePrefabIndex()
+        {
+            ObjectDB odb = ObjectDB.instance;
+            if (odb?.m_items == null)
+                return;
+
+            int count = odb.m_items.Count;
+            if (_odbCount == count && PrefabCache.Count > 0)
+                return;
+
+            PrefabCache.Clear();
+            _odbCount = count;
+            for (int i = 0; i < count; i++)
+            {
+                GameObject go = odb.m_items[i];
+                if (go == null)
+                    continue;
+                string pname = StripClone(go.name);
+                if (!string.IsNullOrEmpty(pname))
+                {
+                    PrefabCache[pname] = go;
+                    string pn = Normalize(pname);
+                    if (!string.IsNullOrEmpty(pn) && !PrefabCache.ContainsKey(pn))
+                        PrefabCache[pn] = go;
+                }
+                ItemDrop drop = go.GetComponent<ItemDrop>();
+                if (drop?.m_itemData?.m_shared == null)
+                    continue;
+                string shared = drop.m_itemData.m_shared.m_name;
+                if (string.IsNullOrEmpty(shared))
+                    continue;
+                PrefabCache[shared] = go;
+                string sn = Normalize(shared);
+                if (!string.IsNullOrEmpty(sn) && !PrefabCache.ContainsKey(sn))
+                    PrefabCache[sn] = go;
+            }
         }
     }
 }

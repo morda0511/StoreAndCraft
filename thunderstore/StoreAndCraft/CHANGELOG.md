@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.32
+
+### FIX
+- Select Types menu opens without a long freeze (no full item-list rebuild for every category)
+
 ## 1.3.31
 
 ### NEW FEATURES

@@ -39,6 +39,9 @@ namespace StoreAndCraft
         private static RectTransform _itemContent;
         private static TMP_Text _itemHeader;
         private static GameObject _itemBox;
+        private static bool _pendingItems;
+        private static readonly Dictionary<string, Sprite> _iconCache =
+            new Dictionary<string, Sprite>(System.StringComparer.Ordinal);
 
         private static readonly Color Gold = new Color(1f, 0.85f, 0.4f, 1f);
         private static readonly Color Cream = new Color(0.95f, 0.92f, 0.82f, 1f);
@@ -64,7 +67,7 @@ namespace StoreAndCraft
             if (DisplaySmallOptions.IsOpen)
                 DisplaySmallOptions.Close();
 
-            DisplayFilters.InvalidateSubItemCache();
+            // Keep sub-item caches warm — invalidating here caused multi-second Freezes on open.
             _board = board;
             _skills = gui.m_skillsDialog;
             _openedAt = Time.unscaledTime;
@@ -84,8 +87,14 @@ namespace StoreAndCraft
             panel.transform.SetAsLastSibling();
             HideVanillaRows();
             ApplyTitle();
+            // Warm caches before building rows (avoids LiberationSans spam + PrefabFromToken scans).
+            UiFonts.ThinNorse();
+            ItemIds.PrefabFromToken("$item_wood");
             EnsureHost();
-            RebuildUi();
+            if (_host != null)
+                _host.SetActive(true);
+            RebuildUi(buildItems: false);
+            _pendingItems = true;
             IsOpen = true;
         }
 
@@ -106,6 +115,7 @@ namespace StoreAndCraft
                 _suppressMenuFrame = Time.frameCount;
 
                 DestroyHost();
+                _pendingItems = false;
                 RestoreVanillaRows();
                 RestoreTitle();
 
@@ -147,6 +157,12 @@ namespace StoreAndCraft
                 return;
             }
 
+            if (_pendingItems)
+            {
+                _pendingItems = false;
+                RebuildUi(buildItems: true);
+            }
+
             if (Time.unscaledTime < _openedAt + 0.2f)
                 return;
             if (ZInput.GetKeyDown(KeyCode.Escape, true) || ZInput.GetButtonDown("JoyButtonB"))
@@ -166,7 +182,8 @@ namespace StoreAndCraft
                 return;
             _board.ToggleFilter(id);
             _focusId = id;
-            RebuildUi();
+            _pendingItems = false;
+            RebuildUi(buildItems: true);
         }
 
         private static void FocusCategory(int id)
@@ -174,7 +191,8 @@ namespace StoreAndCraft
             if (id <= 0)
                 return;
             _focusId = id;
-            RebuildUi();
+            _pendingItems = false;
+            RebuildUi(buildItems: true);
         }
 
         private static void PickItem(string shared, int parentFilterId)
@@ -184,7 +202,8 @@ namespace StoreAndCraft
             _board.ToggleItemToken(shared, parentFilterId);
             if (parentFilterId > 0)
                 _focusId = parentFilterId;
-            RebuildUi();
+            _pendingItems = false;
+            RebuildUi(buildItems: true);
         }
 
         private static void PickEpicLootSub(int subFilterId)
@@ -193,7 +212,8 @@ namespace StoreAndCraft
                 return;
             _board.ToggleFilter(subFilterId);
             _focusId = DisplayFilters.EpicLootGroupId;
-            RebuildUi();
+            _pendingItems = false;
+            RebuildUi(buildItems: true);
         }
 
         private static void HideVanillaRows()
@@ -474,7 +494,7 @@ namespace StoreAndCraft
                 Object.Destroy(content.GetChild(i).gameObject);
         }
 
-        private static void RebuildUi()
+        private static void RebuildUi(bool buildItems)
         {
             if (_skills == null)
                 return;
@@ -483,10 +503,20 @@ namespace StoreAndCraft
                 return;
 
             ClearContent(_catContent);
-            ClearContent(_itemContent);
+            if (buildItems)
+                ClearContent(_itemContent);
 
             List<int> selected = _board != null ? _board.FilterIds() : new List<int>();
             List<string> selectedItems = _board != null ? _board.ItemTokens() : new List<string>();
+            var selectedSet = new HashSet<int>(selected);
+            var selectedItemSet = new HashSet<string>(selectedItems, System.StringComparer.Ordinal);
+            var partialParents = new HashSet<int>();
+            foreach (string token in selectedItemSet)
+            {
+                int parent = DisplayFilters.ParentFilterIdFromToken(token);
+                if (parent > 0)
+                    partialParents.Add(parent);
+            }
             EnsureFocus(selected, selectedItems);
 
             int catN = 0;
@@ -496,7 +526,7 @@ namespace StoreAndCraft
                 int id = choice.Id;
                 if (DisplayFilters.IsEpicLootSubFilter(id))
                     continue;
-                bool on = CategoryIsOn(id, selected, selectedItems);
+                bool on = CategoryIsOn(id, selectedSet, partialParents);
                 bool focused = id == _focusId;
                 int captured = id;
                 AddCategoryRow(_catContent, catN++, choice.Label(), on, focused,
@@ -504,6 +534,13 @@ namespace StoreAndCraft
                     () => ToggleCategory(captured));
             }
             SetContentHeight(_catContent, catN);
+
+            if (!buildItems)
+            {
+                if (_itemHeader != null)
+                    _itemHeader.text = Loc.T("Items", "Items");
+                return;
+            }
 
             string focusName = "?";
             DisplayFilter focusFilter;
@@ -518,7 +555,7 @@ namespace StoreAndCraft
             if (_focusId == DisplayFilters.EpicLootGroupId)
             {
                 hasItems = true;
-                bool allOn = selected.Contains(DisplayFilters.EpicLootGroupId);
+                bool allOn = selectedSet.Contains(DisplayFilters.EpicLootGroupId);
                 AddCategoryRow(_itemContent, itemN++,
                     Loc.T("All", "All") + " Epic Loot", allOn, false, null,
                     () => ToggleCategory(DisplayFilters.EpicLootGroupId));
@@ -528,7 +565,7 @@ namespace StoreAndCraft
                     DisplayFilter sub;
                     if (!DisplayFilters.TryGet(subId, out sub))
                         continue;
-                    bool on = selected.Contains(subId);
+                    bool on = selectedSet.Contains(subId);
                     int capturedSub = subId;
                     AddItemRow(_itemContent, itemN++, sub.Label(), on, null,
                         () => PickEpicLootSub(capturedSub));
@@ -540,11 +577,11 @@ namespace StoreAndCraft
                 if (items != null && items.Count > 0)
                 {
                     hasItems = true;
-                    bool categoryOn = selected.Contains(_focusId);
+                    bool categoryOn = selectedSet.Contains(_focusId);
                     for (int s = 0; s < items.Count; s++)
                     {
                         string shared = items[s];
-                        bool on = categoryOn || selectedItems.Contains(shared);
+                        bool on = categoryOn || selectedItemSet.Contains(shared);
                         string captured = shared;
                         int parent = _focusId;
                         AddItemRow(_itemContent, itemN++, DisplayFilters.ItemLabel(shared), on,
@@ -695,9 +732,16 @@ namespace StoreAndCraft
 
         private static Sprite ItemIcon(string shared)
         {
+            if (string.IsNullOrEmpty(shared))
+                return null;
+            Sprite cached;
+            if (_iconCache.TryGetValue(shared, out cached))
+                return cached;
             GameObject prefab = ItemIds.PrefabFromToken(shared);
             ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
-            return drop?.m_itemData != null ? StackLimits.Icon(drop.m_itemData) : null;
+            Sprite icon = drop?.m_itemData != null ? StackLimits.Icon(drop.m_itemData) : null;
+            _iconCache[shared] = icon;
+            return icon;
         }
 
         private static void StyleLabel(TMP_Text tmp, float size)
@@ -761,7 +805,7 @@ namespace StoreAndCraft
             _focusId = 0;
         }
 
-        private static bool CategoryIsOn(int id, List<int> selected, List<string> selectedItems)
+        private static bool CategoryIsOn(int id, HashSet<int> selected, HashSet<int> partialParents)
         {
             if (selected.Contains(id))
                 return true;
@@ -774,15 +818,7 @@ namespace StoreAndCraft
                 }
                 return false;
             }
-            if (!DisplayFilters.IsExpandable(id))
-                return false;
-            List<string> subs = DisplayFilters.SubItems(id);
-            for (int s = 0; s < subs.Count; s++)
-            {
-                if (selectedItems.Contains(subs[s]))
-                    return true;
-            }
-            return false;
+            return partialParents != null && partialParents.Contains(id);
         }
 
         private static void ApplyTitle()

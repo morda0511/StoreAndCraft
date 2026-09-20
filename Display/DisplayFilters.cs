@@ -385,11 +385,6 @@ namespace StoreAndCraft
         {
             if (string.IsNullOrEmpty(token))
                 return 0;
-            if (TokenBelongsToCategory(token, IngredientsFilterId))
-                return IngredientsFilterId;
-            if (TokenBelongsToCategory(token, FoodFilterId))
-                return FoodFilterId;
-
             GameObject prefab = ItemIds.PrefabFromToken(token);
             ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
             if (drop?.m_itemData != null)
@@ -829,8 +824,12 @@ namespace StoreAndCraft
                 return false;
             if (filterId == EpicLootGroupId)
                 return false;
-            List<string> subs = SubItems(filterId);
-            return subs != null && subs.Contains(shared);
+            // Prefer Matches over SubItems — building full Food/ingredient lists is expensive.
+            GameObject prefab = ItemIds.PrefabFromToken(shared);
+            ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            if (drop?.m_itemData == null)
+                return false;
+            return Matches(drop.m_itemData, filterId);
         }
 
         private static bool TypeAllowed(ItemDrop.ItemData.ItemType type, ItemDrop.ItemData.ItemType[] types)
