@@ -20,6 +20,10 @@ namespace StoreAndCraft
         public static Sprite ToggleOff => Get("toggle_button_off.png");
         public static Sprite LinkSelected => Get("link_selected.png");
         public static Sprite ShowDisplayDisabled => Get("show_display_disabled.png");
+        public static Sprite PanelWood => GetSliced("panel_wood.png", 14f);
+        public static Sprite BtnWood => GetSliced("btn_wood.png", 8f);
+        public static Sprite BtnWoodAccent => GetSliced("btn_wood_accent.png", 8f);
+        public static Sprite RowFocus => Get("row_focus.png");
 
         public static Sprite Link(int id)
         {
@@ -36,6 +40,35 @@ namespace StoreAndCraft
             EnsureLoaded();
             Sprite cached;
             return Cache.TryGetValue(fileName.ToLowerInvariant(), out cached) ? cached : null;
+        }
+
+        /// <summary>Same as Get, but recreates with 9-slice borders if missing from cache key.</summary>
+        public static Sprite GetSliced(string fileName, float border)
+        {
+            if (string.IsNullOrEmpty(fileName))
+                return null;
+
+            string key = fileName.ToLowerInvariant() + "#s" + border.ToString("0");
+            EnsureLoaded();
+            Sprite cached;
+            if (Cache.TryGetValue(key, out cached))
+                return cached;
+
+            Sprite baseSprite = Get(fileName);
+            if (baseSprite == null)
+                return null;
+
+            Texture2D tex = baseSprite.texture;
+            Sprite sliced = Sprite.Create(
+                tex,
+                new Rect(0, 0, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f),
+                100f,
+                0,
+                SpriteMeshType.FullRect,
+                new Vector4(border, border, border, border));
+            Cache[key] = sliced;
+            return sliced;
         }
 
         private static void EnsureLoaded()
@@ -73,8 +106,11 @@ namespace StoreAndCraft
                             continue;
                         tex.wrapMode = TextureWrapMode.Clamp;
                         tex.filterMode = FilterMode.Bilinear;
-                        // Toggle buttons keep their dark chrome — do not punch near-black to alpha.
-                        if (!file.StartsWith("toggle_button_"))
+                        // Toggle buttons / wood panels keep their dark chrome — do not punch near-black to alpha.
+                        if (!file.StartsWith("toggle_button_")
+                            && !file.StartsWith("panel_")
+                            && !file.StartsWith("btn_")
+                            && file != "row_focus.png")
                             MakeNearBlackTransparent(tex);
                         // Link / outline sprites are padded in a wide canvas — crop tight.
                         Rect rect = (file.StartsWith("link") || file == "link_selected.png")

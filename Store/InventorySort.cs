@@ -93,7 +93,7 @@ namespace StoreAndCraft
                 if (item == null || item.m_shared == null || item.m_stack <= 0)
                     continue;
 
-                if (IsLocked(item, lockFavorites, lockEquipped, lockHotbar))
+                if (PlayerBag.IsSortLocked(item, lockFavorites, lockEquipped, lockHotbar, inv))
                 {
                     locked.Add(item);
                     lockedSlots.Add(item.m_gridPos);
@@ -134,6 +134,7 @@ namespace StoreAndCraft
                 // Player hotbar is row 0 — never pack sorted bag items into it.
                 if (lockHotbar && y == 0)
                     continue;
+                // Wider/Deeper Pockets rows (y >= 4) are normal bag — include them.
                 for (int x = 0; x < width; x++)
                 {
                     var slot = new Vector2i(x, y);
@@ -158,19 +159,6 @@ namespace StoreAndCraft
 
             Refs.NotifyChanged(inv);
             return Mathf.Max(changed, movable.Count > 0 ? 1 : 0);
-        }
-
-        private static bool IsLocked(ItemDrop.ItemData item, bool lockFavorites, bool lockEquipped, bool lockHotbar)
-        {
-            if (item == null)
-                return true;
-            if (lockEquipped && item.m_equipped)
-                return true;
-            if (lockFavorites && Favorites.IsFavorite(item))
-                return true;
-            if (lockHotbar && item.m_gridPos.y == 0)
-                return true;
-            return false;
         }
 
         private static void CompactStacks(List<ItemDrop.ItemData> items)

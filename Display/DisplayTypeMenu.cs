@@ -1,14 +1,23 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace StoreAndCraft
 {
+    /// <summary>
+    /// Select Types mockup layout: Categories box (scroll) on top, Items box (scroll) below,
+    /// Cancel / Apply. Uses real UiToggle sprites. No skills-prefab icon squares.
+    /// </summary>
     internal static class DisplayTypeMenu
     {
         public static bool IsOpen { get; private set; }
+
+        private const float RowH = 36f;
+        private const float IconSize = 28f;
+        private const float Pad = 8f;
 
         private static StorageDisplayBoard _board;
         private static SkillsDialog _skills;
@@ -16,12 +25,28 @@ namespace StoreAndCraft
         private static bool _openedInventory;
         private static float _openedAt;
         private static int _suppressMenuFrame;
-        private static readonly List<GameObject> _rows = new List<GameObject>();
+        private static bool _closing;
+        private static int _focusId;
+        private static bool _listWasActive = true;
+
         private static readonly List<GameObject> _hiddenVanilla = new List<GameObject>();
         private static readonly List<TMP_Text> _titleTexts = new List<TMP_Text>();
         private static readonly List<string> _titleBackup = new List<string>();
         private static readonly List<bool> _titleLocalize = new List<bool>();
-        private static bool _closing;
+
+        private static GameObject _host;
+        private static RectTransform _catContent;
+        private static RectTransform _itemContent;
+        private static TMP_Text _itemHeader;
+        private static GameObject _itemBox;
+
+        private static readonly Color Gold = new Color(1f, 0.85f, 0.4f, 1f);
+        private static readonly Color Cream = new Color(0.95f, 0.92f, 0.82f, 1f);
+        private static readonly Color Muted = new Color(0.7f, 0.65f, 0.55f, 1f);
+        private static readonly Color BoxBg = new Color(0.14f, 0.09f, 0.05f, 0.94f);
+        private static readonly Color BoxBorder = new Color(0.42f, 0.30f, 0.16f, 1f);
+        private static readonly Color RowBg = new Color(0.18f, 0.12f, 0.07f, 0.45f);
+        private static readonly Color RowFocus = new Color(0.34f, 0.24f, 0.12f, 0.95f);
 
         public static void Open(StorageDisplayBoard board)
         {
@@ -59,7 +84,8 @@ namespace StoreAndCraft
             panel.transform.SetAsLastSibling();
             HideVanillaRows();
             ApplyTitle();
-            RebuildRows();
+            EnsureHost();
+            RebuildUi();
             IsOpen = true;
         }
 
@@ -76,10 +102,10 @@ namespace StoreAndCraft
                 IsOpen = false;
                 _openedInventory = false;
                 _board = null;
-                Expanded.Clear();
+                _focusId = 0;
                 _suppressMenuFrame = Time.frameCount;
 
-                ClearOurRows();
+                DestroyHost();
                 RestoreVanillaRows();
                 RestoreTitle();
 
@@ -134,46 +160,40 @@ namespace StoreAndCraft
             Close();
         }
 
-        private static readonly HashSet<int> Expanded = new HashSet<int>();
-
-        private static void Pick(int id)
+        private static void ToggleCategory(int id)
         {
-            StorageDisplayBoard board = _board;
-            if (board == null)
+            if (_board == null || id <= 0)
                 return;
-            if (id == 0)
-            {
-                board.WriteSelection(new List<int>(), new List<string>());
-                RebuildRows();
-                return;
-            }
-            if (DisplayFilters.IsExpandable(id))
-            {
-                if (!Expanded.Add(id))
-                    Expanded.Remove(id);
-                RebuildRows();
-                return;
-            }
-            board.ToggleFilter(id);
-            RebuildRows();
+            _board.ToggleFilter(id);
+            _focusId = id;
+            RebuildUi();
         }
 
-        private static void PickAll(int filterId)
+        private static void FocusCategory(int id)
         {
-            StorageDisplayBoard board = _board;
-            if (board == null)
+            if (id <= 0)
                 return;
-            board.ToggleFilter(filterId);
-            RebuildRows();
+            _focusId = id;
+            RebuildUi();
         }
 
         private static void PickItem(string shared, int parentFilterId)
         {
-            StorageDisplayBoard board = _board;
-            if (board == null)
+            if (_board == null)
                 return;
-            board.ToggleItemToken(shared, parentFilterId);
-            RebuildRows();
+            _board.ToggleItemToken(shared, parentFilterId);
+            if (parentFilterId > 0)
+                _focusId = parentFilterId;
+            RebuildUi();
+        }
+
+        private static void PickEpicLootSub(int subFilterId)
+        {
+            if (_board == null || !DisplayFilters.IsEpicLootSubFilter(subFilterId))
+                return;
+            _board.ToggleFilter(subFilterId);
+            _focusId = DisplayFilters.EpicLootGroupId;
+            RebuildUi();
         }
 
         private static void HideVanillaRows()
@@ -195,264 +215,584 @@ namespace StoreAndCraft
         {
             for (int i = 0; i < _hiddenVanilla.Count; i++)
             {
-                GameObject row = _hiddenVanilla[i];
-                if (row != null)
-                    row.SetActive(true);
+                if (_hiddenVanilla[i] != null)
+                    _hiddenVanilla[i].SetActive(true);
             }
             _hiddenVanilla.Clear();
+            if (_skills != null && _skills.m_listRoot != null)
+                _skills.m_listRoot.gameObject.SetActive(_listWasActive);
         }
 
-        private static void ClearOurRows()
+        private static void EnsureHost()
         {
-            for (int i = 0; i < _rows.Count; i++)
-            {
-                if (_rows[i] != null)
-                    Object.Destroy(_rows[i]);
-            }
-            _rows.Clear();
-        }
-
-        private static void RebuildRows()
-        {
-            if (_skills == null || _skills.m_elementPrefab == null || _skills.m_listRoot == null)
+            if (_host != null || _skills == null)
                 return;
 
-            ClearOurRows();
+            Transform parent = _skills.m_listRoot != null && _skills.m_listRoot.parent != null
+                ? _skills.m_listRoot.parent
+                : _skills.transform;
+
+            if (_skills.m_listRoot != null)
+            {
+                _listWasActive = _skills.m_listRoot.gameObject.activeSelf;
+                _skills.m_listRoot.gameObject.SetActive(false);
+            }
+
+            if (_skills.m_totalSkillText != null)
+                _skills.m_totalSkillText.gameObject.SetActive(false);
+
+            _host = new GameObject("SAC_TypeMenuHost", typeof(RectTransform));
+            _host.transform.SetParent(parent, false);
+            RectTransform hostRt = _host.transform as RectTransform;
+            Stretch(hostRt);
+            hostRt.offsetMin = new Vector2(8f, 8f);
+            hostRt.offsetMax = new Vector2(-8f, -8f);
+
+            // Top: Categories box (~50%)
+            MakeScrollBox(hostRt, "CatBox",
+                new Vector2(0f, 0.50f), new Vector2(1f, 1f),
+                Loc.T("Categories", "Categories"),
+                out _catContent, out _);
+
+            // Bottom: Items box
+            RectTransform itemBoxRt = MakeScrollBox(hostRt, "ItemBox",
+                new Vector2(0f, 0.12f), new Vector2(1f, 0.48f),
+                Loc.T("Items", "Items"),
+                out _itemContent, out _itemHeader);
+            _itemBox = itemBoxRt.gameObject;
+
+            BuildFooter(hostRt);
+        }
+
+        private static void DestroyHost()
+        {
+            _catContent = null;
+            _itemContent = null;
+            _itemHeader = null;
+            _itemBox = null;
+            if (_host != null)
+            {
+                Object.Destroy(_host);
+                _host = null;
+            }
+            if (_skills != null && _skills.m_totalSkillText != null)
+                _skills.m_totalSkillText.gameObject.SetActive(true);
+        }
+
+        private static RectTransform MakeScrollBox(
+            RectTransform parent,
+            string name,
+            Vector2 anchorMin,
+            Vector2 anchorMax,
+            string header,
+            out RectTransform content,
+            out TMP_Text headerLabel)
+        {
+            var box = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            box.transform.SetParent(parent, false);
+            RectTransform boxRt = box.transform as RectTransform;
+            boxRt.anchorMin = anchorMin;
+            boxRt.anchorMax = anchorMax;
+            boxRt.offsetMin = new Vector2(0f, 2f);
+            boxRt.offsetMax = new Vector2(0f, -2f);
+            Image boxImg = box.GetComponent<Image>();
+            Sprite panel = UiAssets.PanelWood;
+            if (panel != null)
+            {
+                boxImg.sprite = panel;
+                boxImg.type = Image.Type.Sliced;
+                boxImg.color = Color.white;
+            }
+            else
+            {
+                boxImg.color = BoxBg;
+            }
+            boxImg.raycastTarget = true;
+            if (panel == null)
+                AddBoxBorder(boxRt);
+
+            var headGo = new GameObject("Header", typeof(RectTransform));
+            headGo.transform.SetParent(boxRt, false);
+            RectTransform headRt = headGo.transform as RectTransform;
+            headRt.anchorMin = new Vector2(0f, 1f);
+            headRt.anchorMax = new Vector2(1f, 1f);
+            headRt.pivot = new Vector2(0f, 1f);
+            headRt.anchoredPosition = new Vector2(Pad, -6f);
+            headRt.sizeDelta = new Vector2(-Pad * 2f, 20f);
+            headerLabel = UiFonts.CreateLabel(headGo, 15f);
+            StyleLabel(headerLabel, 15f);
+            headerLabel.color = Gold;
+            headerLabel.alignment = TextAlignmentOptions.MidlineLeft;
+            headerLabel.text = header;
+
+            var scrollGo = new GameObject("Scroll", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(ScrollRect));
+            scrollGo.transform.SetParent(boxRt, false);
+            RectTransform scrollRt = scrollGo.transform as RectTransform;
+            scrollRt.anchorMin = Vector2.zero;
+            scrollRt.anchorMax = Vector2.one;
+            scrollRt.offsetMin = new Vector2(Pad, Pad);
+            scrollRt.offsetMax = new Vector2(-Pad, -28f);
+            Image scrollBg = scrollGo.GetComponent<Image>();
+            scrollBg.color = new Color(0f, 0f, 0f, 0.12f);
+            scrollBg.raycastTarget = true;
+
+            var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(RectMask2D));
+            viewport.transform.SetParent(scrollRt, false);
+            RectTransform vpRt = viewport.transform as RectTransform;
+            Stretch(vpRt);
+            Image vpImg = viewport.GetComponent<Image>();
+            vpImg.color = new Color(1f, 1f, 1f, 0.01f);
+            vpImg.raycastTarget = true;
+
+            var contentGo = new GameObject("Content", typeof(RectTransform));
+            contentGo.transform.SetParent(vpRt, false);
+            content = contentGo.transform as RectTransform;
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            content.sizeDelta = Vector2.zero;
+
+            ScrollRect sr = scrollGo.GetComponent<ScrollRect>();
+            sr.viewport = vpRt;
+            sr.content = content;
+            sr.horizontal = false;
+            sr.vertical = true;
+            sr.movementType = ScrollRect.MovementType.Clamped;
+            sr.scrollSensitivity = 120f;
+            sr.inertia = true;
+
+            return boxRt;
+        }
+
+        private static void AddBoxBorder(RectTransform box)
+        {
+            var top = new GameObject("BordT", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            top.transform.SetParent(box, false);
+            RectTransform tRt = top.transform as RectTransform;
+            tRt.anchorMin = new Vector2(0f, 1f);
+            tRt.anchorMax = new Vector2(1f, 1f);
+            tRt.pivot = new Vector2(0.5f, 1f);
+            tRt.sizeDelta = new Vector2(0f, 2f);
+            tRt.anchoredPosition = Vector2.zero;
+            top.GetComponent<Image>().color = BoxBorder;
+            top.GetComponent<Image>().raycastTarget = false;
+
+            var bot = new GameObject("BordB", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            bot.transform.SetParent(box, false);
+            RectTransform bRt = bot.transform as RectTransform;
+            bRt.anchorMin = new Vector2(0f, 0f);
+            bRt.anchorMax = new Vector2(1f, 0f);
+            bRt.pivot = new Vector2(0.5f, 0f);
+            bRt.sizeDelta = new Vector2(0f, 2f);
+            bot.GetComponent<Image>().color = BoxBorder;
+            bot.GetComponent<Image>().raycastTarget = false;
+
+            var left = new GameObject("BordL", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            left.transform.SetParent(box, false);
+            RectTransform lRt = left.transform as RectTransform;
+            lRt.anchorMin = new Vector2(0f, 0f);
+            lRt.anchorMax = new Vector2(0f, 1f);
+            lRt.pivot = new Vector2(0f, 0.5f);
+            lRt.sizeDelta = new Vector2(2f, 0f);
+            left.GetComponent<Image>().color = BoxBorder;
+            left.GetComponent<Image>().raycastTarget = false;
+
+            var right = new GameObject("BordR", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            right.transform.SetParent(box, false);
+            RectTransform rRt = right.transform as RectTransform;
+            rRt.anchorMin = new Vector2(1f, 0f);
+            rRt.anchorMax = new Vector2(1f, 1f);
+            rRt.pivot = new Vector2(1f, 0.5f);
+            rRt.sizeDelta = new Vector2(2f, 0f);
+            right.GetComponent<Image>().color = BoxBorder;
+            right.GetComponent<Image>().raycastTarget = false;
+        }
+
+        private static void BuildFooter(RectTransform host)
+        {
+            float btnW = 118f;
+            float btnH = 32f;
+            MakeFooterBtn(host, "Cancel", Loc.T("Cancel", "Cancel"),
+                true, new Vector2(Pad, Pad), btnW, btnH, false, Close);
+            MakeFooterBtn(host, "Apply", Loc.T("Apply", "Apply"),
+                false, new Vector2(-Pad, Pad), btnW, btnH, true, Close);
+        }
+
+        private static void MakeFooterBtn(
+            RectTransform host,
+            string name,
+            string label,
+            bool left,
+            Vector2 anchoredPos,
+            float w,
+            float h,
+            bool accent,
+            UnityAction click)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            go.transform.SetParent(host, false);
+            RectTransform rt = go.transform as RectTransform;
+            rt.anchorMin = left ? new Vector2(0f, 0f) : new Vector2(1f, 0f);
+            rt.anchorMax = rt.anchorMin;
+            rt.pivot = left ? new Vector2(0f, 0f) : new Vector2(1f, 0f);
+            rt.anchoredPosition = anchoredPos;
+            rt.sizeDelta = new Vector2(w, h);
+            Image img = go.GetComponent<Image>();
+            Sprite sprite = accent ? UiAssets.BtnWoodAccent : UiAssets.BtnWood;
+            if (sprite != null)
+            {
+                img.sprite = sprite;
+                img.type = Image.Type.Sliced;
+                img.color = Color.white;
+            }
+            else
+            {
+                img.color = accent
+                    ? new Color(0.40f, 0.28f, 0.12f, 1f)
+                    : new Color(0.26f, 0.18f, 0.10f, 1f);
+            }
+            Button btn = go.GetComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.onClick.AddListener(click);
+
+            var textGo = new GameObject("Text", typeof(RectTransform));
+            textGo.transform.SetParent(go.transform, false);
+            Stretch(textGo.transform as RectTransform);
+            TextMeshProUGUI tmp = UiFonts.CreateLabel(textGo, 15f);
+            StyleLabel(tmp, 15f);
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.color = accent ? Gold : Cream;
+            tmp.text = label;
+        }
+
+        private static void ClearContent(RectTransform content)
+        {
+            if (content == null)
+                return;
+            for (int i = content.childCount - 1; i >= 0; i--)
+                Object.Destroy(content.GetChild(i).gameObject);
+        }
+
+        private static void RebuildUi()
+        {
+            if (_skills == null)
+                return;
+            EnsureHost();
+            if (_catContent == null || _itemContent == null)
+                return;
+
+            ClearContent(_catContent);
+            ClearContent(_itemContent);
+
             List<int> selected = _board != null ? _board.FilterIds() : new List<int>();
             List<string> selectedItems = _board != null ? _board.ItemTokens() : new List<string>();
+            EnsureFocus(selected, selectedItems);
 
-            int rowIndex = 0;
+            int catN = 0;
             for (int i = 0; i < DisplayFilters.Choices.Length; i++)
             {
                 DisplayFilter choice = DisplayFilters.Choices[i];
                 int id = choice.Id;
-                // Dust / Essence / Reagent / Shard / Runestone only under Epic Loot.
                 if (DisplayFilters.IsEpicLootSubFilter(id))
                     continue;
-
-                bool expandable = DisplayFilters.IsExpandable(id);
-                bool expanded = expandable && Expanded.Contains(id);
-                bool categoryOn = selected.Contains(id);
-                bool anyChildOn = false;
-                if (id == DisplayFilters.EpicLootGroupId)
-                {
-                    for (int s = 0; s < DisplayFilters.EpicLootSubFilterIds.Length; s++)
-                    {
-                        if (selected.Contains(DisplayFilters.EpicLootSubFilterIds[s]))
-                        {
-                            anyChildOn = true;
-                            break;
-                        }
-                    }
-                }
-                else if (expandable)
-                {
-                    List<string> subs = DisplayFilters.SubItems(id);
-                    for (int s = 0; s < subs.Count; s++)
-                    {
-                        if (selectedItems.Contains(subs[s]))
-                        {
-                            anyChildOn = true;
-                            break;
-                        }
-                    }
-                }
-
-                bool parentOn = categoryOn || anyChildOn;
-                string expandMark = expandable ? (expanded ? " v " : " > ") : "   ";
-                string mark = parentOn ? "[+]" : "[-]";
-                string label = expandMark + mark + "  " + choice.Label();
-                AddToggleRow(rowIndex++, () => Pick(id), label, parentOn);
-
-                if (!expanded)
-                    continue;
-
-                if (id == DisplayFilters.EpicLootGroupId)
-                {
-                    string allLabel = "    " + (categoryOn ? "[+]" : "[-]") + "  "
-                        + Loc.T("All", "Alle") + " " + choice.Label();
-                    int capturedGroup = id;
-                    AddToggleRow(rowIndex++, () => PickAll(capturedGroup), allLabel, categoryOn);
-
-                    for (int s = 0; s < DisplayFilters.EpicLootSubFilterIds.Length; s++)
-                    {
-                        int subId = DisplayFilters.EpicLootSubFilterIds[s];
-                        DisplayFilter sub;
-                        if (!DisplayFilters.TryGet(subId, out sub))
-                            continue;
-                        bool on = selected.Contains(subId);
-                        string subLabel = "    " + (on ? "[+]" : "[-]") + "  " + sub.Label();
-                        int capturedSub = subId;
-                        AddToggleRow(rowIndex++, () => PickEpicLootSub(capturedSub), subLabel, on);
-                    }
-                    continue;
-                }
-
-                string foodAllLabel = "    " + (categoryOn ? "[+]" : "[-]") + "  "
-                    + Loc.T("All", "Alle") + " " + choice.Label();
-                int capturedId = id;
-                AddToggleRow(rowIndex++, () => PickAll(capturedId), foodAllLabel, categoryOn);
-
-                List<string> items = DisplayFilters.SubItems(id);
-                for (int s = 0; s < items.Count; s++)
-                {
-                    string shared = items[s];
-                    bool on = selectedItems.Contains(shared);
-                    string itemLabel = "    " + (on ? "[+]" : "[-]") + "  " + DisplayFilters.ItemLabel(shared);
-                    string capturedShared = shared;
-                    int parent = id;
-                    AddToggleRow(rowIndex++, () => PickItem(capturedShared, parent), itemLabel, on);
-                }
+                bool on = CategoryIsOn(id, selected, selectedItems);
+                bool focused = id == _focusId;
+                int captured = id;
+                AddCategoryRow(_catContent, catN++, choice.Label(), on, focused,
+                    () => FocusCategory(captured),
+                    () => ToggleCategory(captured));
             }
+            SetContentHeight(_catContent, catN);
 
-            AddActionRow(rowIndex++, Loc.T("Clear", "Zurücksetzen"), () => Pick(0));
-            AddActionRow(rowIndex++, Loc.T("Done", "Fertig"), Close);
+            string focusName = "?";
+            DisplayFilter focusFilter;
+            if (DisplayFilters.TryGet(_focusId, out focusFilter))
+                focusName = focusFilter.Label();
+            if (_itemHeader != null)
+                _itemHeader.text = Loc.T("Items in", "Items in") + " " + focusName;
 
-            float height = Mathf.Max(_skills.m_listRoot.rect.height, rowIndex * _skills.m_spacing);
-            _skills.m_listRoot.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+            int itemN = 0;
+            bool hasItems = false;
 
-            if (_skills.m_totalSkillText != null)
+            if (_focusId == DisplayFilters.EpicLootGroupId)
             {
-                _skills.m_totalSkillText.text = Loc.T(
-                    "Food / Ingredients / Epic Loot: expand for subs. Done closes.",
-                    "Essen / Zutaten / Epic Loot: aufklappen für Subs. Fertig schließt.");
+                hasItems = true;
+                bool allOn = selected.Contains(DisplayFilters.EpicLootGroupId);
+                AddCategoryRow(_itemContent, itemN++,
+                    Loc.T("All", "All") + " Epic Loot", allOn, false, null,
+                    () => ToggleCategory(DisplayFilters.EpicLootGroupId));
+                for (int s = 0; s < DisplayFilters.EpicLootSubFilterIds.Length; s++)
+                {
+                    int subId = DisplayFilters.EpicLootSubFilterIds[s];
+                    DisplayFilter sub;
+                    if (!DisplayFilters.TryGet(subId, out sub))
+                        continue;
+                    bool on = selected.Contains(subId);
+                    int capturedSub = subId;
+                    AddItemRow(_itemContent, itemN++, sub.Label(), on, null,
+                        () => PickEpicLootSub(capturedSub));
+                }
             }
+            else
+            {
+                List<string> items = DisplayFilters.SubItems(_focusId);
+                if (items != null && items.Count > 0)
+                {
+                    hasItems = true;
+                    bool categoryOn = selected.Contains(_focusId);
+                    for (int s = 0; s < items.Count; s++)
+                    {
+                        string shared = items[s];
+                        bool on = categoryOn || selectedItems.Contains(shared);
+                        string captured = shared;
+                        int parent = _focusId;
+                        AddItemRow(_itemContent, itemN++, DisplayFilters.ItemLabel(shared), on,
+                            ItemIcon(shared),
+                            () => PickItem(captured, parent));
+                    }
+                }
+            }
+
+            if (_itemBox != null)
+                _itemBox.SetActive(hasItems);
+            SetContentHeight(_itemContent, hasItems ? itemN : 0);
         }
 
-        private static void PickEpicLootSub(int subFilterId)
+        private static void SetContentHeight(RectTransform content, int rows)
         {
-            StorageDisplayBoard board = _board;
-            if (board == null || !DisplayFilters.IsEpicLootSubFilter(subFilterId))
+            if (content == null)
                 return;
-            // ToggleFilter clears Epic Loot "All" so the board band is Dust/Essence/… not the parent.
-            board.ToggleFilter(subFilterId);
-            RebuildRows();
+            content.sizeDelta = new Vector2(0f, Mathf.Max(rows * RowH + 4f, 4f));
+            content.anchoredPosition = Vector2.zero;
         }
 
-        private static void AddToggleRow(int index, UnityEngine.Events.UnityAction action, string label, bool selected)
-        {
-            GameObject row = Object.Instantiate(
-                _skills.m_elementPrefab,
-                Vector3.zero,
-                Quaternion.identity,
-                _skills.m_listRoot);
-            row.SetActive(true);
-            RectTransform rt = row.transform as RectTransform;
-            if (rt != null)
-                rt.anchoredPosition = new Vector2(0f, -index * _skills.m_spacing);
-            BindActionToggleRow(row, label, selected, action);
-            _rows.Add(row);
-        }
-
-        private static void AddActionRow(int index, string label, UnityEngine.Events.UnityAction action)
-        {
-            GameObject row = Object.Instantiate(
-                _skills.m_elementPrefab,
-                Vector3.zero,
-                Quaternion.identity,
-                _skills.m_listRoot);
-            row.SetActive(true);
-            RectTransform rt = row.transform as RectTransform;
-            if (rt != null)
-                rt.anchoredPosition = new Vector2(0f, -index * _skills.m_spacing);
-            BindActionRow(row, label, action);
-            _rows.Add(row);
-        }
-
-        private static void BindActionToggleRow(
-            GameObject row,
+        private static void AddCategoryRow(
+            RectTransform parent,
+            int index,
             string label,
-            bool selected,
-            UnityEngine.Events.UnityAction action)
+            bool on,
+            bool focused,
+            UnityAction onFocus,
+            UnityAction onToggle)
         {
-            Transform t = row.transform;
-            Color color = selected ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f);
-            StripSkillChrome(t);
-            WidenNameField(t);
-            SetChildText(t, "name", label, color);
-            SetChildText(t, "leveltext", "", color);
+            GameObject row = MakeRow(parent, index, focused ? RowFocus : RowBg);
+            RectTransform rowRt = row.transform as RectTransform;
 
-            Button button = EnsureButton(row);
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(action);
+            if (onFocus != null)
+            {
+                var hit = new GameObject("Focus", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+                hit.transform.SetParent(rowRt, false);
+                RectTransform hitRt = hit.transform as RectTransform;
+                hitRt.anchorMin = Vector2.zero;
+                hitRt.anchorMax = new Vector2(0.78f, 1f);
+                hitRt.offsetMin = Vector2.zero;
+                hitRt.offsetMax = Vector2.zero;
+                Image hitImg = hit.GetComponent<Image>();
+                hitImg.color = new Color(1f, 1f, 1f, 0.001f);
+                hitImg.raycastTarget = true;
+                Button b = hit.GetComponent<Button>();
+                b.transition = Selectable.Transition.None;
+                b.onClick.AddListener(onFocus);
+            }
 
-            UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
-            if (input != null)
-                input.m_onLeftClick = go => action();
+            string text = (focused ? "<color=#FFB84D>▼</color>  " : "") + label;
+            AddLabel(rowRt, text, focused ? Gold : (on ? Cream : Muted), 0.03f, 0.76f);
+            AttachToggle(rowRt, on, onToggle);
         }
 
-        private static void BindToggleRow(GameObject row, int id, string label, bool selected)
+        private static void AddItemRow(
+            RectTransform parent,
+            int index,
+            string label,
+            bool on,
+            Sprite icon,
+            UnityAction onToggle)
         {
-            string mark = selected ? "[+]" : "[-]";
-            BindActionToggleRow(row, mark + "  " + label, selected, () => Pick(id));
+            GameObject row = MakeRow(parent, index, RowBg);
+            RectTransform rowRt = row.transform as RectTransform;
+
+            float labelLeft = 0.03f;
+            if (icon != null)
+            {
+                var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                iconGo.transform.SetParent(rowRt, false);
+                RectTransform iconRt = iconGo.transform as RectTransform;
+                iconRt.anchorMin = new Vector2(0f, 0.5f);
+                iconRt.anchorMax = new Vector2(0f, 0.5f);
+                iconRt.pivot = new Vector2(0f, 0.5f);
+                iconRt.anchoredPosition = new Vector2(6f, 0f);
+                iconRt.sizeDelta = new Vector2(IconSize, IconSize);
+                Image img = iconGo.GetComponent<Image>();
+                img.sprite = icon;
+                img.preserveAspect = true;
+                img.raycastTarget = false;
+                img.color = Color.white;
+                labelLeft = 0.14f;
+            }
+
+            AddLabel(rowRt, label, on ? Cream : Muted, labelLeft, 0.76f);
+            AttachToggle(rowRt, on, onToggle);
         }
 
-        private static void BindActionRow(GameObject row, string label, UnityEngine.Events.UnityAction action)
+        private static GameObject MakeRow(RectTransform parent, int index, Color bg)
         {
-            Transform t = row.transform;
-            Color accent = new Color(1f, 0.85f, 0.4f, 1f);
-            StripSkillChrome(t);
-            WidenNameField(t);
-            SetChildText(t, "name", label, accent);
-            SetChildText(t, "leveltext", "", Color.white);
-
-            Button button = EnsureButton(row);
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(action);
-
-            UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
-            if (input != null)
-                input.m_onLeftClick = go => action();
+            var row = new GameObject("Row" + index, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            row.transform.SetParent(parent, false);
+            RectTransform rt = row.transform as RectTransform;
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = new Vector2(0f, -index * RowH);
+            rt.sizeDelta = new Vector2(0f, RowH - 2f);
+            Image img = row.GetComponent<Image>();
+            if (bg == RowFocus && UiAssets.RowFocus != null)
+            {
+                img.sprite = UiAssets.RowFocus;
+                img.type = Image.Type.Sliced;
+                img.color = Color.white;
+            }
+            else
+            {
+                img.color = bg;
+            }
+            img.raycastTarget = true;
+            return row;
         }
 
-        private static void StripSkillChrome(Transform root)
+        private static void AddLabel(RectTransform row, string text, Color color, float a0, float a1)
         {
-            HideChild(root, "bonustext");
-            HideChild(root, "levelbar");
-            HideChild(root, "levelbar_total");
-            HideChild(root, "currentlevel");
-            HideChild(root, "icon");
+            var go = new GameObject("Label", typeof(RectTransform));
+            go.transform.SetParent(row, false);
+            RectTransform rt = go.transform as RectTransform;
+            rt.anchorMin = new Vector2(a0, 0f);
+            rt.anchorMax = new Vector2(a1, 1f);
+            rt.offsetMin = new Vector2(4f, 0f);
+            rt.offsetMax = new Vector2(-4f, 0f);
+            TextMeshProUGUI tmp = UiFonts.CreateLabel(go, 15f);
+            StyleLabel(tmp, 15f);
+            tmp.alignment = TextAlignmentOptions.MidlineLeft;
+            tmp.color = color;
+            tmp.richText = true;
+            tmp.text = text;
+        }
 
-            if (root == null)
+        private static void AttachToggle(RectTransform row, bool on, UnityAction onClick)
+        {
+            if (onClick == null)
                 return;
-
-            Transform[] all = root.GetComponentsInChildren<Transform>(true);
-            for (int i = 0; i < all.Length; i++)
-            {
-                Transform child = all[i];
-                if (child == null || child == root)
-                    continue;
-                string n = child.gameObject.name.ToLowerInvariant();
-                if (!(n.Contains("icon") || n.Contains("skillicon") || n.EndsWith("_icon")))
-                    continue;
-                if (child.GetComponent<TMP_Text>() != null)
-                    continue;
-                child.gameObject.SetActive(false);
-            }
+            GameObject toggle = UiToggle.Create(
+                row, "Toggle", on, true, onClick, UiFonts.ThinNorse(),
+                UiToggle.CompactWidth, UiToggle.CompactHeight);
+            RectTransform rt = toggle.transform as RectTransform;
+            rt.anchorMin = new Vector2(1f, 0.5f);
+            rt.anchorMax = new Vector2(1f, 0.5f);
+            rt.pivot = new Vector2(1f, 0.5f);
+            rt.anchoredPosition = new Vector2(-6f, 0f);
+            rt.sizeDelta = new Vector2(UiToggle.CompactWidth, UiToggle.CompactHeight);
+            rt.SetAsLastSibling();
         }
 
-        private static Button EnsureButton(GameObject row)
+        private static Sprite ItemIcon(string shared)
         {
-            Button button = row.GetComponent<Button>() ?? row.GetComponentInChildren<Button>(true);
-            if (button != null)
-                return button;
-            if (row.GetComponent<Image>() == null)
+            GameObject prefab = ItemIds.PrefabFromToken(shared);
+            ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            return drop?.m_itemData != null ? StackLimits.Icon(drop.m_itemData) : null;
+        }
+
+        private static void StyleLabel(TMP_Text tmp, float size)
+        {
+            UiFonts.StyleThinLabel(tmp, size);
+            tmp.enableAutoSizing = false;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.overflowMode = TextOverflowModes.Ellipsis;
+            tmp.maxVisibleLines = 1;
+            tmp.raycastTarget = false;
+        }
+
+        private static void Stretch(RectTransform rt)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+        }
+
+        private static void EnsureFocus(List<int> selected, List<string> selectedItems)
+        {
+            if (_focusId > 0 && !DisplayFilters.IsEpicLootSubFilter(_focusId))
             {
-                Image bg = row.AddComponent<Image>();
-                bg.color = new Color(0f, 0f, 0f, 0.01f);
+                DisplayFilter unused;
+                if (DisplayFilters.TryGet(_focusId, out unused))
+                    return;
             }
-            return row.AddComponent<Button>();
+            for (int i = 0; i < selected.Count; i++)
+            {
+                int id = selected[i];
+                if (DisplayFilters.IsEpicLootSubFilter(id))
+                {
+                    _focusId = DisplayFilters.EpicLootGroupId;
+                    return;
+                }
+                if (id > 0)
+                {
+                    _focusId = id;
+                    return;
+                }
+            }
+            for (int i = 0; i < selectedItems.Count; i++)
+            {
+                int parent = DisplayFilters.ParentFilterIdFromToken(selectedItems[i]);
+                if (parent > 0)
+                {
+                    _focusId = parent;
+                    return;
+                }
+            }
+            for (int i = 0; i < DisplayFilters.Choices.Length; i++)
+            {
+                int id = DisplayFilters.Choices[i].Id;
+                if (DisplayFilters.IsEpicLootSubFilter(id))
+                    continue;
+                _focusId = id;
+                return;
+            }
+            _focusId = 0;
+        }
+
+        private static bool CategoryIsOn(int id, List<int> selected, List<string> selectedItems)
+        {
+            if (selected.Contains(id))
+                return true;
+            if (id == DisplayFilters.EpicLootGroupId)
+            {
+                for (int s = 0; s < DisplayFilters.EpicLootSubFilterIds.Length; s++)
+                {
+                    if (selected.Contains(DisplayFilters.EpicLootSubFilterIds[s]))
+                        return true;
+                }
+                return false;
+            }
+            if (!DisplayFilters.IsExpandable(id))
+                return false;
+            List<string> subs = DisplayFilters.SubItems(id);
+            for (int s = 0; s < subs.Count; s++)
+            {
+                if (selectedItems.Contains(subs[s]))
+                    return true;
+            }
+            return false;
         }
 
         private static void ApplyTitle()
         {
             CacheTitles();
-            string title = Loc.T("Select types", "Typen wählen");
+            string title = Loc.T("Select types", "Select types");
             for (int i = 0; i < _titleTexts.Count; i++)
             {
-                TMP_Text tmp = _titleTexts[i];
-                if (tmp != null)
-                    tmp.text = title;
+                if (_titleTexts[i] != null)
+                    _titleTexts[i].text = title;
             }
         }
 
@@ -482,7 +822,6 @@ namespace StoreAndCraft
             _titleLocalize.Clear();
             if (_skills == null)
                 return;
-
             Transform listRoot = _skills.m_listRoot;
             TMP_Text[] texts = _skills.GetComponentsInChildren<TMP_Text>(true);
             for (int i = 0; i < texts.Length; i++)
@@ -492,87 +831,18 @@ namespace StoreAndCraft
                     continue;
                 if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
                     continue;
-
                 string n = tmp.gameObject.name.ToLowerInvariant();
                 if (!(n.Contains("title") || n.Contains("header") || n.Contains("topic") || n.Contains("label")
                     || n == "text" || n.Contains("skill")))
                     continue;
-
                 Component localize = tmp.GetComponent("Localize");
                 bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
                 if (hadLocalize)
                     ((MonoBehaviour)localize).enabled = false;
-
                 _titleTexts.Add(tmp);
                 _titleBackup.Add(tmp.text ?? "");
                 _titleLocalize.Add(hadLocalize);
             }
-        }
-
-        private static void WidenNameField(Transform root)
-        {
-            // Skills rows reserve space for icon + level — reclaim it for the label.
-            HideChild(root, "leveltext");
-            Transform name = FindChild(root, "name");
-            if (name == null)
-                return;
-            RectTransform rt = name as RectTransform;
-            if (rt == null)
-                return;
-            rt.anchorMin = new Vector2(0.02f, 0.05f);
-            rt.anchorMax = new Vector2(0.98f, 0.95f);
-            rt.pivot = new Vector2(0f, 0.5f);
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-            rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta = Vector2.zero;
-        }
-
-        private static void SetChildText(Transform root, string name, string text, Color color)
-        {
-            Transform child = FindChild(root, name);
-            if (child == null)
-                return;
-            TMP_Text tmp = child.GetComponent<TMP_Text>();
-            if (tmp == null)
-                return;
-            Component localize = child.GetComponent("Localize");
-            if (localize is MonoBehaviour mb)
-                mb.enabled = false;
-
-            // Skills rows auto-size long names smaller and wrap — lock one uniform line.
-            tmp.enableAutoSizing = false;
-            tmp.fontSize = 18f;
-            tmp.textWrappingMode = TextWrappingModes.NoWrap;
-            tmp.overflowMode = TextOverflowModes.Overflow;
-            tmp.maxVisibleLines = 1;
-            tmp.alignment = TextAlignmentOptions.MidlineLeft;
-
-            tmp.text = text;
-            tmp.color = color;
-        }
-
-        private static void HideChild(Transform root, string name)
-        {
-            Transform child = FindChild(root, name);
-            if (child != null)
-                child.gameObject.SetActive(false);
-        }
-
-        private static Transform FindChild(Transform root, string name)
-        {
-            if (root == null)
-                return null;
-            Transform direct = root.Find(name);
-            if (direct != null)
-                return direct;
-            for (int i = 0; i < root.childCount; i++)
-            {
-                Transform found = FindChild(root.GetChild(i), name);
-                if (found != null)
-                    return found;
-            }
-            return null;
         }
     }
 

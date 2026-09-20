@@ -1,6 +1,6 @@
 {
     "name":  "StoreAndCraft",
-    "version_number":  "1.3.30",
+    "version_number":  "1.3.31",
     "website_url":  "https://github.com/morda0511/StoreAndCraft",
     "description":  "Base that works with you: auto-store, dump, craft from chests, [E] + auto-fill, cooking auto-drop [N], Storage Displays, Feed Trough, favorites, search. Server + all clients.",
     "dependencies":  [

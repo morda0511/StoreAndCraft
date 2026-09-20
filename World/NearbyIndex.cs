@@ -154,7 +154,7 @@ namespace StoreAndCraft
             if (!force && LastInventoryLoad.TryGetValue(id, out last) && now - last < InventoryLoadCooldown)
                 return;
 
-            ContainerFilter.RefreshInventory(container);
+            ContainerFilter.RefreshInventory(container, force);
             LastInventoryLoad[id] = now;
             PendingChestDebit.OnInventoryLoaded(container);
 

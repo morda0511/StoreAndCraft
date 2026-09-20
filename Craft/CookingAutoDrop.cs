@@ -5,9 +5,9 @@ using UnityEngine;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Per cooking station (spit / stone oven): when on, finished food pops off as a
-    /// ground drop so auto-store can pick it up. Hover with inventory closed and press N.
-    /// Uses the same RPC path as vanilla [E] pickup.
+    /// Per cooking station / beehive: when on, finished product drops on the ground
+    /// so auto-store can pick it up. Hover with inventory closed and press N.
+    /// Cooking uses the vanilla [E] pickup RPC; beehives use RPC_Extract.
     /// Off = only a cheap ZDO flag check; never scans chests.
     /// </summary>
     internal static class CookingAutoDrop
@@ -16,6 +16,10 @@ namespace StoreAndCraft
 
         private static readonly MethodInfo HaveDoneItem =
             AccessTools.Method(typeof(CookingStation), "HaveDoneItem");
+        private static readonly MethodInfo BeeGetHoneyLevel =
+            AccessTools.Method(typeof(Beehive), "GetHoneyLevel");
+        private static readonly MethodInfo BeeExtract =
+            AccessTools.Method(typeof(Beehive), "Extract");
 
         public static bool IsOn(ZNetView nv)
         {
@@ -29,11 +33,27 @@ namespace StoreAndCraft
             return station != null && IsOn(station.GetComponent<ZNetView>());
         }
 
+        public static bool IsOn(Beehive hive)
+        {
+            return hive != null && IsOn(hive.GetComponent<ZNetView>());
+        }
+
         public static void AppendHover(ref string text, CookingStation station)
         {
             if (station == null)
                 return;
-            ZNetView nv = station.GetComponent<ZNetView>();
+            AppendHoverLine(ref text, station.GetComponent<ZNetView>());
+        }
+
+        public static void AppendHover(ref string text, Beehive hive)
+        {
+            if (hive == null)
+                return;
+            AppendHoverLine(ref text, hive.GetComponent<ZNetView>());
+        }
+
+        private static void AppendHoverLine(ref string text, ZNetView nv)
+        {
             if (nv == null || !nv.IsValid())
                 return;
 
@@ -59,11 +79,16 @@ namespace StoreAndCraft
                 return false;
 
             CookingStation station = HoveredStation();
-            ZNetView nv = station != null ? station.GetComponent<ZNetView>() : null;
+            Beehive hive = station == null ? HoveredBeehive() : null;
+            ZNetView nv = station != null
+                ? station.GetComponent<ZNetView>()
+                : hive != null ? hive.GetComponent<ZNetView>() : null;
             if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
                 return false;
 
-            Vector3 pos = station.transform.position;
+            Vector3 pos = station != null
+                ? station.transform.position
+                : hive.transform.position;
             if (!PrivateArea.CheckAccess(pos, 0f, false, true))
             {
                 player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
@@ -103,6 +128,40 @@ namespace StoreAndCraft
             nv.InvokeRPC("RPC_RemoveDoneItem", point, 1);
         }
 
+        public static void TryExtractHoney(Beehive hive)
+        {
+            if (hive == null || !IsOn(hive))
+                return;
+
+            ZNetView nv = hive.GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid() || !nv.IsOwner())
+                return;
+
+            if (BeeGetHoneyLevel == null || BeeExtract == null)
+                return;
+
+            int honey;
+            try
+            {
+                honey = (int)BeeGetHoneyLevel.Invoke(hive, null);
+            }
+            catch
+            {
+                return;
+            }
+
+            if (honey <= 0)
+                return;
+
+            try
+            {
+                BeeExtract.Invoke(hive, null);
+            }
+            catch
+            {
+            }
+        }
+
         private static Vector3 DropPoint(CookingStation station)
         {
             Transform spawn = station.m_spawnPoint;
@@ -121,6 +180,17 @@ namespace StoreAndCraft
                 return null;
             return hover.GetComponentInParent<CookingStation>();
         }
+
+        private static Beehive HoveredBeehive()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return null;
+            GameObject hover = player.GetHoverObject();
+            if (hover == null)
+                return null;
+            return hover.GetComponentInParent<Beehive>();
+        }
     }
 
     [HarmonyPatch(typeof(CookingStation), "UpdateCooking")]
@@ -132,6 +202,26 @@ namespace StoreAndCraft
             if (__instance == null || !CookingAutoDrop.IsOn(__instance))
                 return;
             CookingAutoDrop.TryPopDone(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(Beehive), "UpdateBees")]
+    internal static class BeehiveAutoDropUpdatePatch
+    {
+        private static void Postfix(Beehive __instance)
+        {
+            if (__instance == null || !CookingAutoDrop.IsOn(__instance))
+                return;
+            CookingAutoDrop.TryExtractHoney(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(Beehive), nameof(Beehive.GetHoverText))]
+    internal static class BeehiveAutoDropHoverPatch
+    {
+        private static void Postfix(Beehive __instance, ref string __result)
+        {
+            CookingAutoDrop.AppendHover(ref __result, __instance);
         }
     }
 }

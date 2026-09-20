@@ -12,6 +12,8 @@ namespace StoreAndCraft
         // Valheim serializes chest contents under ZDOVars.s_items.
         private static readonly FieldInfo ItemsHash = AccessTools.Field(typeof(ZDOVars), "s_items");
         private static float _nextEmptyWriteLog;
+        /// <summary>Our consume/withdraw emptied a chest on purpose — allow that Save.</summary>
+        internal static int AllowEmptySave;
 
         public static bool IsUsable(Container container)
         {
@@ -102,16 +104,44 @@ namespace StoreAndCraft
             return piece.IsPlacedByPlayer();
         }
 
-        public static void RefreshInventory(Container container)
+        public static void RefreshInventory(Container container, bool force = false)
         {
             if (container == null || LoadInventory == null)
                 return;
 
             try
             {
-                if (LastRevision != null)
+                ZNetView nv = Refs.View(container);
+                ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+                Inventory inv = container.GetInventory();
+                int localCount = inv != null ? inv.NrOfItems() : 0;
+                bool zdoHas = ZdoHasItemPayload(zdo);
+
+                // Populated local view + ZDO not ready: Load would clear the chest, then
+                // vanilla Container.Save persists the wipe (Storage Displays used to do this).
+                if (localCount > 0 && !zdoHas)
+                    return;
+
+                // Nothing in the ZDO to restore. Skip so we do not fire Inventory.Changed.
+                if (!zdoHas)
+                    return;
+
+                // Already have a populated local bag — do not re-Load over it on idle reads
+                // (Storage Display / craft counts). Re-Load only when forced (write prep) or
+                // when the local view is empty and the ZDO still has items.
+                if (!force && localCount > 0)
+                    return;
+
+                // Only force a re-read when the local view is empty but the ZDO still
+                // has items (stale empty after travel). Never zero revision over a full bag.
+                if (force && localCount <= 0 && LastRevision != null)
                     LastRevision.SetValue(container, (uint)0);
+
                 LoadInventory.Invoke(container, null);
+
+                inv = container.GetInventory();
+                int after = inv != null ? inv.NrOfItems() : 0;
+                ChestLoadGuard.NoteLoadResult(container, after <= 0, zdoHas);
             }
             catch
             {
@@ -131,20 +161,28 @@ namespace StoreAndCraft
             if (nv == null || !nv.IsValid() || !nv.IsOwner())
                 return false;
 
-            RefreshInventory(container);
+            RefreshInventory(container, force: true);
             Inventory inv = container.GetInventory();
             if (inv == null)
                 return false;
 
-            if (inv.NrOfItems() <= 0 && ZdoHasItemPayload(nv.GetZDO()))
+            // Coming back from a raid: local view is empty until the ZDO bytes arrive.
+            // Writing then (dump / auto-store / auto-stack) persists empty and wipes the chest.
+            if (inv.NrOfItems() <= 0)
             {
-                if (Plugin.Log != null && Time.unscaledTime >= _nextEmptyWriteLog)
+                bool payload = ZdoHasItemPayload(nv.GetZDO());
+                if (payload || !container.IsInUse())
                 {
-                    _nextEmptyWriteLog = Time.unscaledTime + 10f;
-                    Plugin.Log.LogWarning(
-                        "Skipped chest write: local inventory empty but ZDO still has items (load race).");
+                    if (Plugin.Log != null && Time.unscaledTime >= _nextEmptyWriteLog)
+                    {
+                        _nextEmptyWriteLog = Time.unscaledTime + 10f;
+                        Plugin.Log.LogWarning(
+                            payload
+                                ? "Skipped chest write: local inventory empty but ZDO still has items (load race)."
+                                : "Skipped chest write: local inventory empty after travel / unload.");
+                    }
+                    return false;
                 }
-                return false;
             }
 
             return true;
@@ -158,12 +196,18 @@ namespace StoreAndCraft
             if (container.GetInventory() == null)
                 return;
 
+            AllowEmptySave++;
             try
             {
                 SaveInventoryMethod.Invoke(container, null);
             }
             catch
             {
+            }
+            finally
+            {
+                if (AllowEmptySave > 0)
+                    AllowEmptySave--;
             }
         }
 

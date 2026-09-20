@@ -122,7 +122,7 @@ namespace StoreAndCraft
                 return false;
             if (Favorites.IsFavorite(item))
                 return false;
-            if (Plugin.Settings.IgnoreHotbar.Value && item.m_gridPos.y == 0)
+            if (PlayerBag.IsDumpProtected(item))
                 return false;
             return true;
         }

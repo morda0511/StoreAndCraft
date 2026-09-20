@@ -63,6 +63,8 @@ namespace StoreAndCraft
                     ItemDrop drop = DropScratch[i];
                     if (drop == null || drop.m_itemData == null)
                         continue;
+                    if (FeedTroughBait.IsBait(drop))
+                        continue;
                     ZNetView nv = Refs.View(drop);
                     if (nv == null || !nv.IsValid() || drop.IsPiece())
                         continue;

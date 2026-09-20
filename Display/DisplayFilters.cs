@@ -52,9 +52,14 @@ namespace StoreAndCraft
 
         public static bool IsExpandable(int filterId)
         {
-            return filterId == FoodFilterId
-                || filterId == IngredientsFilterId
-                || filterId == EpicLootGroupId;
+            if (filterId == EpicLootGroupId)
+                return true;
+            if (filterId == FoodFilterId || filterId == IngredientsFilterId)
+                return true;
+            DisplayFilter filter;
+            if (TryGet(filterId, out filter) && filter.Names != null && filter.Names.Length > 0)
+                return true;
+            return false;
         }
 
         /// <summary>Dust/Essence/Reagent/Shard/Runestone — under Epic Loot expand only, not top-level.</summary>
@@ -649,23 +654,51 @@ namespace StoreAndCraft
             return true;
         }
 
-        /// <summary>Shared-name tokens for expandable Food / Ingredients rows (cached).</summary>
+        /// <summary>Shared-name tokens for category item rows (cached).</summary>
         public static List<string> SubItems(int filterId)
         {
             if (filterId == IngredientsFilterId)
                 return IngredientSubItems();
             if (filterId == FoodFilterId)
                 return FoodSubItems();
+            DisplayFilter filter;
+            if (TryGet(filterId, out filter) && filter.Names != null && filter.Names.Length > 0)
+                return NamedSubItems(filterId, filter.Names);
             return new List<string>();
         }
 
         private static List<string> _ingredientSubs;
         private static List<string> _foodSubs;
+        private static readonly Dictionary<int, List<string>> _namedSubs = new Dictionary<int, List<string>>();
 
         public static void InvalidateSubItemCache()
         {
             _ingredientSubs = null;
             _foodSubs = null;
+            _namedSubs.Clear();
+        }
+
+        private static List<string> NamedSubItems(int filterId, string[] names)
+        {
+            List<string> cached;
+            if (_namedSubs.TryGetValue(filterId, out cached) && cached != null)
+                return cached;
+            var list = new List<string>();
+            if (names == null)
+            {
+                _namedSubs[filterId] = list;
+                return list;
+            }
+            for (int i = 0; i < names.Length; i++)
+            {
+                string shared = ResolveSharedName(names[i]);
+                if (string.IsNullOrEmpty(shared) || list.Contains(shared))
+                    continue;
+                list.Add(shared);
+            }
+            list.Sort(CompareLocalized);
+            _namedSubs[filterId] = list;
+            return list;
         }
 
         private static List<string> IngredientSubItems()
@@ -792,10 +825,12 @@ namespace StoreAndCraft
 
         public static bool TokenBelongsToCategory(string shared, int filterId)
         {
-            if (string.IsNullOrEmpty(shared) || !IsExpandable(filterId))
+            if (string.IsNullOrEmpty(shared) || filterId <= 0)
+                return false;
+            if (filterId == EpicLootGroupId)
                 return false;
             List<string> subs = SubItems(filterId);
-            return subs.Contains(shared);
+            return subs != null && subs.Contains(shared);
         }
 
         private static bool TypeAllowed(ItemDrop.ItemData.ItemType type, ItemDrop.ItemData.ItemType[] types)

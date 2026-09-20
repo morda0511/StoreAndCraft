@@ -67,8 +67,13 @@ namespace StoreAndCraft
             // Prefer a real local deposit: after travel / unload the client inventory view
             // is often empty or stale. Remote Deposit then "succeeds" (items removed + RPC)
             // and the owner refunds — TopLeft says stored, bag still has items, no ping.
+            // Do not steal ownership while the local view is empty — Claim + Save wipes
+            // the chest when you walk back into base after a boss.
+            NearbyIndex.EnsureInventory(chest, force: true);
             ZNetView nv = Refs.View(chest);
-            if (nv != null && nv.IsValid() && !nv.IsOwner() && !chest.IsInUse())
+            Inventory peek = chest.GetInventory();
+            bool localReady = peek != null && peek.NrOfItems() > 0;
+            if (nv != null && nv.IsValid() && !nv.IsOwner() && !chest.IsInUse() && localReady)
                 nv.ClaimOwnership();
 
             if (IsChestOwner(chest))

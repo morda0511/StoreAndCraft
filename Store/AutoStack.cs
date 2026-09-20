@@ -31,9 +31,12 @@ namespace StoreAndCraft
                 ZNetView nv = Refs.View(chest);
                 if (nv == null || !nv.IsOwner())
                     continue;
+                if (!ContainerFilter.TryReadyForWrite(chest))
+                    continue;
                 Inventory chestInv = chest.GetInventory();
-                if (chestInv != null)
-                    CompactInventory(chestInv, false);
+                if (chestInv == null || chestInv.NrOfItems() <= 0)
+                    continue;
+                CompactInventory(chestInv, false);
             }
         }
 
@@ -92,9 +95,7 @@ namespace StoreAndCraft
         {
             if (item == null || item.m_equipped)
                 return true;
-            if (Plugin.Settings.IgnoreHotbar.Value && item.m_gridPos.y == 0)
-                return true;
-            return false;
+            return PlayerBag.IsDumpProtected(item);
         }
 
         private static bool SameStackType(ItemDrop.ItemData a, ItemDrop.ItemData b)

@@ -5,8 +5,8 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        // Bump when package layout changes. v11 = AutoIntakeEnabled separate from StoreEnabled.
-        public const int ProtocolVersion = 11;
+        // Bump when package layout changes. v12 = StationFillSkipInventory.
+        public const int ProtocolVersion = 12;
 
         public ConfigEntry<bool> LockConfig { get; }
         public ConfigEntry<bool> ModEnabled { get; }
@@ -25,6 +25,7 @@ namespace StoreAndCraft
         public ConfigEntry<bool> AutoStackEnabled { get; }
         public ConfigEntry<float> CraftRange { get; }
         public ConfigEntry<float> AutoFillRange { get; }
+        public ConfigEntry<bool> StationFillSkipInventory { get; }
         public ConfigEntry<float> IntakeInterval { get; }
         public ConfigEntry<int> MaxTransfersPerTick { get; }
         public ConfigEntry<KeyboardShortcut> DumpKey { get; }
@@ -58,7 +59,7 @@ namespace StoreAndCraft
             LeaveOneItem = file.Bind("3 - Craft", "LeaveOneItem", true,
                 "If enabled, every pull from a chest (craft, build, plant, station [E], Ctrl+middle-click fill) leaves 1 item so auto-store can keep filling that stack. That leftover item cannot be spent (same as smelter [E]).");
             IgnoreHotbar = file.Bind("2 - Store", "IgnoreHotbar", true,
-                "If enabled, dump will not move items from the hotbar (first inventory row).");
+                "If enabled, dump will not move items from the hotbar (first inventory row). Equipment / quick-slot mod overflow (outside the live bag grid) is always skipped. Wider/Deeper Pockets bag rows are dumped normally.");
             HighlightOnStore = file.Bind("2 - Store", "HighlightOnStore", true,
                 "If enabled, a chest flashes when something is stored into it.");
             PingOnStore = file.Bind("2 - Store", "PingOnStore", false,
@@ -77,6 +78,8 @@ namespace StoreAndCraft
                 "Craft / build / station-[E] pull range in meters (player → chest). Synced from server when LockConfig is on.");
             AutoFillRange = file.Bind("3 - Craft", "AutoFillRange", 20f,
                 "Auto-fill range in meters: player → station (kiln/smelter/blast furnace/oven/fermenter/torch), and player → chests for auto-fill materials. Independent from CraftRange. Synced from server when LockConfig is on.");
+            StationFillSkipInventory = file.Bind("3 - Craft", "StationFillSkipInventory", false,
+                "If enabled, station auto-fill (B) takes fuel / ore / food from nearby chests only — never from your bag, hotbar, or equipment/quick-slot mod overflow. Wider/Deeper Pockets bag rows still count as bag. Manual [E] refill is unchanged. Synced from server when LockConfig is on.");
             IntakeInterval = file.Bind("2 - Store", "IntakeInterval", 5f,
                 "Seconds between automatic scans for ground items. Lower = snappier, higher = less CPU.");
             MaxTransfersPerTick = file.Bind("1 - General", "MaxTransfersPerTick", 8,
@@ -96,17 +99,17 @@ namespace StoreAndCraft
             AutoFillKey = file.Bind("4 - Keys", "AutoFillKey", new KeyboardShortcut(KeyCode.B),
                 "Look at a kiln, smelter, blast furnace, cooking / stone oven, fermenter, or torch / fire with the inventory closed and press to toggle auto-fill. The station pull filter still applies. Local, not synced.");
             AutoDropKey = file.Bind("4 - Keys", "AutoDropKey", new KeyboardShortcut(KeyCode.N),
-                "Look at a cooking spit or stone oven with the inventory closed and press to toggle auto-drop. Finished food falls off as a ground drop so auto-store can pick it up. Per-station, stored on the piece.");
+                "Look at a cooking spit, stone oven, or beehive with the inventory closed and press to toggle auto-drop. Finished food / honey falls as a ground drop so auto-store can pick it up. Per piece, stored on the piece.");
             SortKey = file.Bind("4 - Keys", "SortKey", new KeyboardShortcut(KeyCode.R),
-                "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, and hotbar stay put).");
+                "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, hotbar, and equipment/quick-slot mod overflow stay put; Wider/Deeper Pockets rows sort normally).");
             DisplayRangeKey = file.Bind("4 - Keys", "DisplayRangeKey", new KeyboardShortcut(KeyCode.R, KeyCode.LeftAlt),
                 "Look at a Storage Display and press to set that board's chest-scan range (5–50 m). Per display.");
             BuildGrabKey = file.Bind("4 - Keys", "BuildGrabKey", new KeyboardShortcut(KeyCode.C),
                 "Hold this key while confirming a hammer place to grab that piece's materials from nearby chests (nothing is placed). Default C — Shift stays free for no-snap. Local, not synced.");
             FeedTroughEnabled = file.Bind("5 - Feed Trough", "FeedTroughEnabled", true,
-                "If enabled, the Feed Trough hammer piece is available and nearby hungry tameables eat matching food from it. Synced from server when LockConfig is on.");
+                "If enabled, the Feed Trough hammer piece is available. Hungry tames walk to it and eat matching food, like drops on the ground. Synced from server when LockConfig is on.");
             FeedTroughRange = file.Bind("5 - Feed Trough", "FeedTroughRange", 8f,
-                "How far (meters) a Feed Trough looks for hungry animals. Synced from server when LockConfig is on.");
+                "How far (meters) hungry animals notice a Feed Trough and walk to it. Also limited by each animal's own food-search range. Synced from server when LockConfig is on.");
         }
 
         public float StationPullRange()
@@ -135,6 +138,7 @@ namespace StoreAndCraft
             pkg.Write(AutoStackEnabled.Value);
             pkg.Write(CraftRange.Value);
             pkg.Write(AutoFillRange.Value);
+            pkg.Write(StationFillSkipInventory.Value);
             pkg.Write(IntakeInterval.Value);
             pkg.Write(MaxTransfersPerTick.Value);
             pkg.Write(FeedTroughEnabled.Value);
@@ -157,6 +161,7 @@ namespace StoreAndCraft
             AutoStackEnabled.Value = pkg.ReadBool();
             CraftRange.Value = pkg.ReadSingle();
             AutoFillRange.Value = pkg.ReadSingle();
+            StationFillSkipInventory.Value = pkg.ReadBool();
             IntakeInterval.Value = pkg.ReadSingle();
             MaxTransfersPerTick.Value = pkg.ReadInt();
             FeedTroughEnabled.Value = pkg.ReadBool();

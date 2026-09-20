@@ -120,8 +120,8 @@ namespace StoreAndCraft
 
             piece.m_name = Loc.T("Feed Trough", "Futtertrog");
             piece.m_description = Loc.T(
-                "Put animal food inside. Nearby tamed animals eat from it when hungry.",
-                "Tierfutter hineinlegen. Zahme Tiere in der Nähe fressen daraus, wenn sie hungrig sind.");
+                "Open it and put animal food inside (carrots, mushrooms, berries). Hungry tames walk up to it and eat, like food on the ground.",
+                "Öffnen und Tierfutter hineinlegen (Karotten, Pilze, Beeren). Hungrige Zahme laufen hin und fressen, wie bei Futter auf dem Boden.");
             // Build-menu Storage tab is UsageTagFlags (not PieceCategory).
             piece.m_category = Piece.PieceCategory.Furniture;
             piece.m_usage = Piece.UsageTagFlags.Storage;
@@ -166,6 +166,7 @@ namespace StoreAndCraft
             // Half of previous 75% width → 37.5% of the bed (long thin trough). Keep length/height.
             Vector3 s = clone.transform.localScale;
             clone.transform.localScale = new Vector3(s.x * WidthScale, s.y, s.z);
+            AddInteractCollider(clone);
 
             _prefab = clone;
             ByHash[FeedTrough.PrefabName.GetStableHashCode()] = clone;
@@ -193,6 +194,31 @@ namespace StoreAndCraft
             container.m_height = 2;
             container.m_privacy = Container.PrivacySetting.Public;
             container.m_checkGuardStone = true;
+        }
+
+        /// <summary>
+        /// Root is squashed on X; restore a usable hover/use box so the trough is not
+        /// almost impossible to click.
+        /// </summary>
+        private static void AddInteractCollider(GameObject clone)
+        {
+            if (clone == null)
+                return;
+
+            Transform existing = clone.transform.Find("SacTroughHit");
+            if (existing != null)
+                return;
+
+            var hit = new GameObject("SacTroughHit");
+            hit.transform.SetParent(clone.transform, false);
+            float undo = WidthScale > 0.01f ? 1f / WidthScale : 1f;
+            hit.transform.localScale = new Vector3(undo, 1f, 1f);
+            hit.transform.localPosition = Vector3.zero;
+
+            BoxCollider box = hit.AddComponent<BoxCollider>();
+            box.center = new Vector3(0f, 0.25f, 0f);
+            box.size = new Vector3(0.9f, 0.55f, 2.2f);
+            box.isTrigger = false;
         }
 
         /// <summary>

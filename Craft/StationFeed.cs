@@ -32,15 +32,8 @@ namespace StoreAndCraft
             if (inv == null)
                 return 0;
 
-            InventoryCountPatches.Skip++;
-            try
-            {
-                return inv.CountItems(shared, -1, true);
-            }
-            finally
-            {
-                InventoryCountPatches.Skip--;
-            }
+            // Extra rows / quick slots are not "bag" — auto-fill and [E] must not steal them.
+            return PlayerBag.CountInBag(inv, shared);
         }
 
         public static bool ChestsHave(Player player, string shared)
@@ -337,7 +330,7 @@ namespace StoreAndCraft
             Inventory inv = player != null ? player.GetInventory() : null;
             if (inv == null || string.IsNullOrEmpty(shared))
                 return null;
-            return inv.GetItem(shared, -1, false);
+            return PlayerBag.FindInBag(inv, shared);
         }
     }
 }

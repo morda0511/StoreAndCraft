@@ -424,6 +424,25 @@ namespace StoreAndCraft
             return smelter.m_addOreSwitch != null && smelter.m_maxOre > 0;
         }
 
+        private static bool UsePlayerInventory()
+        {
+            return Plugin.Settings == null || !Plugin.Settings.StationFillSkipInventory.Value;
+        }
+
+        private static int AutoFillLocalCount(Player player, string shared)
+        {
+            if (!UsePlayerInventory())
+                return 0;
+            return StationFeed.LocalCount(player, shared);
+        }
+
+        private static bool AutoFillHasLocalAny(Player player, List<string> sharedNames)
+        {
+            if (!UsePlayerInventory())
+                return false;
+            return HasLocalAny(player, sharedNames);
+        }
+
         private static bool FillFuelToMax(Smelter smelter, Player player)
         {
             string fuel = StationFeed.SharedFrom(smelter.m_fuelItem);
@@ -435,7 +454,7 @@ namespace StoreAndCraft
             int added = 0;
             for (int i = 0; i < need; i++)
             {
-                if (StationFeed.LocalCount(player, fuel) >= 1)
+                if (AutoFillLocalCount(player, fuel) >= 1)
                 {
                     if (SmelterAddFuel == null || !InvokeAdd(SmelterAddFuel, smelter, smelter.m_addWoodSwitch, player))
                         break;
@@ -481,7 +500,7 @@ namespace StoreAndCraft
             int added = 0;
             for (int i = 0; i < need; i++)
             {
-                if (HasLocalAny(player, allowed))
+                if (AutoFillHasLocalAny(player, allowed))
                 {
                     if (SmelterAddOre == null || !InvokeAdd(SmelterAddOre, smelter, smelter.m_addOreSwitch, player))
                         break;
@@ -540,17 +559,10 @@ namespace StoreAndCraft
             {
                 for (int i = 0; i < need; i++)
                 {
-                    if (StationFeed.LocalCount(player, fuel) >= 1)
+                    if (AutoFillLocalCount(player, fuel) >= 1)
                     {
-                        InventoryCountPatches.Skip++;
-                        try
-                        {
-                            inv.RemoveItem(fuel, 1, -1, true);
-                        }
-                        finally
-                        {
-                            InventoryCountPatches.Skip--;
-                        }
+                        if (!PlayerBag.RemoveOneFromBag(inv, fuel))
+                            break;
                     }
                     else
                     {
@@ -600,7 +612,7 @@ namespace StoreAndCraft
             int added = 0;
             for (int i = 0; i < need; i++)
             {
-                if (StationFeed.LocalCount(player, fuel) >= 1)
+                if (AutoFillLocalCount(player, fuel) >= 1)
                 {
                     if (CookAddFuel == null || !InvokeWith(CookAddFuel, oven, oven.m_addFuelSwitch, player))
                         break;
@@ -650,7 +662,7 @@ namespace StoreAndCraft
                 string shared = null;
                 string prefab = null;
 
-                if (HasLocalAny(player, foods))
+                if (AutoFillHasLocalAny(player, foods))
                 {
                     ItemDrop.ItemData item = FirstLocal(player, foods);
                     if (item == null || item.m_shared == null)
@@ -718,7 +730,7 @@ namespace StoreAndCraft
                 return false;
             }
 
-            if (HasLocalAny(player, meads))
+            if (AutoFillHasLocalAny(player, meads))
             {
                 ItemDrop.ItemData item = FirstLocal(player, meads);
                 return item != null && InvokeWith(FermenterAddItem, fermenter, player, item);
@@ -762,7 +774,7 @@ namespace StoreAndCraft
             {
                 if (string.IsNullOrEmpty(shared))
                     continue;
-                ItemDrop.ItemData item = inv.GetItem(shared, -1, false);
+                ItemDrop.ItemData item = PlayerBag.FindInBag(inv, shared);
                 if (item != null)
                     return item;
             }

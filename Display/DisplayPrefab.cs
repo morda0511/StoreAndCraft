@@ -346,8 +346,7 @@ namespace StoreAndCraft
         {
             if (__instance == null || __instance != Player.m_localPlayer)
                 return true;
-            if (secondaryAttack)
-                return true;
+            // Block primary (scale) and secondary (layout) while Shift+hovering a display.
             return !StorageDisplayBoard.ShouldBlockAttackForCycle();
         }
     }

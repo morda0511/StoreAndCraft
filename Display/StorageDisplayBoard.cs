@@ -10,10 +10,13 @@ namespace StoreAndCraft
         public const string ZdoItemKey = "sac_item";
         public const string ZdoRangeKey = "sac_display_range";
         public const string ZdoScaleKey = "sac_ui_scale";
+        public const string ZdoLayoutKey = "sac_ui_layout";
         public const string ZdoShowNameKey = "sac_show_name";
         public const string ZdoShowAmountKey = "sac_show_amount";
-        public const int ScaleMin = -10;
-        public const int ScaleMax = 10;
+        public const int ScaleMin = -2;
+        public const int ScaleMax = 4;
+        public const int LayoutClassic = 0;
+        public const int LayoutCompact = 1;
 
         private static readonly List<StorageDisplayBoard> All = new List<StorageDisplayBoard>();
 
@@ -26,7 +29,13 @@ namespace StoreAndCraft
         private int _headerColumns;
         private int _itemsPerGroup = 1;
         private float _fontFactor = 0.22f;
+        private float _bandFontFactor = 0.15f;
         private float _titleFactor = 0.12f;
+        private float _baseAmountFont;
+        private float _slotFont;
+        private float _chipFont;
+        private float _boardW = 1f;
+        private float _boardH = 1f;
         private bool _columnMajor;
         private bool _columnHeaders;
         private bool _tightSlots;
@@ -34,10 +43,18 @@ namespace StoreAndCraft
         private float _labelWidth;
         private int _builtBandCount = -1;
         private int _builtScaleStep = int.MinValue;
+        private int _builtLayoutMode = int.MinValue;
         private int _builtShowName = int.MinValue;
         private int _builtShowAmount = int.MinValue;
         private TextMeshProUGUI[] _bandLabels;
         private RectTransform _gridRoot;
+
+        private struct SlotPairLayout
+        {
+            public float IconFrac;
+            public float GapFrac;
+            public float FontSize;
+        }
 
         private readonly List<Container> _watched = new List<Container>();
         private readonly List<int> _watchIds = new List<int>();
@@ -63,6 +80,7 @@ namespace StoreAndCraft
             public Image Icon;
             public TextMeshProUGUI Amount;
             public TextMeshProUGUI Name;
+            public bool IsChip;
         }
 
         public DisplayKind Kind
@@ -89,6 +107,7 @@ namespace StoreAndCraft
                     _itemsPerGroup = 1;
                     // Slightly larger count than before; icon size is handled in CreateSlotCell.
                     _fontFactor = 0.34f;
+                    _bandFontFactor = 0.34f;
                     _titleFactor = 0.16f;
                     _columnMajor = false;
                     _columnHeaders = false;
@@ -103,7 +122,9 @@ namespace StoreAndCraft
                     _columns = 13;
                     _rows = DisplayFilters.MaxCategories; // 12
                     _slotCount = _columns * _rows;
-                    _fontFactor = 0.18f / 3f;
+                    _fontFactor = 0.14f;
+                    // Category labels stay at the old scale-0 size and never follow content scale.
+                    _bandFontFactor = 0.18f / 3f;
                     _titleFactor = 0.10f / 3f;
                     _columnMajor = false;
                     _columnHeaders = false;
@@ -119,7 +140,8 @@ namespace StoreAndCraft
                     _rows = 3;
                     _headerColumns = 1;
                     _itemsPerGroup = 4;
-                    _fontFactor = 0.15f;
+                    _fontFactor = 0.22f;
+                    _bandFontFactor = 0.13f;
                     _titleFactor = 0.10f;
                     _columnMajor = false;
                     _columnHeaders = true;
@@ -145,8 +167,8 @@ namespace StoreAndCraft
 
         public float ContentScaleMul()
         {
-            // −10…+10 → 0.2…1.8 (readable at the extremes).
-            return 1f + ContentScaleStep() * 0.08f;
+            // −2…+4 → 0.5…2.0 (25% per Shift+LMB click).
+            return 1f + ContentScaleStep() * 0.25f;
         }
 
         public void SetContentScaleStep(int step)
@@ -173,7 +195,7 @@ namespace StoreAndCraft
         }
 
         /// <summary>
-        /// Cycle 0 → +1…+10 → −10…−1 → 0 → … (this board only).
+        /// Cycle 0 → +1…+4 → −2…−1 → 0 → … (this board only).
         /// </summary>
         public void CycleContentScaleStep()
         {
@@ -189,6 +211,66 @@ namespace StoreAndCraft
         {
             return Loc.T("Display Scale", "Display Scale") + " : "
                 + "<color=yellow><b>" + FormatScaleStep(ContentScaleStep()) + "</b></color>";
+        }
+
+        public int ContentLayoutMode()
+        {
+            if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
+                return LayoutClassic;
+            ZNetView nv = GetComponent<ZNetView>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return LayoutClassic;
+            return zdo.GetInt(ZdoLayoutKey, LayoutClassic) == LayoutCompact
+                ? LayoutCompact
+                : LayoutClassic;
+        }
+
+        public bool IsCompactLayout()
+        {
+            return ContentLayoutMode() == LayoutCompact
+                && (_kind == DisplayKind.Medium || _kind == DisplayKind.Large);
+        }
+
+        public void SetLayoutMode(int mode)
+        {
+            if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
+                return;
+            mode = mode == LayoutCompact ? LayoutCompact : LayoutClassic;
+            ZNetView nv = GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid() || !nv.IsOwner())
+                nv?.ClaimOwnership();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return;
+            if (zdo.GetInt(ZdoLayoutKey, LayoutClassic) == mode)
+                return;
+            zdo.Set(ZdoLayoutKey, mode);
+            InvalidateUi();
+            if (_gridRoot != null)
+            {
+                Destroy(_gridRoot.gameObject);
+                _gridRoot = null;
+            }
+            _slots = null;
+            MarkDirty();
+        }
+
+        /// <summary>Shift+RMB: Classic ↔ Compact on this board only.</summary>
+        public void CycleLayoutMode()
+        {
+            if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
+                return;
+            SetLayoutMode(ContentLayoutMode() == LayoutCompact ? LayoutClassic : LayoutCompact);
+        }
+
+        public string FormatHoverLayoutLine()
+        {
+            string mode = ContentLayoutMode() == LayoutCompact
+                ? Loc.T("Compact", "Compact")
+                : Loc.T("Classic", "Classic");
+            return Loc.T("Layout", "Layout") + " : "
+                + "<color=yellow><b>" + mode + "</b></color>";
         }
 
         /// <summary>
@@ -223,27 +305,40 @@ namespace StoreAndCraft
         }
 
         /// <summary>
-        /// Shift+LMB: exactly one cycle on mouse/attack button <b>down</b> (not while held, not on release).
+        /// Shift+LMB scale / Shift+RMB layout: one cycle on button <b>down</b> only.
         /// StartAttack only blocks the swing — it must not cycle (fires many times per click).
         /// </summary>
         private static int _cycleFrame = -1;
+        private static int _layoutFrame = -1;
 
         public static void TickCycleInput()
         {
             if (!IsScaleChordHeld())
                 return;
 
-            bool pressed = Input.GetMouseButtonDown(0);
+            bool lmb = Input.GetMouseButtonDown(0);
+            bool rmb = Input.GetMouseButtonDown(1);
             try
             {
                 if (ZInput.GetButtonDown("Attack"))
-                    pressed = true;
+                    lmb = true;
+                if (ZInput.GetButtonDown("SecondaryAttack"))
+                    rmb = true;
             }
             catch
             {
             }
 
-            if (!pressed)
+            if (rmb)
+            {
+                if (_layoutFrame == Time.frameCount)
+                    return;
+                _layoutFrame = Time.frameCount;
+                TryCycleLayoutHovered();
+                return;
+            }
+
+            if (!lmb)
                 return;
 
             // Same frame can see both mouse and Attack down — only once.
@@ -281,6 +376,31 @@ namespace StoreAndCraft
             else
                 return false;
 
+            return true;
+        }
+
+        public static bool TryCycleLayoutHovered()
+        {
+            if (!IsScaleChordHeld())
+                return false;
+
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return false;
+
+            StorageDisplayBoard board = HoveredBoard();
+            if (board == null)
+                return false;
+            if (board.Kind != DisplayKind.Medium && board.Kind != DisplayKind.Large)
+                return false;
+
+            if (!PrivateArea.CheckAccess(board.transform.position, 0f, false, true))
+            {
+                player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                return true;
+            }
+
+            board.CycleLayoutMode();
             return true;
         }
 
@@ -389,58 +509,204 @@ namespace StoreAndCraft
             _headers = null;
             _bandLabels = null;
             _builtScaleStep = int.MinValue;
+            _builtLayoutMode = int.MinValue;
             _builtShowName = int.MinValue;
             _builtShowAmount = int.MinValue;
             _builtBandCount = -1;
         }
 
-        private void ApplyScaleToLayout()
+        private void CaptureBoardMetrics(TextMeshProUGUI template)
         {
-            float mul = ContentScaleMul();
-            if (_kind == DisplayKind.Medium)
+            if (template == null)
+                return;
+            _baseAmountFont = template.fontSize * _fontFactor;
+            _chipFont = template.fontSize * _bandFontFactor;
+            RectTransform board = template.rectTransform;
+            if (board == null)
+                return;
+            Rect r = board.rect;
+            float w = Mathf.Abs(r.width);
+            float h = Mathf.Abs(r.height);
+            // Stretched signs sometimes report 0 until laid out — fall back to sizeDelta / corners.
+            if (w < 0.05f || h < 0.05f)
             {
-                // Keep changing density across the full −10…+10 range (old −step hit the floor at +2/+5).
-                _columns = Mathf.Clamp(Mathf.RoundToInt(_baseColumns / mul), 2, 8);
-                _rows = _baseRows;
-                _slotCount = _columns * _rows;
-                _itemsPerGroup = _columns;
+                Vector3[] corners = new Vector3[4];
+                board.GetLocalCorners(corners);
+                w = Mathf.Abs(corners[2].x - corners[0].x);
+                h = Mathf.Abs(corners[2].y - corners[0].y);
             }
-            else if (_kind == DisplayKind.Large)
+            if (w < 0.05f)
+                w = Mathf.Max(0.05f, Mathf.Abs(board.sizeDelta.x));
+            if (h < 0.05f)
+                h = Mathf.Max(0.05f, Mathf.Abs(board.sizeDelta.y));
+            if (w > 0.05f)
+                _boardW = w;
+            if (h > 0.05f)
+                _boardH = h;
+        }
+
+        /// <summary>Reserve width for a 4-digit count ("9999") at the given font size.</summary>
+        private static float AmountReserveWidth(float fontSize)
+        {
+            // World-space Valheim signs: digit advance ≈ 0.40×font (0.62 over-shrinks to dots).
+            return Mathf.Max(0.01f, fontSize * 0.40f * 4f);
+        }
+
+        private float ReferenceCellHeightPx()
+        {
+            if (IsCompactLayout())
             {
-                // Min 4 so +6…+10 still grows cells (was floored at 8 → icons froze, only fonts grew).
-                _columns = Mathf.Clamp(Mathf.RoundToInt(_baseColumns / mul), 4, 18);
-                _rows = DisplayFilters.MaxCategories;
-                _slotCount = _columns * _rows;
+                // Denser than Classic category rows so Compact packs more pairs at scale 0.
+                int targetRows = _kind == DisplayKind.Large ? 8 : 5;
+                return Mathf.Max(0.01f, _boardH / targetRows);
             }
-            // Small: no content scale.
+            if (_kind == DisplayKind.Large)
+                return Mathf.Max(0.01f, _boardH / Mathf.Max(1, DisplayFilters.MaxCategories));
+            if (_kind == DisplayKind.Medium && _columnHeaders)
+                return Mathf.Max(0.01f, (_boardH * 0.88f) / Mathf.Max(1, _baseRows));
+            int rows = _baseRows > 0 ? _baseRows : 3;
+            return Mathf.Max(0.01f, _boardH / Mathf.Max(1, rows));
+        }
+
+        private float MinPairWidthPx(float cellH, float baseFont)
+        {
+            // Pair size comes from cell height only — Display Scale grows cells (cols/rows), not font alone.
+            float refH = ReferenceCellHeightPx();
+            float s = refH > 0.01f ? cellH / refH : 1f;
+            float font = Mathf.Min(baseFont * s, cellH * 0.70f);
+            float icon = cellH * 0.82f;
+            float gap = Mathf.Max(0.01f, cellH * 0.04f);
+            return icon + gap + AmountReserveWidth(font);
         }
 
         /// <summary>
-        /// Font / icon sizing vs default — tracks the scale step across the full −10…+10 range.
+        /// Icon + amount as one pair sized to the cell. Scale grows cells (fewer cols/rows);
+        /// never let font exceed cell height (that caused Large Classic overlap).
         /// </summary>
-        private float CellSizeScale()
+        private SlotPairLayout LayoutSlotPair(float cellWFrac, float cellHFrac, float baseFont)
         {
-            if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
-                return 1f;
-            return Mathf.Clamp(ContentScaleMul(), 0.35f, 1.85f);
+            float cellW = Mathf.Max(0.01f, cellWFrac * _boardW);
+            float cellH = Mathf.Max(0.01f, cellHFrac * _boardH);
+            float refH = ReferenceCellHeightPx();
+            float s = refH > 0.01f ? cellH / refH : 1f;
+            float font = Mathf.Min(baseFont * s, cellH * 0.70f);
+            float icon = cellH * 0.82f;
+            float gap = Mathf.Max(0.01f, cellH * 0.04f);
+            float amountW = AmountReserveWidth(font);
+            float pairW = icon + gap + amountW;
+            if (pairW > cellW && pairW > 0.01f)
+            {
+                float fit = cellW / pairW;
+                fit = Mathf.Max(0.55f, fit);
+                icon *= fit;
+                font *= fit;
+                gap *= fit;
+                // Keep icon roughly square vs cell height after width fit.
+                icon = Mathf.Min(icon, cellH * 0.90f);
+                font = Mathf.Min(font, cellH * 0.70f);
+            }
+
+            return new SlotPairLayout
+            {
+                IconFrac = Mathf.Clamp(icon / cellW, 0.22f, 0.55f),
+                GapFrac = Mathf.Max(0.004f, gap / cellW),
+                FontSize = font
+            };
         }
 
-        /// <summary>How much of each cell the icon may own (rest is the count).</summary>
-        private void SlotIconShare(out float iconMax, out float textMin)
+        private void EnforceClassicColumnFloor(float contentWFrac, float contentHFrac)
         {
-            float cell = CellSizeScale();
-            if (_kind == DisplayKind.Small)
+            if (_baseAmountFont <= 0.01f || _boardW <= 1.01f)
+                return;
+            float cellH = contentHFrac * _boardH / Mathf.Max(1, _rows);
+            float minPair = MinPairWidthPx(cellH, _baseAmountFont);
+            float contentW = contentWFrac * _boardW;
+            int maxCols = Mathf.Max(2, Mathf.FloorToInt(contentW / Mathf.Max(0.01f, minPair)));
+            if (_columns > maxCols)
+                _columns = maxCols;
+        }
+
+        private void ApplyCompactScale(float mul)
+        {
+            float refH = ReferenceCellHeightPx();
+            float pairH = Mathf.Clamp(refH * mul, _boardH / 18f, _boardH / 2f);
+            float baseFont = _baseAmountFont > 0.01f ? _baseAmountFont : 8f;
+            float font = baseFont * (pairH / Mathf.Max(0.01f, refH));
+            // Keep a readable floor so scale −2 does not become microscopic dots.
+            float minFont = baseFont * 0.55f;
+            if (font < minFont)
             {
-                iconMax = 0.40f;
-                textMin = 0.40f;
+                float grow = minFont / Mathf.Max(0.01f, font);
+                font = minFont;
+                pairH *= grow;
+            }
+            float pairW = pairH * 0.88f + Mathf.Max(0.01f, pairH * 0.05f) + AmountReserveWidth(font);
+            _columns = Mathf.Clamp(Mathf.FloorToInt(_boardW / Mathf.Max(0.01f, pairW)), 2, 16);
+            _rows = Mathf.Clamp(Mathf.FloorToInt(_boardH / Mathf.Max(0.01f, pairH)), 2, 16);
+            _slotCount = _columns * _rows;
+            _itemsPerGroup = _columns;
+            // Do NOT clear _headerColumns — Classic Medium needs it after toggle.
+        }
+
+        /// <summary>Put Medium/Large chassis flags back after Compact (Compact must not leave Classic broken).</summary>
+        private void RestoreClassicChassisFlags()
+        {
+            if (_kind == DisplayKind.Medium)
+            {
+                _headerColumns = 1;
+                _columnHeaders = true;
+                _flowSections = false;
+                _columnMajor = false;
+                _tightSlots = true;
+            }
+            else if (_kind == DisplayKind.Large)
+            {
+                _headerColumns = 0;
+                _columnHeaders = false;
+                _flowSections = true;
+                _columnMajor = false;
+                _tightSlots = true;
+            }
+        }
+
+        private void ApplyScaleToLayout()
+        {
+            if (_kind == DisplayKind.Small)
+                return;
+
+            float mul = ContentScaleMul();
+            if (IsCompactLayout())
+            {
+                ApplyCompactScale(mul);
                 return;
             }
 
-            float baseIcon = _tightSlots ? 0.40f : 0.46f;
-            // Grow icon share with scale so sprites keep up with amount font past +5.
-            float t = Mathf.InverseLerp(1f, 1.85f, Mathf.Max(1f, cell));
-            iconMax = Mathf.Lerp(baseIcon, 0.72f, t);
-            textMin = Mathf.Min(0.78f, iconMax + 0.03f);
+            RestoreClassicChassisFlags();
+
+            if (_kind == DisplayKind.Medium)
+            {
+                _columns = Mathf.Clamp(Mathf.RoundToInt(_baseColumns / mul), 2, 8);
+                // Taller cells at higher scale so icon+count grow together (not font-only).
+                _rows = Mathf.Clamp(Mathf.RoundToInt(_baseRows / mul), 1, _baseRows);
+                EnforceClassicColumnFloor(1f, _columnHeaders ? 0.88f : 1f);
+                _slotCount = _columns * _rows;
+                _itemsPerGroup = _columns;
+                _headerColumns = 1;
+            }
+            else if (_kind == DisplayKind.Large)
+            {
+                // Fewer / taller rows + fewer columns → icons and counts grow inside the cell.
+                _columns = Mathf.Clamp(Mathf.RoundToInt(_baseColumns / mul), 4, 18);
+                _rows = Mathf.Clamp(
+                    Mathf.RoundToInt(DisplayFilters.MaxCategories / mul),
+                    3,
+                    DisplayFilters.MaxCategories);
+                float labelW = Mathf.Clamp(_labelWidth, 0.08f, 0.16f);
+                EnforceClassicColumnFloor(1f - labelW, 1f);
+                _slotCount = _columns * _rows;
+                _itemsPerGroup = 1;
+                _headerColumns = 0;
+            }
         }
 
         public static string FormatScaleStep(int step)
@@ -549,14 +815,16 @@ namespace StoreAndCraft
             string use = "[<color=yellow><b>E</b></color>] " + Loc.T("Select type", "Typ wählen");
             string scaleKey = "[<color=yellow><b>Shift+LMB</b></color>] ";
             string scaleLine = scaleKey + FormatHoverScaleLine();
+            string layoutKey = "[<color=yellow><b>Shift+RMB</b></color>] ";
+            string layoutLine = layoutKey + FormatHoverLayoutLine();
             if (filters.Count == 0 && items.Count == 0)
-                return BoardTitle() + "\n" + use + "\n" + scaleLine + "\n" + rangeLine;
+                return BoardTitle() + "\n" + use + "\n" + scaleLine + "\n" + layoutLine + "\n" + rangeLine;
 
             RefreshClusterPages();
             string title = BoardTitle() + " (" + name + ")";
             if (_pages > 1)
                 title += " (" + (_page + 1) + "/" + _pages + ")";
-            return title + "\n" + use + "\n" + scaleLine + "\n" + rangeLine;
+            return title + "\n" + use + "\n" + scaleLine + "\n" + layoutLine + "\n" + rangeLine;
         }
 
         public string ItemToken()
@@ -927,24 +1195,31 @@ namespace StoreAndCraft
             // Force UI rebuild when switching to small layout tweaks / slot count changes.
             if (_slots != null && _slots.Length != _slotCount)
                 _slots = null;
-            // Content scale changed (Medium / Large columns + font).
+            // Content scale or Classic/Compact layout changed (Medium / Large).
             if (_slots != null && (_kind == DisplayKind.Medium || _kind == DisplayKind.Large)
-                && ContentScaleStep() != _builtScaleStep)
+                && (ContentScaleStep() != _builtScaleStep || ContentLayoutMode() != _builtLayoutMode))
                 _slots = null;
             // Small name/amount layout changed — rebuild so icon can recenter.
             if (_slots != null && _kind == DisplayKind.Small
                 && ((ShowName() ? 1 : 0) != _builtShowName || (ShowAmount() ? 1 : 0) != _builtShowAmount))
                 _slots = null;
-            // Medium layout gained a category header strip — rebuild old grids.
-            if (_slots != null && _kind == DisplayKind.Medium && _columnHeaders && _headers == null)
+            // Medium Classic: need category header strip. Only force rebuild when headers are expected.
+            if (_slots != null && _kind == DisplayKind.Medium && !IsCompactLayout()
+                && _columnHeaders && _headerColumns > 0 && _headers == null)
                 _slots = null;
-            // Large switched from fixed 3-column headers to flowing sections.
-            if (_slots != null && _kind == DisplayKind.Large && (_headers != null || !_flowSections || _columnMajor))
+            // Large Classic switched from fixed 3-column headers to flowing sections.
+            if (_slots != null && _kind == DisplayKind.Large && !IsCompactLayout()
+                && (_headers != null || !_flowSections || _columnMajor))
                 _slots = null;
-            // Large must keep a full 12-row slot grid (never shrink with filter count).
-            if (_slots != null && _kind == DisplayKind.Large && _flowSections
-                && (_bandLabels == null || _bandLabels.Length < DisplayFilters.MaxCategories
-                    || _slots.Length != _columns * DisplayFilters.MaxCategories))
+            // Compact: fixed left category rail + item grid must match current rows/cols.
+            if (_slots != null && IsCompactLayout()
+                && (_bandLabels == null || _bandLabels.Length != _rows
+                    || _slots.Length != _columns * _rows))
+                _slots = null;
+            // Large Classic: chassis matches current scale row count (taller cells at higher scale).
+            if (_slots != null && _kind == DisplayKind.Large && !IsCompactLayout() && _flowSections
+                && (_bandLabels == null || _bandLabels.Length != _rows
+                    || _slots.Length != _columns * _rows))
                 _slots = null;
             if (_slots != null && _kind == DisplayKind.Small && _slots.Length == 1
                 && (_slots[0].Name == null
@@ -992,11 +1267,17 @@ namespace StoreAndCraft
             ZNetView nv = GetComponent<ZNetView>();
             if (nv == null || !nv.IsValid())
                 return;
+            Sign sign = GetComponent<Sign>();
+            TextMeshProUGUI template = sign != null ? sign.m_textWidget : null;
+            if (template == null)
+                return;
+            CaptureBoardMetrics(template);
             ApplyScaleToLayout();
             BuildUi();
             if (_slots != null)
             {
                 _builtScaleStep = ContentScaleStep();
+                _builtLayoutMode = ContentLayoutMode();
                 _builtShowName = ShowName() ? 1 : 0;
                 _builtShowAmount = ShowAmount() ? 1 : 0;
                 _dirty = true;
@@ -1053,7 +1334,8 @@ namespace StoreAndCraft
                 return;
 
             _signText = template;
-            _titleFont = template.fontSize * _titleFactor * CellSizeScale();
+            // Board title stays put — only item cells grow via fewer/wider columns.
+            _titleFont = template.fontSize * _titleFactor;
             SilenceSignText();
 
             Transform existing = board.parent.Find("SacDisplayGrid");
@@ -1073,9 +1355,17 @@ namespace StoreAndCraft
             rt.localScale = board.localScale;
             rt.localRotation = board.localRotation;
 
-            // Font follows cell size + scale step so icons and amounts grow together.
-            float font = template.fontSize * _fontFactor * CellSizeScale();
-            float bandFont = template.fontSize * _fontFactor; // category labels stay stable
+            // Amount font grows with cell height via LayoutSlotPair; category labels stay fixed.
+            float font = template.fontSize * _fontFactor;
+            // Category labels always match scale 0 — never follow content scale.
+            float bandFont = template.fontSize * _bandFontFactor;
+            _chipFont = bandFont;
+
+            if (IsCompactLayout())
+            {
+                BuildCompactUi(root, template, font, bandFont);
+                return;
+            }
 
             if (_kind == DisplayKind.Large && _flowSections)
             {
@@ -1114,7 +1404,7 @@ namespace StoreAndCraft
                     header.textWrappingMode = TextWrappingModes.NoWrap;
                     header.overflowMode = TextOverflowModes.Overflow;
                     header.enableAutoSizing = false;
-                    header.fontSize = font * 0.85f;
+                    header.fontSize = bandFont;
                     header.color = new Color(1f, 0.95f, 0.75f, 1f);
                     header.faceColor = new Color32(255, 242, 191, 255);
                     header.outlineWidth = 0f;
@@ -1128,10 +1418,6 @@ namespace StoreAndCraft
                 _headers = null;
             }
 
-            float iconMax;
-            float textMin;
-            SlotIconShare(out iconMax, out textMin);
-
             float padX = _tightSlots ? 0.006f : (_kind == DisplayKind.Small ? 0.04f : 0.012f);
             float padY = _tightSlots ? 0.012f : (_kind == DisplayKind.Small ? 0.06f : 0.018f);
 
@@ -1141,7 +1427,7 @@ namespace StoreAndCraft
                 int col;
                 int row;
                 SlotCoord(i, out col, out row);
-                CreateSlotCell(root.transform, template, font, iconMax, textMin, padX, padY, 1f,
+                CreateSlotCell(root.transform, template, font, padX, padY,
                     col / (float)_columns, (col + 1) / (float)_columns,
                     contentTop * (1f - (row + 1) / (float)_rows),
                     contentTop * (1f - row / (float)_rows),
@@ -1152,23 +1438,94 @@ namespace StoreAndCraft
             _gridRoot = rt;
         }
 
+        private void BuildCompactUi(GameObject root, TextMeshProUGUI template, float font, float bandFont)
+        {
+            _headers = null;
+            _gridRoot = root.GetComponent<RectTransform>();
+
+            int rows = Mathf.Max(1, _rows);
+            int itemCols = Mathf.Max(1, _columns);
+            _slotCount = rows * itemCols;
+            _builtBandCount = rows;
+
+            // Fixed left gutter — same board fraction at every scale so labels stay put.
+            const float labelW = 0.118f;
+            float padX = 0.003f;
+            float padY = 0.010f;
+            // Soft nudge toward the board edge without leaving the sign face.
+            const float labelNudge = -0.22f;
+
+            // Category text grows/shrinks with Display Scale; position stays on the left rail.
+            float chipSize = bandFont * Mathf.Clamp(ContentScaleMul(), 0.7f, 1.55f);
+            _chipFont = chipSize;
+
+            _bandLabels = new TextMeshProUGUI[rows];
+            for (int r = 0; r < rows; r++)
+            {
+                GameObject labelGo = Object.Instantiate(template.gameObject, root.transform);
+                labelGo.name = "CompactCat" + r;
+                labelGo.SetActive(false);
+                RectTransform labelRt = labelGo.GetComponent<RectTransform>();
+                float y0 = 1f - (r + 1) / (float)rows;
+                float y1 = 1f - r / (float)rows;
+                labelRt.anchorMin = new Vector2(0f, y0 + padY);
+                labelRt.anchorMax = new Vector2(labelW, y1 - padY);
+                labelRt.offsetMin = new Vector2(labelNudge, 0f);
+                labelRt.offsetMax = Vector2.zero;
+                labelRt.localScale = Vector3.one;
+                labelRt.localRotation = Quaternion.identity;
+
+                TextMeshProUGUI label = labelGo.GetComponent<TextMeshProUGUI>();
+                var localize = labelGo.GetComponent("Localize") as MonoBehaviour;
+                if (localize != null)
+                    Object.Destroy(localize);
+                if (template.font != null)
+                    label.font = template.font;
+                label.enabled = true;
+                label.alignment = TextAlignmentOptions.MidlineLeft;
+                label.textWrappingMode = TextWrappingModes.NoWrap;
+                label.overflowMode = TextOverflowModes.Ellipsis;
+                label.margin = Vector4.zero;
+                label.enableAutoSizing = false;
+                label.fontSize = chipSize;
+                label.color = new Color(1f, 0.88f, 0.35f, 1f);
+                label.faceColor = new Color32(255, 220, 80, 255);
+                label.outlineWidth = 0f;
+                label.raycastTarget = false;
+                label.text = "";
+                _bandLabels[r] = label;
+            }
+
+            _slots = new SlotUi[_slotCount];
+            int slot = 0;
+            for (int r = 0; r < rows; r++)
+            {
+                float y0 = 1f - (r + 1) / (float)rows;
+                float y1 = 1f - r / (float)rows;
+                for (int col = 0; col < itemCols; col++)
+                {
+                    float x0 = labelW + (1f - labelW) * (col / (float)itemCols);
+                    float x1 = labelW + (1f - labelW) * ((col + 1) / (float)itemCols);
+                    CreateSlotCell(root.transform, template, font, padX, padY,
+                        x0, x1, y0, y1, slot);
+                    slot++;
+                }
+            }
+        }
+
         private void BuildLargeUi(GameObject root, TextMeshProUGUI template, float font, float bandFont)
         {
             _headers = null;
             _gridRoot = root.GetComponent<RectTransform>();
-            // Always build the full 12-row chassis once. Paint decides how many rows are used.
-            int rows = DisplayFilters.MaxCategories;
+            // Row count comes from ApplyScaleToLayout (fewer rows = taller cells at higher scale).
+            int rows = Mathf.Max(1, _rows);
             int itemCols = _columns;
-            _rows = rows;
             _slotCount = rows * itemCols;
             _builtBandCount = rows;
 
             float labelW = Mathf.Clamp(_labelWidth, 0.08f, 0.16f);
             float padX = 0.0015f;
-            float padY = 0.006f;
-            float iconMax;
-            float textMin;
-            SlotIconShare(out iconMax, out textMin);
+            float padY = 0.008f;
 
             _bandLabels = new TextMeshProUGUI[rows];
             for (int r = 0; r < rows; r++)
@@ -1218,7 +1575,7 @@ namespace StoreAndCraft
                 {
                     float x0 = labelW + (1f - labelW) * (col / (float)itemCols);
                     float x1 = labelW + (1f - labelW) * ((col + 1) / (float)itemCols);
-                    CreateSlotCell(root.transform, template, font, iconMax, textMin, padX, padY, 1f,
+                    CreateSlotCell(root.transform, template, font, padX, padY,
                         x0, x1, y0, y1, slot);
                     slot++;
                 }
@@ -1229,11 +1586,8 @@ namespace StoreAndCraft
             Transform parent,
             TextMeshProUGUI template,
             float font,
-            float iconMax,
-            float textMin,
             float padX,
             float padY,
-            float contentTop,
             float x0,
             float x1,
             float y0,
@@ -1252,10 +1606,15 @@ namespace StoreAndCraft
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             iconGo.transform.SetParent(cell.transform, false);
             RectTransform iconRt = iconGo.GetComponent<RectTransform>();
+            float cellWFrac = Mathf.Max(0.001f, (x1 - x0) - 2f * padX);
+            float cellHFrac = Mathf.Max(0.001f, (y1 - y0) - 2f * padY);
+            SlotPairLayout pair = default(SlotPairLayout);
             if (_kind != DisplayKind.Small)
             {
-                iconRt.anchorMin = new Vector2(0.00f, 0.10f);
-                iconRt.anchorMax = new Vector2(iconMax, 0.92f);
+                pair = LayoutSlotPair(cellWFrac, cellHFrac, font);
+                _slotFont = pair.FontSize;
+                iconRt.anchorMin = new Vector2(0f, 0.08f);
+                iconRt.anchorMax = new Vector2(pair.IconFrac, 0.92f);
             }
             iconRt.offsetMin = Vector2.zero;
             iconRt.offsetMax = Vector2.zero;
@@ -1276,7 +1635,7 @@ namespace StoreAndCraft
             }
             else
             {
-                textRt.anchorMin = new Vector2(textMin, 0.08f);
+                textRt.anchorMin = new Vector2(pair.IconFrac + pair.GapFrac, 0.08f);
                 textRt.anchorMax = new Vector2(1.00f, 0.92f);
                 textRt.pivot = new Vector2(0f, 0.5f);
             }
@@ -1298,9 +1657,9 @@ namespace StoreAndCraft
             amount.textWrappingMode = TextWrappingModes.NoWrap;
             amount.overflowMode = TextOverflowModes.Overflow;
             amount.enableAutoSizing = false;
-            amount.fontSize = font;
-            if (_kind == DisplayKind.Small)
-                amount.fontSize = Mathf.Max(font, template.fontSize * 0.30f);
+            amount.fontSize = _kind == DisplayKind.Small
+                ? Mathf.Max(font, template.fontSize * 0.30f)
+                : pair.FontSize;
             amount.color = new Color(1f, 0.95f, 0.75f, 1f);
             amount.faceColor = new Color32(255, 242, 191, 255);
             amount.outlineWidth = 0f;
@@ -1349,6 +1708,7 @@ namespace StoreAndCraft
             _slots[index].Icon = icon;
             _slots[index].Amount = amount;
             _slots[index].Name = nameLabel;
+            _slots[index].IsChip = false;
         }
 
         /// <summary>
@@ -1478,7 +1838,8 @@ namespace StoreAndCraft
                 if (ChestNames.IsFullyIgnored(container))
                     continue;
 
-                // Unopened chests often have null/empty inv until Load — required for displays.
+                // Unopened chests often have null/empty inv until Load — read-only for displays.
+                // Never force-Load over a full bag (that was the old wipe race).
                 NearbyIndex.EnsureInventory(container);
                 Inventory inv = container.GetInventory();
                 if (inv == null)
@@ -1662,6 +2023,12 @@ namespace StoreAndCraft
             _pages = Mathf.Max(1, cluster.Count);
             _page = Mathf.Max(0, cluster.IndexOf(this));
 
+            if (IsCompactLayout())
+            {
+                PaintCompactFlow(cluster, filters, itemTokens);
+                return;
+            }
+
             if (_kind == DisplayKind.Large && _flowSections)
             {
                 PaintLargeSections(cluster, filters, itemTokens);
@@ -1753,6 +2120,98 @@ namespace StoreAndCraft
             }
         }
 
+        private void PaintCompactFlow(
+            List<StorageDisplayBoard> cluster,
+            List<int> filters,
+            List<string> itemTokens)
+        {
+            ClearHeaders();
+            if (_bandLabels != null)
+            {
+                for (int i = 0; i < _bandLabels.Length; i++)
+                {
+                    if (_bandLabels[i] == null)
+                        continue;
+                    _bandLabels[i].text = "";
+                    _bandLabels[i].gameObject.SetActive(false);
+                }
+            }
+
+            for (int i = 0; i < _slotCount; i++)
+                ClearSlot(i);
+
+            var ranked = RankItems(cluster, filters, itemTokens, groupByCategory: true);
+            if (ranked == null || ranked.Count == 0)
+                return;
+
+            int cols = Mathf.Max(1, _columns);
+            int slot = 0;
+            int lastCat = int.MinValue;
+            for (int i = 0; i < ranked.Count; i++)
+            {
+                RankedItem entry = ranked[i];
+                if (entry.CategoryId != lastCat)
+                {
+                    // New category on a new row; label sits on the fixed left rail.
+                    if (slot % cols != 0)
+                        slot += cols - (slot % cols);
+
+                    if (slot >= _slotCount)
+                        break;
+
+                    int row = slot / cols;
+                    if (_bandLabels != null && row >= 0 && row < _bandLabels.Length && _bandLabels[row] != null)
+                    {
+                        _bandLabels[row].gameObject.SetActive(true);
+                        if (_chipFont > 0.01f)
+                            _bandLabels[row].fontSize = _chipFont;
+                        _bandLabels[row].text = ShortCategoryLabel(entry.CategoryId);
+                    }
+
+                    lastCat = entry.CategoryId;
+                }
+
+                if (slot >= _slotCount)
+                    break;
+
+                bool moreRemain = i < ranked.Count - 1;
+                if (moreRemain && slot == _slotCount - 1)
+                {
+                    ClearSlot(slot);
+                    SetAmount(slot, "+", new Color(1f, 0.85f, 0.45f, 1f));
+                    slot++;
+                    break;
+                }
+
+                PaintSlot(slot, entry);
+                slot++;
+            }
+        }
+
+        private void PaintChip(int i, string label)
+        {
+            if (_slots == null || i < 0 || i >= _slots.Length)
+                return;
+            if (_slots[i].Icon != null)
+            {
+                _slots[i].Icon.enabled = false;
+                _slots[i].Icon.sprite = null;
+            }
+            SetItemName(i, "");
+            _slots[i].IsChip = true;
+            TextMeshProUGUI amount = _slots[i].Amount;
+            if (amount == null)
+                return;
+            // Left-aligned header cell — reads as a row label, not another item.
+            amount.alignment = TextAlignmentOptions.MidlineLeft;
+            if (_chipFont > 0.01f)
+                amount.fontSize = _chipFont * 1.15f;
+            amount.color = new Color(1f, 0.88f, 0.35f, 1f);
+            amount.faceColor = new Color32(255, 220, 80, 255);
+            amount.text = label ?? "";
+            amount.enabled = true;
+        }
+
         private static ItemDrop.ItemData SampleFromToken(string token)
         {
             GameObject prefab = ItemIds.PrefabFromToken(token);
@@ -1790,11 +2249,8 @@ namespace StoreAndCraft
             if (sections.Count == 0)
                 return;
 
-            int cats = Mathf.Clamp(sections.Count, 1, DisplayFilters.MaxCategories);
-            int rows = DisplayFilters.MaxCategories;
-            int itemCols = _columns;
-            // Few categories → more rows each; 12 cats → one row each.
-            int linesPerCat = Mathf.Max(1, rows / cats);
+            int rows = Mathf.Max(1, _rows);
+            int itemCols = Mathf.Max(1, _columns);
 
             // One chest scan for the whole board — not once per category.
             var rankedAll = RankItems(cluster, filters, itemTokens, groupByCategory: true);
@@ -1812,35 +2268,48 @@ namespace StoreAndCraft
                 list.Add(entry);
             }
 
-            for (int c = 0; c < cats; c++)
+            // Pack categories top→bottom: each uses only the rows it needs, next category
+            // starts on the following free row (no overlap / no wasted empty bands).
+            int cursor = 0;
+            for (int c = 0; c < sections.Count; c++)
             {
-                int catId = sections[c];
-                int row0 = c * linesPerCat;
-                if (row0 >= rows)
+                if (cursor >= rows)
                     break;
 
+                int catId = sections[c];
+                List<RankedItem> ranked;
+                if (!byCat.TryGetValue(catId, out ranked) || ranked == null)
+                    ranked = new List<RankedItem>();
+
+                int itemCount = Mathf.Max(1, ranked.Count); // empty cat still shows a "0" row
+                int rowsNeeded = Mathf.Max(1, Mathf.CeilToInt(itemCount / (float)itemCols));
+                int rowsLeft = rows - cursor;
+                int rowsForThis = Mathf.Min(rowsNeeded, rowsLeft);
+                if (rowsForThis <= 0)
+                    break;
+
+                int row0 = cursor;
                 if (_bandLabels != null && row0 < _bandLabels.Length && _bandLabels[row0] != null)
                 {
                     _bandLabels[row0].gameObject.SetActive(true);
                     _bandLabels[row0].text = ShortCategoryLabel(catId);
                 }
 
-                List<RankedItem> ranked;
-                if (!byCat.TryGetValue(catId, out ranked) || ranked == null)
-                    ranked = new List<RankedItem>();
-
-                int capacity = linesPerCat * itemCols;
+                int capacity = rowsForThis * itemCols;
                 int baseSlot = row0 * itemCols;
 
                 if (ranked.Count == 0)
                 {
                     if (baseSlot < _slotCount)
                         SetAmount(baseSlot, "0", new Color(0.75f, 0.7f, 0.55f, 1f));
+                    cursor = row0 + rowsForThis;
                     continue;
                 }
 
-                int extra = Mathf.Max(0, ranked.Count - capacity);
-                int show = extra > 0 ? capacity - 1 : Mathf.Min(capacity, ranked.Count);
+                bool truncated = ranked.Count > capacity || (c < sections.Count - 1 && cursor + rowsNeeded > rows);
+                int show = truncated && capacity > 0
+                    ? Mathf.Min(capacity - 1, ranked.Count)
+                    : Mathf.Min(capacity, ranked.Count);
                 for (int i = 0; i < show; i++)
                 {
                     int slot = baseSlot + i;
@@ -1849,17 +2318,18 @@ namespace StoreAndCraft
                     PaintSlot(slot, ranked[i]);
                 }
 
-                if (extra > 0)
+                if (truncated && capacity > 0)
                 {
                     int overflowSlot = baseSlot + capacity - 1;
                     if (overflowSlot < _slotCount)
                     {
                         ClearSlot(overflowSlot);
-                        // Only "+" — same color/font as before, no leftover count.
                         SetAmount(overflowSlot, "+",
                             new Color(1f, 0.85f, 0.45f, 1f));
                     }
                 }
+
+                cursor = row0 + rowsForThis;
             }
         }
 
@@ -2030,13 +2500,14 @@ namespace StoreAndCraft
                     if (container == null || !seenChest.Add(container.GetInstanceID()))
                         continue;
                     // Prefer already-loaded inventories; only ZDO-load empty/unopened chests.
+                    // Display is read-only: a brief "0" on the board must never Save/wipe the chest.
                     Inventory inv = container.GetInventory();
                     if (inv == null || inv.NrOfItems() <= 0)
                     {
                         NearbyIndex.EnsureInventory(container);
                         inv = container.GetInventory();
                     }
-                    if (inv == null)
+                    if (inv == null || inv.NrOfItems() <= 0)
                         continue;
                     foreach (ItemDrop.ItemData item in inv.GetAllItems())
                     {
@@ -2133,10 +2604,30 @@ namespace StoreAndCraft
 
         private void PaintSlot(int i, RankedItem entry)
         {
+            ResetSlotStyle(i);
             _slots[i].Icon.sprite = StackLimits.Icon(entry.Sample);
             _slots[i].Icon.enabled = _slots[i].Icon.sprite != null;
             _slots[i].Icon.color = Color.white;
             SetAmount(i, FormatCount(entry.Count));
+        }
+
+        private void ResetSlotStyle(int i)
+        {
+            if (_slots == null || i < 0 || i >= _slots.Length)
+                return;
+            if (!_slots[i].IsChip && (_slots[i].Amount == null || !_slots[i].Amount.enabled))
+            {
+                // Still restore font when coming from overflow "+" only.
+            }
+            _slots[i].IsChip = false;
+            TextMeshProUGUI amount = _slots[i].Amount;
+            if (amount == null)
+                return;
+            amount.alignment = TextAlignmentOptions.MidlineLeft;
+            if (_slotFont > 0.01f)
+                amount.fontSize = _slotFont;
+            amount.color = new Color(1f, 0.95f, 0.75f, 1f);
+            amount.faceColor = new Color32(255, 242, 191, 255);
         }
 
         private void ClearHeaders()
@@ -2165,6 +2656,7 @@ namespace StoreAndCraft
         {
             if (_slots == null || i < 0 || i >= _slots.Length)
                 return;
+            ResetSlotStyle(i);
             if (_slots[i].Icon != null)
             {
                 _slots[i].Icon.enabled = false;

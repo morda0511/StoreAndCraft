@@ -1,7 +1,7 @@
 # StoreAndCraft
 
 **Your base runs with you.**  
-Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]** — or toggle **auto-fill with B**. Cooking stations can **auto-drop finished food with N** so chests pick it up. Tell each station which wood or ore it’s allowed to take. **Small / Medium / Large Storage Displays** with **Shift + left click** scale / layout. Build a **Feed Trough** so tames eat when hungry. Mark favorites with **F**, fill a stack with **Ctrl + Middle mouse**, find a stack with **Y**, sort with **R**. Rename chests with **Alt+E** (Ignore / Show on Display toggles). Carts and ships count too.
+Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]** — or toggle **auto-fill with B**. Cooking stations can **auto-drop finished food with N** so chests pick it up. Tell each station which wood or ore it’s allowed to take. **Small / Medium / Large Storage Displays** with **Shift + left click** scale and **Shift + right click** Classic/Compact layout. Build a **Feed Trough** so tames eat when hungry. Mark favorites with **F**, fill a stack with **Ctrl + Middle mouse**, find a stack with **Y**, sort with **R**. Rename chests with **Alt+E** (Ignore / Show on Display toggles). Carts and ships count too.
 
 **Required on the dedicated / hosted server and every PC client** (same version). Valheim 1.0 · BepInExPack 5.4.2350+. Console players via crossplay cannot load the mod.
 
@@ -25,7 +25,7 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - **`.`** — dump allowed inventory stacks into matching nearby **player-built** chests. If the chest cannot take the whole stack, it fills what fits and leaves the rest.
 - **Middle mouse** (inventory open) — store only the hovered item.
 - **Ctrl + Middle mouse** (inventory open) — **Pull Stack**: fill the hovered stack from matching items in nearby chests.
-- Hotbar can be skipped (`IgnoreHotbar`).
+- Hotbar can be skipped (`IgnoreHotbar`). Extra inventory rows and quick slots (Haldor / EquipmentAndQuickSlotsPlus Z/V/B) are never dumped or sorted.
 - Favorites are never dumped / hover-stored (see below).
 
 ### Craft & build from chests
@@ -47,14 +47,14 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 
 ### Kiln / smelter / cooking auto-fill
 - Look at a kiln, smelter, blast furnace, cooking spit, iron cooking station, stone oven, fermenter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station (saved on the station).
-- When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from inventory first, then chests within `AutoFillRange`. Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
+- When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from inventory first, then chests within `AutoFillRange`. Set **`StationFillSkipInventory = true`** in config section `3 - Craft` to skip your bag entirely (chests only — hotbar, extra rows, and Z/V/B quick slots stay untouched). Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
 - Cooking / ovens top up **free slots** (not only when fully empty). Stone oven door hover shows the toggle; food is added even if the under-fire is out (baking still needs fire to cook).
 - No chest scans and no “it’s full” spam while the station is still running. Filter still applies (Wood OFF stays OFF).
 - **F** with inventory open is still favorites. Manual **[E]** refill is unchanged.
 
 ### Cooking auto-drop
-- Look at a cooking spit, iron cooking station, or stone oven (inventory **closed**) → **N** toggles auto-drop for that station (saved on the station).
-- Finished food falls off as a ground drop so auto-store can put it in a matching chest.
+- Look at a cooking spit, iron cooking station, stone oven, or **beehive** (inventory **closed**) → **N** toggles auto-drop for that piece (saved on the piece).
+- Finished food / honey falls off as a ground drop so auto-store can put it in a matching chest.
 - Pair with **B** auto-fill for hands-off cooking / baking (fire under the stone oven still required to cook).
 
 ### Kiln / smelter pull filter
@@ -67,7 +67,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 ### Storage Display (Hammer)
 - Build **Small**, **Medium**, or **Large Storage Display**.
 - **Small:** assign with hotbar **1–8** while looking at it. **Shift + left click** cycles **Name + Amount** → **No name** → **Icon only** (sprite centers when alone). **Alt+E** still opens the Name / Amount toggle panel if you prefer.
-- **Medium / Large:** **[E]** → type menu (**[+]** / **[-]**). Pick several types at once. **Shift + left click** cycles **Display Scale** (−10…+10) on **that board only** — icons and counts grow together; fewer items per row at higher scale. Hover shows e.g. `Display Scale : +3`.
+- **Medium / Large:** **[E]** → type menu (**[+]** / **[-]**). Pick several types at once. **Shift + left click** cycles **Display Scale** (−2…+4, **25%** per click) on **that board only** — icon and count scale as one pair (room for 4-digit totals); category labels stay fixed. **Shift + right click** toggles **Layout** **Classic** ↔ **Compact** (also per board, saved on the piece). Classic keeps category headers / bands; Compact packs category chips + items in a continuous flow. Hover shows e.g. `Display Scale : +3` and `Layout : Compact`.
 - **Food**, **Ingredients**, and **Epic Loot** expand for subs.
 - Up to **12 categories** per Large board (yellow message if you try more).
 - Large: category bands with labels on the left and dense item rows; overflow shows **+** when there are more stacks than fit.
@@ -77,7 +77,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 
 ### Feed Trough (Hammer)
 - Build a **Feed Trough** (Storage tab) — narrow bed-shaped trough for animal food.
-- Put carrots, cloudberries, etc. inside; nearby hungry tameables eat matching food automatically.
+- **Open it** and put carrots, mushrooms, berries, etc. inside. Hungry tames **walk to the trough** and eat matching food, like drops on the ground. A small sparkle shows when food is inside.
 - Not used by dump, auto-store, craft pull, or Storage Displays.
 - Config: `FeedTroughEnabled`, `FeedTroughRange`.
 
@@ -121,12 +121,13 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 | **Alt + E** | Rename looked-at chest (Ignore / Show on Display toggles + l1–l9) **or** station pull filter / Small Display options |
 | **F** | Favorite / unfavorite hovered inventory item |
 | **B** | Toggle auto-fill on the station you are looking at (inventory closed) |
-| **N** | Toggle auto-drop on a cooking spit / iron station / stone oven (inventory closed) |
+| **N** | Toggle auto-drop on a cooking spit / iron station / stone oven / beehive (inventory closed) |
 | **Y** | Hover an inventory item and press — nearest chest with that item blinks **3×** + map ping |
 | **R** | Sort: bag open = inventory only; chest open = that chest only |
 | **C + place (hammer)** | Grab build materials from chests (do not place). Remap: `BuildGrabKey` |
 | **Alt + R** | Storage Display range (while looking at a display) |
-| **Shift + Left click** | Storage Display: Medium/Large cycle scale (−10…+10, that board only); Small cycle Name+Amount / No name / Icon only |
+| **Shift + Left click** | Storage Display: Medium/Large cycle scale (−2…+4, 25%/click, that board only); Small cycle Name+Amount / No name / Icon only |
+| **Shift + Right click** | Storage Display Medium/Large: toggle Layout Classic ↔ Compact (that board only) |
 
 All hotkeys are configurable in the `.cfg` and stay **local** (not overwritten by server sync).
 
