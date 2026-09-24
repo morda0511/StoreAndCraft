@@ -3,11 +3,13 @@ using UnityEngine;
 
 namespace StoreAndCraft
 {
-    /// <summary>Valheim TMP fonts — prefer thin Norse (not Norsebold / title weight).</summary>
+    /// <summary>Valheim TMP fonts — thin Norse for body, Norsebold for titles.</summary>
     internal static class UiFonts
     {
         private static TMP_FontAsset _thin;
         private static Material _thinMat;
+        private static TMP_FontAsset _bold;
+        private static Material _boldMat;
 
         /// <summary>Thin Valheim body font (Valheim-Norse). Falls back to any non-Liberation TMP font.</summary>
         public static TMP_FontAsset ThinNorse()
@@ -20,30 +22,29 @@ namespace StoreAndCraft
             {
                 for (int i = 0; i < all.Length; i++)
                 {
-                    if (TryPick(all[i], exactNorse: true, anyNorse: false, averia: false, any: false))
+                    if (TryPickThin(all[i], exactNorse: true, anyNorse: false, averia: false, any: false))
                         return _thin;
                 }
 
                 for (int i = 0; i < all.Length; i++)
                 {
-                    if (TryPick(all[i], exactNorse: false, anyNorse: true, averia: false, any: false))
+                    if (TryPickThin(all[i], exactNorse: false, anyNorse: true, averia: false, any: false))
                         return _thin;
                 }
 
                 for (int i = 0; i < all.Length; i++)
                 {
-                    if (TryPick(all[i], exactNorse: false, anyNorse: false, averia: true, any: false))
+                    if (TryPickThin(all[i], exactNorse: false, anyNorse: false, averia: true, any: false))
                         return _thin;
                 }
 
                 for (int i = 0; i < all.Length; i++)
                 {
-                    if (TryPick(all[i], exactNorse: false, anyNorse: false, averia: false, any: true))
+                    if (TryPickThin(all[i], exactNorse: false, anyNorse: false, averia: false, any: true))
                         return _thin;
                 }
             }
 
-            // Last resort: steal from any loaded Valheim TMP label.
             TMP_Text[] live = Resources.FindObjectsOfTypeAll<TMP_Text>();
             if (live == null)
                 return null;
@@ -63,11 +64,51 @@ namespace StoreAndCraft
             return null;
         }
 
+        /// <summary>Bold Valheim title font (Norsebold).</summary>
+        public static TMP_FontAsset BoldNorse()
+        {
+            if (_bold != null)
+                return _bold;
+
+            TMP_FontAsset[] all = Resources.FindObjectsOfTypeAll<TMP_FontAsset>();
+            if (all != null)
+            {
+                for (int i = 0; i < all.Length; i++)
+                {
+                    TMP_FontAsset f = all[i];
+                    if (f == null || string.IsNullOrEmpty(f.name))
+                        continue;
+                    string n = f.name;
+                    if (n.IndexOf("Liberation", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        continue;
+                    if (n.Equals("Norsebold", System.StringComparison.OrdinalIgnoreCase)
+                        || n.Equals("Valheim-Norsebold", System.StringComparison.OrdinalIgnoreCase)
+                        || (n.IndexOf("Norse", System.StringComparison.OrdinalIgnoreCase) >= 0
+                            && n.IndexOf("bold", System.StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        _bold = f;
+                        _boldMat = f.material;
+                        return _bold;
+                    }
+                }
+            }
+
+            return ThinNorse();
+        }
+
         public static Material ThinMaterial()
         {
             if (_thinMat != null)
                 return _thinMat;
             TMP_FontAsset font = ThinNorse();
+            return font != null ? font.material : null;
+        }
+
+        public static Material BoldMaterial()
+        {
+            if (_boldMat != null)
+                return _boldMat;
+            TMP_FontAsset font = BoldNorse();
             return font != null ? font.material : null;
         }
 
@@ -82,6 +123,18 @@ namespace StoreAndCraft
                 go.SetActive(false);
             TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
             StyleThinLabel(tmp, size);
+            if (wasActive)
+                go.SetActive(true);
+            return tmp;
+        }
+
+        public static TextMeshProUGUI CreateBoldLabel(GameObject go, float size = 16f)
+        {
+            bool wasActive = go.activeSelf;
+            if (wasActive)
+                go.SetActive(false);
+            TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
+            StyleBoldLabel(tmp, size);
             if (wasActive)
                 go.SetActive(true);
             return tmp;
@@ -106,7 +159,26 @@ namespace StoreAndCraft
             tmp.raycastTarget = false;
         }
 
-        private static bool TryPick(TMP_FontAsset f, bool exactNorse, bool anyNorse, bool averia, bool any)
+        public static void StyleBoldLabel(TMP_Text tmp, float size = 16f)
+        {
+            if (tmp == null)
+                return;
+            TMP_FontAsset font = BoldNorse();
+            if (font != null)
+            {
+                tmp.font = font;
+                Material mat = BoldMaterial();
+                if (mat != null)
+                    tmp.fontSharedMaterial = mat;
+            }
+            tmp.fontStyle = FontStyles.Normal;
+            tmp.fontSize = size;
+            tmp.enableAutoSizing = false;
+            tmp.richText = false;
+            tmp.raycastTarget = false;
+        }
+
+        private static bool TryPickThin(TMP_FontAsset f, bool exactNorse, bool anyNorse, bool averia, bool any)
         {
             if (f == null || string.IsNullOrEmpty(f.name))
                 return false;

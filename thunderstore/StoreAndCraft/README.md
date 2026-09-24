@@ -34,6 +34,7 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 - Craft / upgrade button enables when mats are in **inventory or chests**.
 - Yellow tint on requirement text when part of the count comes from a chest.
 - `LeaveOneItem` (default on): one item stays in each chest so auto-store can keep refilling. That leftover item cannot be spent (craft, build, plant, or station [E]). Turn the setting off if you want to use the last item.
+- **Forge of Potential** (Schmiede / Werkbank des Potenzials): upgrades count and spend idols in nearby chests. `LeaveOneItem` does not apply there — a single idol in a chest is enough (same as Epic Loot runestones).
 - **C + place (hammer):** hold **C** while confirming a hammer build to **grab** that piece’s materials from nearby chests into your inventory (nothing is placed). Each grab-click can pull another full piece-cost set. Remap with `BuildGrabKey`. Shift stays free for vanilla no-snap.
 
 ### Epic Loot

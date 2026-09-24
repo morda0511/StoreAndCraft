@@ -43,8 +43,9 @@ namespace StoreAndCraft
         }
 
         /// <summary>
-        /// Do not clear a populated inventory when the incoming package is empty/tiny.
+        /// Do not clear a populated inventory when the incoming package is empty.
         /// That is the Storage Display / EnsureInventory chest-wipe race.
+        /// Empty inventories can serialize to more than 8 bytes, so peek the item count.
         /// </summary>
         private static bool Prefix(Inventory __instance, ZPackage pkg)
         {
@@ -57,11 +58,17 @@ namespace StoreAndCraft
             try
             {
                 int leftover = pkg.Size() - pos;
-                if (leftover <= 8)
+                if (leftover <= 0)
+                    return false;
+
+                // Inventory.Load format: int itemCount, then items…
+                int count = pkg.ReadInt();
+                if (count <= 0)
                     return false;
             }
             catch
             {
+                return false;
             }
             finally
             {

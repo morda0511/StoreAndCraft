@@ -178,7 +178,11 @@ namespace StoreAndCraft
             bool was = ClientVerified;
             ClientVerified = ok != 0;
             if (ClientVerified && !was)
+            {
                 Plugin.Log.LogDebug("StoreAndCraft: handshake acknowledged.");
+                // Config RPC can race ahead of Hello; ask again once the ack lands.
+                ConfigSync.RequestConfigFromServer();
+            }
         }
 
         internal static long ServerPeerId()

@@ -75,6 +75,12 @@ namespace StoreAndCraft
         private void Start()
         {
             TryRegisterRpc();
+            if (_container == null)
+                _container = GetComponent<Container>();
+            // Make sure a freshly placed trough has a live inventory bag before the first open.
+            if (_container != null && _container.GetInventory() == null)
+                NearbyIndex.EnsureInventory(_container);
+            HookInventory();
             RefreshOfferings();
         }
 
@@ -221,7 +227,6 @@ namespace StoreAndCraft
             return true;
         }
 
-        /// <summary>Use the live inventory if it already has food; only ZDO-load when empty.</summary>
         private Inventory ReadFood()
         {
             if (_container == null)
@@ -233,7 +238,12 @@ namespace StoreAndCraft
             if (inv != null && inv.NrOfItems() > 0)
                 return inv;
 
-            NearbyIndex.EnsureInventory(_container, force: true);
+            // Open trough: trust the live bag — do not ZDO-Load over it.
+            if (_container.IsInUse() && inv != null)
+                return inv;
+
+            if (ContainerFilter.ZdoHasItemPayload(_view != null && _view.IsValid() ? _view.GetZDO() : null))
+                NearbyIndex.EnsureInventory(_container, force: true);
             return _container.GetInventory();
         }
 

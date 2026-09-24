@@ -7,19 +7,36 @@ namespace StoreAndCraft
         /// <summary>
         /// Count spendable mats in nearby chests for UI / HaveRequirements / plant.
         /// Matches withdraw: LeaveOneItem reserves one per chest for auto-store routing.
+        /// Forge of Potential idols skip LeaveOne — they are unique and a single copy
+        /// in a chest must still be usable (same as Epic Loot runestones).
         /// </summary>
         public static int CountNearby(Player player, string sharedName, int quality = -1)
         {
             if (player == null || Plugin.Settings == null || string.IsNullOrEmpty(sharedName))
                 return 0;
 
-            bool leaveOne = Plugin.Settings.LeaveOneItem.Value;
             return NearbyIndex.CountItem(
-                player.transform.position,
+                StationFeed.ActivePullOrigin(player),
                 0f,
                 sharedName,
-                leaveOne: leaveOne,
+                leaveOne: LeaveOneInChests(player),
                 quality: quality);
+        }
+
+        /// <summary>
+        /// LeaveOne is for stackable craft mats so auto-store can keep routing.
+        /// The Potential forge only spends idol items (often 1 per chest).
+        /// </summary>
+        public static bool LeaveOneInChests(Player player)
+        {
+            if (Plugin.Settings == null || !Plugin.Settings.LeaveOneItem.Value)
+                return false;
+
+            CraftingStation station = player != null ? player.GetCurrentCraftingStation() : null;
+            if (station != null && station.m_upgrader)
+                return false;
+
+            return true;
         }
 
         /// <summary>

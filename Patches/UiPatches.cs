@@ -103,7 +103,7 @@ namespace StoreAndCraft
     }
 
     /// <summary>
-    /// Gold icon tint + ★ badge on favorited player-inventory stacks.
+    /// ★ badge on favorited player-inventory stacks (icon color stays vanilla).
     /// </summary>
     [HarmonyPatch(typeof(InventoryGrid), "UpdateGui")]
     internal static class FavoriteGridVisualPatch
@@ -139,6 +139,7 @@ namespace StoreAndCraft
                 if (!el.m_used)
                 {
                     ClearBadge(el.transform);
+                    ClearLegacyTint(el);
                     continue;
                 }
 
@@ -158,19 +159,19 @@ namespace StoreAndCraft
                 badge.gameObject.SetActive(false);
         }
 
+        private static void ClearLegacyTint(InventoryElement el)
+        {
+            if (el?.m_icon == null)
+                return;
+            // Older builds tinted the icon gold — put it back if we still see that color.
+            Color tinted = Color.Lerp(Color.white, Favorites.Tint, 0.55f);
+            if (ColorsClose(el.m_icon.color, tinted))
+                el.m_icon.color = Color.white;
+        }
+
         private static void ApplyVisual(InventoryElement el, bool favorite)
         {
-            if (el.m_icon != null)
-            {
-                if (favorite)
-                    el.m_icon.color = Color.Lerp(Color.white, Favorites.Tint, 0.55f);
-                else
-                {
-                    Color t = Color.Lerp(Color.white, Favorites.Tint, 0.55f);
-                    if (ColorsClose(el.m_icon.color, t))
-                        el.m_icon.color = Color.white;
-                }
-            }
+            ClearLegacyTint(el);
 
             Transform root = el.transform;
             Transform badge = root.Find(BadgeName);

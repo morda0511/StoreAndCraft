@@ -46,6 +46,8 @@ namespace StoreAndCraft
     [HarmonyPatch(typeof(Smelter), "OnAddFuel")]
     internal static class SmelterAddFuelPatch
     {
+        private static int _fillDepth;
+
         private static void Prefix(Smelter __instance, Humanoid user)
         {
             Player player = StationFeed.LocalPlayer(user);
@@ -61,11 +63,31 @@ namespace StoreAndCraft
                 StationLink.Pop();
             }
         }
+
+        private static void Postfix(Smelter __instance, Humanoid user)
+        {
+            if (_fillDepth > 0 || !FillToMaxInput.Held())
+                return;
+            Player player = StationFeed.LocalPlayer(user);
+            if (player == null || __instance == null)
+                return;
+            _fillDepth++;
+            try
+            {
+                StationAutoFill.ManualFillSmelterToMax(__instance, player, fuel: true, ore: false);
+            }
+            finally
+            {
+                _fillDepth--;
+            }
+        }
     }
 
     [HarmonyPatch(typeof(Smelter), "OnAddOre")]
     internal static class SmelterAddOrePatch
     {
+        private static int _fillDepth;
+
         private static void Prefix(Smelter __instance, Humanoid user, ref ItemDrop.ItemData item)
         {
             Player player = StationFeed.LocalPlayer(user);
@@ -82,6 +104,24 @@ namespace StoreAndCraft
             }
         }
 
+        private static void Postfix(Smelter __instance, Humanoid user)
+        {
+            if (_fillDepth > 0 || !FillToMaxInput.Held())
+                return;
+            Player player = StationFeed.LocalPlayer(user);
+            if (player == null || __instance == null)
+                return;
+            _fillDepth++;
+            try
+            {
+                StationAutoFill.ManualFillSmelterToMax(__instance, player, fuel: false, ore: true);
+            }
+            finally
+            {
+                _fillDepth--;
+            }
+        }
+
         internal static List<string> OreNames(Smelter smelter)
         {
             var names = new List<string>();
@@ -94,6 +134,28 @@ namespace StoreAndCraft
                     names.Add(shared);
             }
             return names;
+        }
+    }
+
+    /// <summary>Shift held = fill station to max on the next [E] add. Does not steal Shift from build no-snap (hammer mode).</summary>
+    internal static class FillToMaxInput
+    {
+        public static bool Held()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return false;
+            // Hammer placement uses Shift for no-snap — never fill-to-max there.
+            if (player.InPlaceMode())
+                return false;
+            try
+            {
+                return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 
@@ -148,8 +210,7 @@ namespace StoreAndCraft
         {
             if (__instance == null || !StationFeed.Ready())
                 return;
-            StationPullFilter.AppendFilterHover(ref __result, __instance);
-            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
+            StationAutoFill.AppendSmelterHover(ref __result, __instance);
         }
     }
 
@@ -198,13 +259,17 @@ namespace StoreAndCraft
     internal static class FireplaceInteractPatch
     {
         private static readonly MethodInfo GetFuel = AccessTools.Method(typeof(Fireplace), "GetFuel");
+        private static int _fillDepth;
 
         private static bool Prefix(Fireplace __instance, Humanoid user, bool hold, bool alt, ref bool __result)
         {
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null || !__instance.m_canRefill)
                 return true;
-            if (__instance.m_canTurnOff && !hold && !alt && FireplaceFuel(__instance) > 0f)
+
+            // Lit + canTurnOff: [E] toggles off — but Shift+[E] must fill to max instead.
+            if (__instance.m_canTurnOff && !hold && !alt && FireplaceFuel(__instance) > 0f
+                && !FillToMaxInput.Held())
                 return true;
 
             string fuel = StationFeed.SharedFrom(__instance.m_fuelItem);
@@ -222,6 +287,24 @@ namespace StoreAndCraft
             }
 
             return true;
+        }
+
+        private static void Postfix(Fireplace __instance, Humanoid user, bool hold, bool alt)
+        {
+            if (_fillDepth > 0 || hold || alt || !FillToMaxInput.Held())
+                return;
+            Player player = StationFeed.LocalPlayer(user);
+            if (player == null || __instance == null || !__instance.m_canRefill)
+                return;
+            _fillDepth++;
+            try
+            {
+                StationAutoFill.ManualFillFireToMax(__instance, player);
+            }
+            finally
+            {
+                _fillDepth--;
+            }
         }
 
         private static float FireplaceFuel(Fireplace fireplace)
@@ -245,12 +328,32 @@ namespace StoreAndCraft
     [HarmonyPatch(typeof(Fireplace), nameof(Fireplace.UseItem))]
     internal static class FireplaceUseItemPatch
     {
+        private static int _fillDepth;
+
         private static void Prefix(Fireplace __instance, Humanoid user)
         {
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null || !__instance.m_canRefill)
                 return;
             StationFeed.EnsureInInventory(player, StationFeed.SharedFrom(__instance.m_fuelItem), 1);
+        }
+
+        private static void Postfix(Fireplace __instance, Humanoid user)
+        {
+            if (_fillDepth > 0 || !FillToMaxInput.Held())
+                return;
+            Player player = StationFeed.LocalPlayer(user);
+            if (player == null || __instance == null || !__instance.m_canRefill)
+                return;
+            _fillDepth++;
+            try
+            {
+                StationAutoFill.ManualFillFireToMax(__instance, player);
+            }
+            finally
+            {
+                _fillDepth--;
+            }
         }
     }
 
@@ -285,6 +388,8 @@ namespace StoreAndCraft
     [HarmonyPatch(typeof(CookingStation), "OnAddFuelSwitch")]
     internal static class CookingAddFuelPatch
     {
+        private static int _fillDepth;
+
         private static void Prefix(CookingStation __instance, Humanoid user)
         {
             Player player = StationFeed.LocalPlayer(user);
@@ -300,6 +405,24 @@ namespace StoreAndCraft
                 StationLink.Pop();
             }
         }
+
+        private static void Postfix(CookingStation __instance, Humanoid user)
+        {
+            if (_fillDepth > 0 || !FillToMaxInput.Held())
+                return;
+            Player player = StationFeed.LocalPlayer(user);
+            if (player == null || __instance == null)
+                return;
+            _fillDepth++;
+            try
+            {
+                StationAutoFill.ManualFillOvenFuelToMax(__instance, player);
+            }
+            finally
+            {
+                _fillDepth--;
+            }
+        }
     }
 
     [HarmonyPatch(typeof(CookingStation), "OnUseItem")]
@@ -308,17 +431,64 @@ namespace StoreAndCraft
         private static void Prefix(CookingStation __instance, Humanoid user, ref ItemDrop.ItemData item)
         {
             Player player = StationFeed.LocalPlayer(user);
-            if (player == null || __instance == null)
+            if (__instance == null)
+                return;
+
+            // Stamp before any chest pull so hotbar stacks with null m_dropPrefab do not NRE.
+            StationFeed.EnsureCookDropPrefab(__instance, item);
+
+            if (player == null)
                 return;
             StationLink.PushStation(__instance);
             try
             {
                 StationFeed.EnsureForUse(player, ref item, CookingOnInteractPatch.FoodNames(__instance));
+                // EnsureForUse may replace `item` with a bag stack — stamp again.
+                StationFeed.EnsureCookDropPrefab(__instance, item);
             }
             finally
             {
                 StationLink.Pop();
             }
+        }
+    }
+
+    /// <summary>
+    /// CookItem does item.m_dropPrefab.name as its first instruction.
+    /// Align dropPrefab to this station's conversion when possible; skip vanilla if still null.
+    /// </summary>
+    [HarmonyPatch(typeof(CookingStation), "CookItem", new[] { typeof(Humanoid), typeof(ItemDrop.ItemData) })]
+    internal static class CookingCookItemDropPrefabPatch
+    {
+        private static bool Prefix(CookingStation __instance, Humanoid user, ItemDrop.ItemData item, ref bool __result)
+        {
+            if (item == null)
+            {
+                __result = false;
+                return false;
+            }
+
+            StationFeed.EnsureCookDropPrefab(__instance, item);
+
+            if (item.m_dropPrefab)
+                return true;
+
+            __result = false;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Stamp conversion m_from before the name check so chest/hotbar stacks with a wrong
+    /// or (Clone) dropPrefab still pass IsItemAllowed on this station.
+    /// </summary>
+    [HarmonyPatch(typeof(CookingStation), "IsItemAllowed", new[] { typeof(ItemDrop.ItemData) })]
+    internal static class CookingIsItemAllowedDropPrefabPatch
+    {
+        private static void Prefix(CookingStation __instance, ItemDrop.ItemData item)
+        {
+            if (item != null)
+                StationFeed.EnsureCookDropPrefab(__instance, item);
         }
     }
 
@@ -342,11 +512,30 @@ namespace StoreAndCraft
             StationLink.PushStation(__instance);
             try
             {
-                StationFeed.EnsureAny(player, FoodNames(__instance), 1);
+                List<string> foods = FoodNames(__instance);
+                StationFeed.EnsureAny(player, foods, 1);
+                // CookItem requires m_dropPrefab; stamp from conversion so chest-pulled
+                // Ashlands meats (e.g. Vulture) actually land on the spit instead of only the bag.
+                StampCookables(player, __instance, foods);
             }
             finally
             {
                 StationLink.Pop();
+            }
+        }
+
+        private static void StampCookables(Player player, CookingStation station, List<string> foods)
+        {
+            Inventory inv = player != null ? player.GetInventory() : null;
+            if (inv == null || foods == null)
+                return;
+            foreach (ItemDrop.ItemData item in inv.GetAllItems())
+            {
+                if (item?.m_shared == null)
+                    continue;
+                if (!foods.Contains(item.m_shared.m_name))
+                    continue;
+                StationFeed.EnsureCookDropPrefab(station, item);
             }
         }
 
@@ -358,7 +547,10 @@ namespace StoreAndCraft
                 return names;
             foreach (CookingStation.ItemConversion conv in station.m_conversion)
             {
-                string shared = StationFeed.SharedFrom(conv != null ? conv.m_from : null);
+                ItemDrop from = conv != null ? conv.m_from : null;
+                string shared = StationFeed.SharedFrom(from);
+                if (string.IsNullOrEmpty(shared) && from != null && from.gameObject != null)
+                    shared = ItemIds.SharedFromToken(ItemIds.StripClone(from.gameObject.name));
                 if (!string.IsNullOrEmpty(shared) && !names.Contains(shared))
                     names.Add(shared);
             }

@@ -14,7 +14,7 @@ namespace StoreAndCraft
             if (item == null)
                 return null;
 
-            if (item.m_dropPrefab != null)
+            if (item.m_dropPrefab)
                 return StripClone(item.m_dropPrefab.name);
 
             if (item.m_shared == null || string.IsNullOrEmpty(item.m_shared.m_name) || ObjectDB.instance == null)
@@ -89,6 +89,29 @@ namespace StoreAndCraft
             return token;
         }
 
+        /// <summary>
+        /// LeaveOne reserves one stackable mat per chest for auto-store routing.
+        /// Unique items (Frost Foundry casts, idols, maxStack 1) must not be reserved —
+        /// otherwise a single cast in a chest can never be pulled.
+        /// </summary>
+        public static bool ShouldLeaveOne(bool leaveOneConfigured, string sharedName)
+        {
+            if (!leaveOneConfigured || string.IsNullOrEmpty(sharedName))
+                return false;
+            return MaxStackSize(sharedName) > 1;
+        }
+
+        public static int MaxStackSize(string sharedOrToken)
+        {
+            GameObject go = PrefabFromToken(sharedOrToken);
+            ItemDrop.ItemData.SharedData shared =
+                go != null ? go.GetComponent<ItemDrop>()?.m_itemData?.m_shared : null;
+            if (shared != null)
+                return Mathf.Max(1, shared.m_maxStackSize);
+            // Unknown: keep LeaveOne so normal craft mats still reserve a routing copy.
+            return 2;
+        }
+
         private static string Normalize(string raw)
         {
             if (string.IsNullOrEmpty(raw))
@@ -108,16 +131,19 @@ namespace StoreAndCraft
             EnsurePrefabIndex();
 
             GameObject cached;
-            if (PrefabCache.TryGetValue(token, out cached))
+            // Never treat a cached null as final — early lookups before ObjectDB was ready
+            // used to poison the cache and break later resolves (e.g. VoltureMeat).
+            if (PrefabCache.TryGetValue(token, out cached) && cached != null)
                 return cached;
 
             string norm = Normalize(token);
-            if (!string.IsNullOrEmpty(norm) && PrefabCache.TryGetValue(norm, out cached))
+            if (!string.IsNullOrEmpty(norm) && PrefabCache.TryGetValue(norm, out cached) && cached != null)
             {
                 PrefabCache[token] = cached;
                 return cached;
             }
 
+            // Prefab name hash lookup (e.g. "VoltureMeat") — not $item_ shared tokens.
             GameObject byName = ObjectDB.instance.GetItemPrefab(token);
             if (byName != null)
             {
@@ -142,7 +168,7 @@ namespace StoreAndCraft
                 }
             }
 
-            PrefabCache[token] = null;
+            // Do not cache failures — ObjectDB / index may become valid next call.
             return null;
         }
 

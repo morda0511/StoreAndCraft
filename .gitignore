@@ -5,3 +5,19 @@ obj/
 thunderstore/packs/
 Assets/
 
+# Unity cache. The project under Unity/StoreAndCraftDisplays stays.
+Unity/**/Library/
+Unity/**/Temp/
+Unity/**/Logs/
+Unity/StoreAndCraftDisplays_src/
+
+# Old Blender OBJ export. The game loads Content/Displays/sac_displays only.
+Content/Displays/small_horizontal/
+Content/Displays/small_vertical/
+Content/Displays/medium_horizontal/
+Content/Displays/medium_vertical/
+Content/Displays/large_horizontal/
+Content/Displays/large_vertical/
+Content/Displays/Displays
+Content/Displays/Displays.manifest
+

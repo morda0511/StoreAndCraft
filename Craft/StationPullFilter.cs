@@ -24,6 +24,16 @@ namespace StoreAndCraft
             return HoveredComponent<CookingStation>();
         }
 
+        public static Fermenter HoveredFermenter()
+        {
+            return HoveredComponent<Fermenter>();
+        }
+
+        public static Fireplace HoveredFireplace()
+        {
+            return HoveredComponent<Fireplace>();
+        }
+
         private static T HoveredComponent<T>() where T : Component
         {
             Player player = Player.m_localPlayer;
@@ -131,10 +141,16 @@ namespace StoreAndCraft
 
         public static void AppendFilterHover(ref string text, Smelter smelter)
         {
+            AppendFilterHover(ref text, smelter, prependLink: true);
+        }
+
+        public static void AppendFilterHover(ref string text, Smelter smelter, bool prependLink)
+        {
             if (smelter == null)
                 return;
             AppendFilterLine(ref text);
-            StationLink.PrependHover(ref text, StationLink.Get(smelter), chest: false);
+            if (prependLink)
+                StationLink.PrependHover(ref text, StationLink.Get(smelter), chest: false);
         }
 
         public static void AppendFilterHover(ref string text, CookingStation cook)
@@ -142,7 +158,20 @@ namespace StoreAndCraft
             if (cook == null)
                 return;
             AppendFilterLine(ref text);
-            StationLink.PrependHover(ref text, StationLink.Get(cook), chest: false);
+        }
+
+        public static void AppendFilterHover(ref string text, Fermenter fermenter)
+        {
+            if (fermenter == null)
+                return;
+            AppendFilterLine(ref text);
+        }
+
+        public static void AppendFilterHover(ref string text, Fireplace fire)
+        {
+            if (fire == null || !fire.m_canRefill)
+                return;
+            AppendFilterLine(ref text);
         }
 
         private static void AppendFilterLine(ref string text)
@@ -182,13 +211,37 @@ namespace StoreAndCraft
                 return true;
             }
 
+            Fermenter fermenter = HoveredFermenter();
+            if (fermenter != null)
+            {
+                if (!PrivateArea.CheckAccess(fermenter.transform.position, 0f, false, true))
+                {
+                    player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                    return true;
+                }
+                StationFilterMenu.Open(fermenter);
+                return true;
+            }
+
+            Fireplace fire = HoveredFireplace();
+            if (fire != null && fire.m_canRefill)
+            {
+                if (!PrivateArea.CheckAccess(fire.transform.position, 0f, false, true))
+                {
+                    player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                    return true;
+                }
+                StationFilterMenu.Open(fire);
+                return true;
+            }
+
             if (warnIfMissing)
             {
                 player.Message(
                     MessageHud.MessageType.Center,
                     Loc.T(
-                        "Look at a kiln / smelter / cook station, then press " + PromptLabel() + ".",
-                        "Schau Ofen / Schmelze / Grill an, dann " + PromptLabel() + "."),
+                        "Look at a kiln / smelter / cook / fermenter / fire, then press " + PromptLabel() + ".",
+                        "Schau Ofen / Schmelze / Grill / Fass / Feuer an, dann " + PromptLabel() + "."),
                     0, null, false);
             }
             return false;

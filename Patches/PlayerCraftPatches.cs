@@ -1,10 +1,85 @@
 using HarmonyLib;
+using UnityEngine;
 
 namespace StoreAndCraft
 {
     [HarmonyPatch]
     internal static class PlayerCraftPatches
     {
+        /// <summary>
+        /// onlyOne recipes (Raw Fish): vanilla GetFirstRequiredItem only scans the bag.
+        /// When null, Recipe.GetAmount NREs on m_quality. Supply a quality clone from chests
+        /// without withdrawing into the bag (avoids the one-frame fish flash).
+        /// </summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Player), "GetFirstRequiredItem")]
+        private static void GetFirstRequiredItemPostfix(
+            Player __instance,
+            Inventory inventory,
+            Recipe recipe,
+            int qualityLevel,
+            ref int amount,
+            ref int extraAmount,
+            int craftMultiplier,
+            ref ItemDrop.ItemData __result)
+        {
+            if (__result != null || !StagingPull.Active)
+                return;
+            if (__instance == null || __instance != Player.m_localPlayer)
+                return;
+            if (recipe == null || !recipe.m_requireOnlyOneIngredient)
+                return;
+
+            ItemDrop.ItemData fromChest = StagingPull.FindFirstRequiredInChests(
+                __instance, recipe, qualityLevel, craftMultiplier, out int need, out int extra);
+            if (fromChest == null)
+                return;
+
+            __result = fromChest;
+            amount = need;
+            extraAmount = extra;
+        }
+
+        /// <summary>
+        /// onlyOne payment happens inside DoCrafting via Inventory.RemoveItem(string),
+        /// not via ConsumeResources. Scope chest pay to that window.
+        /// </summary>
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(InventoryGui), "DoCrafting")]
+        private static void DoCraftingPrefix()
+        {
+            if (StagingPull.Active)
+                StagingPull.BeginDoCrafting();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(InventoryGui), "DoCrafting")]
+        private static void DoCraftingPostfix()
+        {
+            StagingPull.EndDoCrafting();
+        }
+
+        /// <summary>
+        /// DoCrafting for onlyOne: RemoveItem(name, amount, quality) on the bag.
+        /// Pay any missing amount from chests first so craft is not free.
+        /// </summary>
+        [HarmonyPrefix]
+        [HarmonyPatch(
+            typeof(Inventory),
+            nameof(Inventory.RemoveItem),
+            typeof(string),
+            typeof(int),
+            typeof(int),
+            typeof(bool))]
+        private static void RemoveItemStringPrefix(
+            Inventory __instance,
+            string name,
+            int amount,
+            int itemQuality)
+        {
+            StagingPull.PayOnlyOneRemoveFromChests(__instance, name, amount, itemQuality);
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Player), nameof(Player.ConsumeResources))]
         private static void ConsumeResourcesPrefix(

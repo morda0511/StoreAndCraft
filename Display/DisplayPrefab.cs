@@ -18,6 +18,11 @@ namespace StoreAndCraft
         public const string SmallName = "sac_storage_display_small";
         public const string LargeName = "sac_storage_display_large";
 
+        public const string SmallCarvedName = "sac_storage_display_small_carved";
+        public const string SmallWideName = "sac_storage_display_small_wide";
+        public const string MediumCarvedName = "sac_storage_display_carved";
+        public const string LargeCarvedName = "sac_storage_display_large_carved";
+
         private static readonly Dictionary<int, GameObject> ByHash = new Dictionary<int, GameObject>();
         private static readonly List<GameObject> AllPrefabs = new List<GameObject>();
         private static GameObject _hide;
@@ -92,29 +97,62 @@ namespace StoreAndCraft
                 _hide.SetActive(false);
             }
 
-            BuildVariant(scene, sign, SmallName, DisplayKind.Small,
+            // Vanilla wood signs (always available).
+            BuildVariant(scene, sign, SmallName, DisplayKind.Small, null,
                 "Small Storage Display",
                 "Shows the total of one item from nearby chests. Look at it and press hotbar 1-8 to set the item.",
                 Vector3.one);
 
-            BuildVariant(scene, sign, MediumName, DisplayKind.Medium,
+            BuildVariant(scene, sign, MediumName, DisplayKind.Medium, null,
                 "Medium Storage Display",
                 "Shows nearby chest totals for one item type. Press [E] and click a type.",
                 new Vector3(2.5f, 2.1f, 1f));
 
-            BuildVariant(scene, sign, LargeName, DisplayKind.Large,
+            BuildVariant(scene, sign, LargeName, DisplayKind.Large, null,
                 "Large Storage Display",
                 "Wide board with flowing category sections from nearby chests. Press [E] and click types.",
                 new Vector3(7.5f, 6.3f, 1f));
 
-            Plugin.Log.LogDebug("StoreAndCraft storage displays registered (small / medium / large).");
+            // Carved Unity boards — hidden until the prefabs are ready for players.
+            if (CarvedDisplaysExposed && DisplayVisual.Available("small_vertical"))
+            {
+                BuildVariant(scene, sign, SmallCarvedName, DisplayKind.Small, "small_vertical",
+                    "Small Storage Display (Carved)",
+                    "Carved hanging board. Shows one item total from nearby chests. Look at it and press hotbar 1-8 to set the item.",
+                    Vector3.one);
+
+                BuildVariant(scene, sign, SmallWideName, DisplayKind.Small, "small_horizontal",
+                    "Small Wide Storage Display (Carved)",
+                    "Wide carved hanging board. Shows one item total from nearby chests. Look at it and press hotbar 1-8 to set the item.",
+                    Vector3.one);
+
+                BuildVariant(scene, sign, MediumCarvedName, DisplayKind.Medium, "medium",
+                    "Medium Storage Display (Carved)",
+                    "Carved board. Shows nearby chest totals for one item type. Press [E] and click a type.",
+                    Vector3.one);
+
+                BuildVariant(scene, sign, LargeCarvedName, DisplayKind.Large, "large",
+                    "Large Storage Display (Carved)",
+                    "Large carved board with flowing category sections. Press [E] and click types.",
+                    Vector3.one);
+
+                Plugin.Log.LogDebug("StoreAndCraft storage displays registered (vanilla + carved).");
+            }
+            else
+            {
+                Plugin.Log.LogDebug("StoreAndCraft storage displays registered (vanilla only).");
+            }
         }
+
+        /// <summary>Flip to true when carved Unity boards ship to players.</summary>
+        private static bool CarvedDisplaysExposed => false;
 
         private static void BuildVariant(
             ZNetScene scene,
             GameObject sign,
             string prefabName,
             DisplayKind kind,
+            string visualBase,
             string pieceName,
             string pieceDesc,
             Vector3 scaleMul)
@@ -139,7 +177,10 @@ namespace StoreAndCraft
             // Keep distant sync closer to normal furniture — scaled signs otherwise stay visible too far.
             znv.m_distant = false;
 
-            clone.transform.localScale = Vector3.Scale(clone.transform.localScale, scaleMul);
+            bool custom = !string.IsNullOrEmpty(visualBase) && DisplayVisual.Available(visualBase);
+            clone.transform.localScale = custom
+                ? Vector3.one
+                : Vector3.Scale(clone.transform.localScale, scaleMul);
 
             Piece piece = clone.GetComponent<Piece>();
             Piece source = sign.GetComponent<Piece>();
@@ -162,6 +203,9 @@ namespace StoreAndCraft
             if (board == null)
                 board = clone.AddComponent<StorageDisplayBoard>();
             board.Configure(kind);
+            board.VisualBase = visualBase;
+            if (custom)
+                DisplayVisual.Ensure(board);
 
             int hash = prefabName.GetStableHashCode();
             ByHash[hash] = clone;

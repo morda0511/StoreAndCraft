@@ -5,8 +5,8 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        // Bump when package layout changes. v12 = StationFillSkipInventory.
-        public const int ProtocolVersion = 12;
+        // Bump when package layout changes. v13 = Remote Automation.
+        public const int ProtocolVersion = 13;
 
         public ConfigEntry<bool> LockConfig { get; }
         public ConfigEntry<bool> ModEnabled { get; }
@@ -26,6 +26,9 @@ namespace StoreAndCraft
         public ConfigEntry<float> CraftRange { get; }
         public ConfigEntry<float> AutoFillRange { get; }
         public ConfigEntry<bool> StationFillSkipInventory { get; }
+        public ConfigEntry<bool> RemoteAutomationEnabled { get; }
+        public ConfigEntry<float> RemoteStationRange { get; }
+        public ConfigEntry<int> RemoteMaxKeepAliveStations { get; }
         public ConfigEntry<float> IntakeInterval { get; }
         public ConfigEntry<int> MaxTransfersPerTick { get; }
         public ConfigEntry<KeyboardShortcut> DumpKey { get; }
@@ -80,6 +83,12 @@ namespace StoreAndCraft
                 "Auto-fill range in meters: player → station (kiln/smelter/blast furnace/oven/fermenter/torch), and player → chests for auto-fill materials. Independent from CraftRange. Synced from server when LockConfig is on.");
             StationFillSkipInventory = file.Bind("3 - Craft", "StationFillSkipInventory", false,
                 "If enabled, station auto-fill (B) takes fuel / ore / food from nearby chests only — never from your bag, hotbar, or equipment/quick-slot mod overflow. Wider/Deeper Pockets bag rows still count as bag. Manual [E] refill is unchanged. Synced from server when LockConfig is on.");
+            RemoteAutomationEnabled = file.Bind("3 - Craft", "RemoteAutomationEnabled", true,
+                "If enabled, stations with Remote Automation toggled on (Alt+E filter) and a link l1–l9 keep feeding from / emptying into matching [lN] chests while far away. Soft-off if LazyVikings is loaded. Synced from server when LockConfig is on.");
+            RemoteStationRange = file.Bind("3 - Craft", "RemoteStationRange", 20f,
+                "Remote Automation range in meters: station → linked [lN] chests. Synced from server when LockConfig is on.");
+            RemoteMaxKeepAliveStations = file.Bind("3 - Craft", "RemoteMaxKeepAliveStations", 12,
+                "Max remote stations whose zones stay loaded while players are far away. Lower = less server load. Synced from server when LockConfig is on.");
             IntakeInterval = file.Bind("2 - Store", "IntakeInterval", 5f,
                 "Seconds between automatic scans for ground items. Lower = snappier, higher = less CPU.");
             MaxTransfersPerTick = file.Bind("1 - General", "MaxTransfersPerTick", 8,
@@ -119,7 +128,15 @@ namespace StoreAndCraft
 
         public float MaxGameplayRange()
         {
-            return Mathf.Max(PlayerDumpRange.Value, StoreRange.Value, StorageRange.Value, DisplayRange.Value, CraftRange.Value, AutoFillRange.Value, FeedTroughRange.Value);
+            return Mathf.Max(
+                PlayerDumpRange.Value,
+                StoreRange.Value,
+                StorageRange.Value,
+                DisplayRange.Value,
+                CraftRange.Value,
+                AutoFillRange.Value,
+                FeedTroughRange.Value,
+                RemoteStationRange.Value);
         }
 
         public void WriteToPackage(ZPackage pkg)
@@ -139,6 +156,9 @@ namespace StoreAndCraft
             pkg.Write(CraftRange.Value);
             pkg.Write(AutoFillRange.Value);
             pkg.Write(StationFillSkipInventory.Value);
+            pkg.Write(RemoteAutomationEnabled.Value);
+            pkg.Write(RemoteStationRange.Value);
+            pkg.Write(RemoteMaxKeepAliveStations.Value);
             pkg.Write(IntakeInterval.Value);
             pkg.Write(MaxTransfersPerTick.Value);
             pkg.Write(FeedTroughEnabled.Value);
@@ -162,6 +182,9 @@ namespace StoreAndCraft
             CraftRange.Value = pkg.ReadSingle();
             AutoFillRange.Value = pkg.ReadSingle();
             StationFillSkipInventory.Value = pkg.ReadBool();
+            RemoteAutomationEnabled.Value = pkg.ReadBool();
+            RemoteStationRange.Value = pkg.ReadSingle();
+            RemoteMaxKeepAliveStations.Value = pkg.ReadInt();
             IntakeInterval.Value = pkg.ReadSingle();
             MaxTransfersPerTick.Value = pkg.ReadInt();
             FeedTroughEnabled.Value = pkg.ReadBool();

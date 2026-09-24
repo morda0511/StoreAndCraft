@@ -54,12 +54,13 @@ namespace StoreAndCraft
         {
             if (filterId == EpicLootGroupId)
                 return true;
-            if (filterId == FoodFilterId || filterId == IngredientsFilterId)
-                return true;
+            // Weapons / Armor intentionally have no per-item expand.
+            if (filterId == 8 || filterId == 9)
+                return false;
             DisplayFilter filter;
-            if (TryGet(filterId, out filter) && filter.Names != null && filter.Names.Length > 0)
-                return true;
-            return false;
+            if (!TryGet(filterId, out filter))
+                return false;
+            return true;
         }
 
         /// <summary>Dust/Essence/Reagent/Shard/Runestone — under Epic Loot expand only, not top-level.</summary>
@@ -113,7 +114,7 @@ namespace StoreAndCraft
         {
             "bonefragments", "witheredbone", "entrails", "bloodbag", "feathers", "guck", "ooze",
             "needle", "greydwarfeye", "freezegland", "hardantler", "wolffang", "root",
-            "softtissue", "mandible", "bukeperries", "ectoplasm", "bilebag", "refinedeitr"
+            "softtissue", "mandible", "ectoplasm", "bilebag"
         };
 
         private static readonly string[] CropNames =
@@ -135,7 +136,7 @@ namespace StoreAndCraft
         // Cooking ingredients: berries, mushrooms, honey, dough / mead bases / uncooked pies.
         private static readonly string[] IngredientNames =
         {
-            "blueberry", "raspberry", "cloudberry", "blueberryjam",
+            "blueberry", "raspberry", "cloudberry", "blueberryjam", "bukeperries",
             "honey", "mushroom", "mushroomblue", "mushroomyellow", "mushroomendon",
             "magecap", "jotunpuffs", "smokepuffs",
             "breaddough", "loxpie_uncooked", "loxpieuncooked",
@@ -163,56 +164,52 @@ namespace StoreAndCraft
             "leatherbelt", "silverring", "goldrubyring", "andvaranaut"
         };
 
+        /// <summary>
+        /// Menu order (top → bottom): building → hunt → cooking → valuables → gear → mods.
+        /// Ids stay stable for saved boards; only display order changes.
+        /// </summary>
         public static readonly DisplayFilter[] Choices =
         {
+            // --- Building & refining ---
             Named(11, "Wood", "Holz", WoodNames, ItemDrop.ItemData.ItemType.Material),
+            Named(14, "Stone", "Stein", StoneNames, ItemDrop.ItemData.ItemType.Material),
             Named(12, "Ore", "Erz", OreNames, ItemDrop.ItemData.ItemType.Material),
             Named(13, "Metals", "Metalle", MetalNames, ItemDrop.ItemData.ItemType.Material),
-            Named(14, "Stone", "Stein", StoneNames, ItemDrop.ItemData.ItemType.Material),
             Named(15, "Fuel", "Brennstoff", FuelNames, ItemDrop.ItemData.ItemType.Material),
+
+            // --- Hunt / creature materials ---
             Named(16, "Hides", "Häute", HideNames, ItemDrop.ItemData.ItemType.Material),
             Named(17, "Parts", "Teile", PartsNames, ItemDrop.ItemData.ItemType.Material),
+
+            // --- Farming & cooking ---
             Named(18, "Crops & Seeds", "Pflanzen & Samen", CropNames,
                 ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Consumable),
             Named(19, "Raw Food", "Rohes Essen", RawFoodNames, ItemDrop.ItemData.ItemType.Material),
             Named(22, "Ingredients", "Zutaten", IngredientNames,
                 ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Consumable),
-            Named(20, "Gems & Coins", "Edelsteine & Münzen", GemNames, ItemDrop.ItemData.ItemType.Material),
-            Named(21, "Boss / Rare", "Boss / Selten", BossNames, ItemDrop.ItemData.ItemType.Material),
-            // Catch-all for leftover mod materials (not Epic Loot craft mats).
-            Other(23, "Other materials", "Andere Materialien"),
-            // All Food = cooked consumables only (ingredients / raw claimed elsewhere).
             Typed(2, "Food", "Essen", true,
                 ItemDrop.ItemData.ItemType.Consumable),
             Typed(3, "Fish", "Fisch", false,
                 ItemDrop.ItemData.ItemType.Fish),
+
+            // --- Valuables & leftovers ---
+            Named(20, "Gems & Coins", "Edelsteine & Münzen", GemNames, ItemDrop.ItemData.ItemType.Material),
+            Named(21, "Boss / Rare", "Boss / Selten", BossNames, ItemDrop.ItemData.ItemType.Material),
+            Other(23, "Other materials", "Andere Materialien"),
+
+            Typed(7, "Tools", "Werkzeuge", false,
+                ItemDrop.ItemData.ItemType.Tool),
+            Typed(6, "Ammo", "Munition", false,
+                ItemDrop.ItemData.ItemType.Ammo,
+                ItemDrop.ItemData.ItemType.AmmoNonEquipable),
+            Typed(10, "Utility", "Nutzen", false,
+                ItemDrop.ItemData.ItemType.Utility),
             Typed(4, "Trophy", "Trophäe", false,
                 ItemDrop.ItemData.ItemType.Trophy),
             Typed(5, "Misc", "Sonstiges", false,
                 ItemDrop.ItemData.ItemType.Misc),
-            Typed(6, "Ammo", "Munition", false,
-                ItemDrop.ItemData.ItemType.Ammo,
-                ItemDrop.ItemData.ItemType.AmmoNonEquipable),
-            Typed(7, "Tools", "Werkzeuge", false,
-                ItemDrop.ItemData.ItemType.Tool),
-            Typed(8, "Weapons", "Waffen", false,
-                ItemDrop.ItemData.ItemType.OneHandedWeapon,
-                ItemDrop.ItemData.ItemType.TwoHandedWeapon,
-                ItemDrop.ItemData.ItemType.TwoHandedWeaponLeft,
-                ItemDrop.ItemData.ItemType.Bow,
-                ItemDrop.ItemData.ItemType.Shield,
-                ItemDrop.ItemData.ItemType.Torch,
-                ItemDrop.ItemData.ItemType.Attach_Atgeir),
-            Typed(9, "Armor", "Rüstung", false,
-                ItemDrop.ItemData.ItemType.Helmet,
-                ItemDrop.ItemData.ItemType.Chest,
-                ItemDrop.ItemData.ItemType.Legs,
-                ItemDrop.ItemData.ItemType.Hands,
-                ItemDrop.ItemData.ItemType.Shoulder,
-                ItemDrop.ItemData.ItemType.Trinket),
-            Typed(10, "Utility", "Nutzen", false,
-                ItemDrop.ItemData.ItemType.Utility),
-            // Epic Loot at the bottom: parent expands; subs are real categories on the board.
+
+            // --- Mods (parent expands; subs are real board categories) ---
             Typed(30, "Epic Loot", "Epic Loot", false,
                 ItemDrop.ItemData.ItemType.Material, ItemDrop.ItemData.ItemType.Misc),
             Typed(31, "Dust", "Dust", false,
@@ -652,25 +649,41 @@ namespace StoreAndCraft
         /// <summary>Shared-name tokens for category item rows (cached).</summary>
         public static List<string> SubItems(int filterId)
         {
+            if (filterId <= 0 || filterId == 8 || filterId == 9)
+                return new List<string>();
             if (filterId == IngredientsFilterId)
                 return IngredientSubItems();
             if (filterId == FoodFilterId)
                 return FoodSubItems();
             DisplayFilter filter;
-            if (TryGet(filterId, out filter) && filter.Names != null && filter.Names.Length > 0)
+            if (!TryGet(filterId, out filter))
+                return new List<string>();
+            if (filter.Names != null && filter.Names.Length > 0)
                 return NamedSubItems(filterId, filter.Names);
-            return new List<string>();
+            // Typed categories (Fish, Ammo, Trophy, Epic Loot mats, …): scan ObjectDB.
+            return TypedSubItems(filterId);
         }
 
         private static List<string> _ingredientSubs;
         private static List<string> _foodSubs;
         private static readonly Dictionary<int, List<string>> _namedSubs = new Dictionary<int, List<string>>();
+        private static readonly Dictionary<int, List<string>> _typedSubs = new Dictionary<int, List<string>>();
 
         public static void InvalidateSubItemCache()
         {
             _ingredientSubs = null;
             _foodSubs = null;
             _namedSubs.Clear();
+            _typedSubs.Clear();
+        }
+
+        /// <summary>First matching item shared-name for icon previews (Epic Loot subs, etc.).</summary>
+        public static string RepresentativeShared(int filterId)
+        {
+            List<string> items = SubItems(filterId);
+            if (items != null && items.Count > 0)
+                return items[0];
+            return null;
         }
 
         private static List<string> NamedSubItems(int filterId, string[] names)
@@ -693,6 +706,49 @@ namespace StoreAndCraft
             }
             list.Sort(CompareLocalized);
             _namedSubs[filterId] = list;
+            return list;
+        }
+
+        private static List<string> TypedSubItems(int filterId)
+        {
+            List<string> cached;
+            if (_typedSubs.TryGetValue(filterId, out cached) && cached != null)
+                return cached;
+
+            var list = new List<string>();
+            if (ObjectDB.instance?.m_items == null)
+                return list;
+
+            // Epic Loot group: every craft-mat subtype item.
+            int matchId = filterId == EpicLootGroupId ? EpicLootGroupId : filterId;
+
+            foreach (UnityEngine.GameObject go in ObjectDB.instance.m_items)
+            {
+                if (go == null)
+                    continue;
+                ItemDrop drop = go.GetComponent<ItemDrop>();
+                if (drop?.m_itemData?.m_shared == null)
+                    continue;
+                if (!Matches(drop.m_itemData, matchId))
+                    continue;
+                // Avoid dumping Food-claimed consumables into Misc/Other scans twice.
+                if (filterId == MiscFilterId || filterId == OtherMaterialsFilterId)
+                {
+                    if (Matches(drop.m_itemData, FoodFilterId) || Matches(drop.m_itemData, IngredientsFilterId))
+                        continue;
+                }
+                string shared = drop.m_itemData.m_shared.m_name;
+                if (string.IsNullOrEmpty(shared) || list.Contains(shared))
+                    continue;
+                string label = ItemLabel(shared);
+                if (IsBadLabel(label))
+                    continue;
+                list.Add(shared);
+            }
+
+            list.Sort(CompareLocalized);
+            if (list.Count > 0)
+                _typedSubs[filterId] = list;
             return list;
         }
 

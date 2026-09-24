@@ -50,11 +50,21 @@ namespace StoreAndCraft
             if (!_loggedGiveUp && _attempts >= 30 && !ConfigSync.HasReceivedConfig)
             {
                 _loggedGiveUp = true;
-                Plugin.Log.LogWarning(
-                    "StoreAndCraft: still no server config after " + _attempts +
-                    " attempts. Install the same StoreAndCraft version on the dedicated" +
-                    " server (full client plugin, not only StoreAndCraftServer), then" +
-                    " reconnect. Handshake can succeed while config sync fails.");
+                if (VersionGate.ClientVerified)
+                {
+                    ConfigSync.AcceptLocalFallback(
+                        "handshake ok but no config package after " + _attempts + " attempts");
+                }
+                else
+                {
+                    Plugin.Log.LogWarning(
+                        "StoreAndCraft: still no server config after " + _attempts +
+                        " attempts. Install the same StoreAndCraft version on the dedicated" +
+                        " server (full client plugin, not only StoreAndCraftServer), then" +
+                        " reconnect. Handshake can succeed while config sync fails.");
+                    ConfigSync.AcceptLocalFallback("no server handshake/config");
+                }
+                enabled = false;
             }
         }
     }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace StoreAndCraft
@@ -18,6 +19,13 @@ namespace StoreAndCraft
         /// 1–9 = only matching [lN] chests.
         /// </summary>
         public static int ActiveId { get; private set; } = -1;
+
+        /// <summary>
+        /// Nested Push/Pop (autofill → OnAddFuel Prefix, Shift+fill, etc.) must restore
+        /// the outer link. A bare ActiveId=-1 Pop let kiln fuel ConsumeFromChests use
+        /// every nearby chest after the first nested EnsureInInventory.
+        /// </summary>
+        private static readonly List<int> IdStack = new List<int>(4);
 
         // Bright colors — no red / orange (those are [I] / [H]).
         private static readonly string[] ColorHex =
@@ -50,17 +58,28 @@ namespace StoreAndCraft
 
         public static void Push(int linkId)
         {
+            IdStack.Add(ActiveId);
             ActiveId = Clamp(linkId);
         }
 
         public static void PushStation(Component station)
         {
+            // Link ≥ 1 → only [lN] chests. Link 0 → only untagged chests (linked chests stay exclusive).
+            IdStack.Add(ActiveId);
             ActiveId = Get(station);
         }
 
         public static void Pop()
         {
-            ActiveId = -1;
+            int n = IdStack.Count;
+            if (n <= 0)
+            {
+                ActiveId = -1;
+                return;
+            }
+
+            ActiveId = IdStack[n - 1];
+            IdStack.RemoveAt(n - 1);
         }
 
         public static int Clamp(int id)

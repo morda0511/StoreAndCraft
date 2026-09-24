@@ -38,12 +38,25 @@ namespace StoreAndCraft
 
         public static bool ChestsHave(Player player, string shared)
         {
-            if (player == null || string.IsNullOrEmpty(shared))
+            if (string.IsNullOrEmpty(shared))
+                return false;
+            if (player == null && !HasPullOriginOverride)
                 return false;
 
-            // Linked station context: don't use the unfiltered autofill snapshot.
+            // During RoundRobin fill ActiveId is 0..9. The autofill pulse snapshot is
+            // built with ActiveId=-1 and can disagree with ConsumeFromChests.
             if (StationLink.ActiveId >= 0)
-                return RequirementBridge.CountNearby(player, shared) > 0;
+            {
+                if (player != null)
+                    return RequirementBridge.CountNearby(player, shared) > 0;
+                if (!HasPullOriginOverride || Plugin.Settings == null)
+                    return false;
+                return NearbyIndex.CountItem(
+                    PullOriginOverride,
+                    0f,
+                    shared,
+                    leaveOne: Plugin.Settings.LeaveOneItem.Value) > 0;
+            }
 
             if (_pulseActive && _pulseSpendable != null)
             {
@@ -59,9 +72,49 @@ namespace StoreAndCraft
         /// </summary>
         public static float PullRangeOverride;
 
+        /// <summary>
+        /// When set, chest distance checks use this point instead of the player
+        /// (Remote Automation: station → linked chests while the player is far).
+        /// </summary>
+        public static bool HasPullOriginOverride;
+        public static Vector3 PullOriginOverride;
+
+        /// <summary>When true, station fill ignores the bag and only uses chests.</summary>
+        public static bool ForceChestOnly;
+
         /// <summary>Auto-fill pulse: one chest snapshot, then O(1) ChestsHave.</summary>
         private static Dictionary<string, int> _pulseSpendable;
         private static bool _pulseActive;
+
+        public static Vector3 ActivePullOrigin(Player player)
+        {
+            if (HasPullOriginOverride)
+                return PullOriginOverride;
+            if (player != null)
+                return player.transform.position;
+            return PullOriginOverride;
+        }
+
+        public static void BeginStationPull(Component station, float range, bool chestOnly)
+        {
+            PullRangeOverride = range;
+            ForceChestOnly = chestOnly;
+            if (station != null)
+            {
+                HasPullOriginOverride = true;
+                PullOriginOverride = station.transform.position;
+                StationLink.PushStation(station);
+            }
+        }
+
+        public static void EndStationPull()
+        {
+            StationLink.Pop();
+            HasPullOriginOverride = false;
+            PullOriginOverride = Vector3.zero;
+            PullRangeOverride = 0f;
+            ForceChestOnly = false;
+        }
 
         public static void BeginAutoFillPulse(Player player, float range)
         {
@@ -164,7 +217,10 @@ namespace StoreAndCraft
                 if (string.IsNullOrEmpty(shared))
                     continue;
                 if (LocalCount(player, shared) >= amount)
+                {
+                    StampDropPrefabs(player, sharedNames);
                     return true;
+                }
             }
 
             foreach (string shared in sharedNames)
@@ -172,15 +228,188 @@ namespace StoreAndCraft
                 if (string.IsNullOrEmpty(shared))
                     continue;
                 if (EnsureInInventory(player, shared, amount))
+                {
+                    StampDropPrefabs(player, sharedNames);
                     return true;
+                }
             }
 
             return false;
         }
 
+        /// <summary>
+        /// CookingStation.CookItem reads m_dropPrefab.name immediately (NRE if null).
+        /// IsItemAllowed compares that prefab GameObject name to conversion m_from.
+        /// Only stamps when missing — never replaces a valid existing prefab.
+        /// </summary>
+        public static void StampDropPrefabs(Player player, List<string> sharedNames)
+        {
+            Inventory inv = player != null ? player.GetInventory() : null;
+            if (inv == null || sharedNames == null || sharedNames.Count == 0)
+                return;
+            foreach (ItemDrop.ItemData item in inv.GetAllItems())
+            {
+                if (item?.m_shared == null || item.m_dropPrefab)
+                    continue;
+                if (!sharedNames.Contains(item.m_shared.m_name))
+                    continue;
+                EnsureDropPrefab(item);
+            }
+        }
+
+        public static void EnsureDropPrefab(ItemDrop.ItemData item)
+        {
+            if (item == null || item.m_shared == null)
+                return;
+            if (item.m_dropPrefab)
+                return;
+
+            // SharedData is reference-keyed in ObjectDB — works when m_shared is live prefab data.
+            if (ObjectDB.instance != null)
+            {
+                GameObject go = ObjectDB.instance.GetItemPrefab(item.m_shared);
+                if (go != null)
+                {
+                    item.m_dropPrefab = go;
+                    return;
+                }
+            }
+
+            // By shared token / prefab name (cache no longer stores null failures).
+            GameObject fromToken = ItemIds.PrefabFromToken(item.m_shared.m_name);
+            if (fromToken != null)
+            {
+                item.m_dropPrefab = fromToken;
+                return;
+            }
+
+            ResolveDropPrefabFromObjectDb(item);
+        }
+
+        /// <summary>
+        /// CookingStation.IsItemAllowed compares m_dropPrefab.name to conversion m_from
+        /// with exact string equality — a (Clone) ref or wrong GO → "can't use …".
+        /// When this station has a conversion for the item, stamp that m_from GameObject.
+        /// Items with no conversion here are left alone (correct vanilla reject).
+        /// </summary>
+        public static void EnsureCookDropPrefab(CookingStation station, ItemDrop.ItemData item)
+        {
+            if (item?.m_shared == null)
+                return;
+
+            CookingStation.ItemConversion conv = FindCookConversion(station, item);
+            if (conv?.m_from != null && conv.m_from.gameObject != null)
+            {
+                if (item.m_dropPrefab != conv.m_from.gameObject)
+                    item.m_dropPrefab = conv.m_from.gameObject;
+                return;
+            }
+
+            // No conversion on this station (e.g. Volture on wooden spit) — only fill nulls.
+            if (!item.m_dropPrefab)
+                EnsureDropPrefab(item);
+        }
+
+        /// <summary>
+        /// Prefab name RPC_AddItem / IsItemAllowed(string) need — exact conversion GameObject name.
+        /// </summary>
+        public static string CookPrefabName(CookingStation station, string shared)
+        {
+            if (station?.m_conversion == null || string.IsNullOrEmpty(shared))
+                return null;
+
+            for (int i = 0; i < station.m_conversion.Count; i++)
+            {
+                CookingStation.ItemConversion conv = station.m_conversion[i];
+                ItemDrop from = conv != null ? conv.m_from : null;
+                if (from?.gameObject == null)
+                    continue;
+
+                string fromShared = from.m_itemData?.m_shared != null
+                    ? from.m_itemData.m_shared.m_name
+                    : null;
+                if (!string.IsNullOrEmpty(fromShared)
+                    && string.Equals(fromShared, shared, System.StringComparison.OrdinalIgnoreCase))
+                    return from.gameObject.name;
+
+                string fromName = ItemIds.StripClone(from.gameObject.name);
+                GameObject odb = ItemIds.PrefabFromToken(shared);
+                if (odb != null
+                    && string.Equals(fromName, ItemIds.StripClone(odb.name), System.StringComparison.OrdinalIgnoreCase))
+                    return from.gameObject.name;
+            }
+
+            GameObject fallback = ItemIds.PrefabFromToken(shared);
+            return fallback != null ? ItemIds.StripClone(fallback.name) : null;
+        }
+
+        public static CookingStation.ItemConversion FindCookConversion(
+            CookingStation station,
+            ItemDrop.ItemData item)
+        {
+            if (station?.m_conversion == null || item?.m_shared == null)
+                return null;
+
+            string shared = item.m_shared.m_name;
+            string hint = item.m_dropPrefab ? ItemIds.StripClone(item.m_dropPrefab.name) : null;
+            GameObject odb = ItemIds.PrefabFromToken(shared);
+            string odbName = odb != null ? ItemIds.StripClone(odb.name) : null;
+
+            for (int i = 0; i < station.m_conversion.Count; i++)
+            {
+                CookingStation.ItemConversion conv = station.m_conversion[i];
+                ItemDrop from = conv != null ? conv.m_from : null;
+                if (from?.gameObject == null)
+                    continue;
+
+                string fromShared = from.m_itemData?.m_shared != null
+                    ? from.m_itemData.m_shared.m_name
+                    : null;
+                string fromName = ItemIds.StripClone(from.gameObject.name);
+
+                if (!string.IsNullOrEmpty(fromShared)
+                    && string.Equals(fromShared, shared, System.StringComparison.OrdinalIgnoreCase))
+                    return conv;
+                if (!string.IsNullOrEmpty(hint)
+                    && string.Equals(fromName, hint, System.StringComparison.OrdinalIgnoreCase))
+                    return conv;
+                if (!string.IsNullOrEmpty(odbName)
+                    && string.Equals(fromName, odbName, System.StringComparison.OrdinalIgnoreCase))
+                    return conv;
+            }
+
+            return null;
+        }
+
+        private static void ResolveDropPrefabFromObjectDb(ItemDrop.ItemData item)
+        {
+            if (item?.m_shared == null || ObjectDB.instance?.m_items == null)
+                return;
+            string shared = item.m_shared.m_name;
+            for (int i = 0; i < ObjectDB.instance.m_items.Count; i++)
+            {
+                GameObject go = ObjectDB.instance.m_items[i];
+                if (go == null)
+                    continue;
+                ItemDrop drop = go.GetComponent<ItemDrop>();
+                string dropShared = drop?.m_itemData?.m_shared != null
+                    ? drop.m_itemData.m_shared.m_name
+                    : null;
+                if (string.IsNullOrEmpty(dropShared))
+                    continue;
+                if (string.Equals(dropShared, shared, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    item.m_dropPrefab = go;
+                    return;
+                }
+            }
+        }
+
         public static int ConsumeFromChests(Player player, string shared, int amount)
         {
-            if (player == null || amount <= 0 || string.IsNullOrEmpty(shared))
+            if (amount <= 0 || string.IsNullOrEmpty(shared))
+                return 0;
+            if (player == null && !HasPullOriginOverride)
                 return 0;
             if (!Ready())
                 return 0;
@@ -188,7 +417,7 @@ namespace StoreAndCraft
             NearbyIndex.Tick();
             bool leaveOne = Plugin.Settings != null && Plugin.Settings.LeaveOneItem.Value;
             float range = ActivePullRange();
-            Vector3 origin = player.transform.position;
+            Vector3 origin = ActivePullOrigin(player);
             int need = amount;
             int took = 0;
 
@@ -201,12 +430,18 @@ namespace StoreAndCraft
                 if (ContainerFilter.Distance(origin, chest.transform.position) > range)
                     continue;
 
+                Inventory inv = chest.GetInventory();
+                if (inv == null || inv.NrOfItems() <= 0)
+                    NearbyIndex.EnsureInventory(chest, force: true);
+
                 int n = TransferService.Consume(chest, shared, need, leaveOne);
                 if (n <= 0)
                     continue;
                 took += n;
                 need -= n;
                 NotePulseConsumed(shared, n);
+                if (ForceChestOnly)
+                    RemoteAutomation.NotePull(shared, n);
             }
 
             return took;
@@ -224,7 +459,7 @@ namespace StoreAndCraft
             NearbyIndex.Tick();
             bool leaveOne = Plugin.Settings != null && Plugin.Settings.LeaveOneItem.Value;
             float cfgCraft = ActivePullRange();
-            Vector3 origin = player.transform.position;
+            Vector3 origin = ActivePullOrigin(player);
             int need = amount;
 
             foreach (Container chest in NearbyIndex.Current)
@@ -236,6 +471,10 @@ namespace StoreAndCraft
 
                 if (ContainerFilter.Distance(origin, chest.transform.position) > cfgCraft)
                     continue;
+
+                Inventory chestInv = chest.GetInventory();
+                if (chestInv == null || chestInv.NrOfItems() <= 0)
+                    NearbyIndex.EnsureInventory(chest, force: true);
 
                 int took = TransferService.Withdraw(chest, shared, need, inv, leaveOne);
                 need -= took;
@@ -271,8 +510,8 @@ namespace StoreAndCraft
                         ItemDrop.ItemData local = GetLocal(player, shared);
                         if (local == null)
                             continue;
-                        if (local.m_dropPrefab == null)
-                            local.m_dropPrefab = ItemIds.PrefabFromToken(ItemIds.PrefabName(local) ?? shared);
+                        if (!local.m_dropPrefab)
+                            EnsureDropPrefab(local);
                         item = local;
                         return;
                     }
@@ -280,21 +519,30 @@ namespace StoreAndCraft
                 return;
             }
 
+            // Prefer bag stack (IgnoreHotbar may hide the hotbar row from GetLocal).
             ItemDrop.ItemData found = GetLocal(player, want);
-            if (found == null)
+            if (found != null)
             {
-                item = null;
+                if (!found.m_dropPrefab)
+                    EnsureDropPrefab(found);
+                item = found;
                 return;
             }
 
-            if (found.m_dropPrefab == null)
+            // Manual use: player already selected this stack (often hotbar). Never wipe it —
+            // that made Humanoid show "can't use Volture Meat on Iron Cooking Station"
+            // while OnUseItem received null and returned false.
+            if (requested != null && requested.m_shared != null
+                && string.Equals(requested.m_shared.m_name, want, System.StringComparison.Ordinal)
+                && requested.m_stack > 0)
             {
-                GameObject prefab = ItemIds.PrefabFromToken(want);
-                if (prefab == null && requested.m_dropPrefab != null)
-                    prefab = requested.m_dropPrefab;
-                found.m_dropPrefab = prefab;
+                if (!requested.m_dropPrefab)
+                    EnsureDropPrefab(requested);
+                item = requested;
+                return;
             }
-            item = found;
+
+            item = null;
         }
 
         public static ItemDrop.ItemData SampleNearby(Player player, string shared)

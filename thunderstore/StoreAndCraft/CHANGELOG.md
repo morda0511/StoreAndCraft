@@ -1,5 +1,62 @@
 # Changelog
 
+## 1.3.40
+
+### FIX
+- Storage Displays no longer flicker when changing Scale or Layout
+- Kiln / smelter chest pull no longer takes wood or ore from unlinked chests
+- Food Preparation Table: Raw Fish (and other only-one-ingredient recipes) craft from nearby chests and remove the fish from the chest
+
+## 1.3.39
+
+### UI IMPROVEMENTS
+- Station hover prompts use one order everywhere: vanilla actions, then two-key shortcuts, then single keys
+
+### FIX
+- Cooking: raw meat from the hotbar or chests (including Volture meat) works on cooking stations again
+- Cooking auto-fill places food on the spit/oven instead of treating it as not allowed
+- Stone oven no longer shows a third empty hover on the body (food door and wood only)
+
+## 1.3.38
+
+### FIX
+- Cooking from chests: raw meat (including Vulture meat) cooks on the spit/oven again instead of only appearing in your bag
+- Remote Automation temporarily disabled (unstable when far from the station)
+- Shift+[E] Fill to max works on fireplaces and torches (and cooking-station fuel)
+
+## 1.3.36
+
+### NEW FEATURES
+- Ballista (Mistlands turret) auto-fill: press [B] to load ammo from bag and nearby chests
+
+### UI IMPROVEMENTS
+- Kiln / smelter hover: no duplicate Auto-fill / Fill to max; order is Add → Fill to max → Chest pull filter → Auto-fill
+- Favorites: star badge only — no gold tint on the item icon
+
+### FIX
+- Station auto-fill finds items in nearby chests again when chest inventories looked empty after the wipe-guard (Frost Foundry / smelters / kilns)
+- Frost Foundry casts (and other max-stack-1 items) can be pulled from chests again — LeaveOne no longer blocks the only copy
+
+## 1.3.35
+
+### FIX
+- Cooking auto-fill (campfire sticks / spit / oven) pulls food from chests again like pressing [E]; stone ovens still fall back to network add when the under-fire is out
+
+## 1.3.34
+
+### NEW FEATURES
+- Hold Shift and press [E] on a kiln, smelter, or blast furnace to fill fuel or ore to max from your bag and nearby chests
+
+### FIX
+- Storage Displays no longer clear nearby chest contents when counting items (stronger empty-load guard)
+- Feed Trough keeps food visible and usable after you put carrots or other animal food inside
+- Config sync no longer loops forever when the server handshake works but the config package fails; the client keeps local settings and warns once
+
+## 1.3.33
+
+### FIX
+- Forge of Potential: chest idols now count and can be spent. LeaveOne does not apply there (one idol in a chest is enough)
+
 ## 1.3.32
 
 ### FIX

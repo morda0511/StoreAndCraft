@@ -361,10 +361,12 @@ namespace StoreAndCraft
                 Inventory inv = c.GetInventory();
                 if (inv == null || inv.NrOfItems() <= 0)
                 {
-                    EnsureInventory(c);
+                    // Force once: idle cooldown + empty skip left cooking autofill blind
+                    // after the chest-wipe guard (pulse Quiet'd food for 25s).
+                    EnsureInventory(c, force: true);
                     inv = c.GetInventory();
                 }
-                if (inv == null)
+                if (inv == null || inv.NrOfItems() <= 0)
                     continue;
 
                 SnapshotScratch.Clear();
@@ -383,7 +385,7 @@ namespace StoreAndCraft
                     int n = pair.Value - PendingChestDebit.Of(c, pair.Key);
                     if (n < 0)
                         n = 0;
-                    if (leaveOne && n > 0)
+                    if (leaveOne && n > 0 && ItemIds.ShouldLeaveOne(true, pair.Key))
                         n -= 1;
                     if (n <= 0)
                         continue;
@@ -425,8 +427,21 @@ namespace StoreAndCraft
                 if (ContainerFilter.SqrDistance(origin, c.transform.position) > craftSq)
                     continue;
 
-                EnsureInventory(c);
+                // Same as SnapshotSpendable: after the empty-load wipe-guard, chests can
+                // look empty for the cooldown window. Auto-fill then Quiet's ("no chests")
+                // even though the ZDO still has items — force once when local inv is empty.
                 Inventory inv = c.GetInventory();
+                if (inv == null || inv.NrOfItems() <= 0)
+                {
+                    EnsureInventory(c, force: true);
+                    inv = c.GetInventory();
+                }
+                else
+                {
+                    EnsureInventory(c);
+                    inv = c.GetInventory();
+                }
+
                 if (inv == null)
                     continue;
 
@@ -434,7 +449,7 @@ namespace StoreAndCraft
                 n -= PendingChestDebit.Of(c, sharedName);
                 if (n < 0)
                     n = 0;
-                if (leaveOne && n > 0)
+                if (leaveOne && n > 0 && ItemIds.ShouldLeaveOne(true, sharedName))
                     n -= 1;
                 if (n > 0)
                     total += n;

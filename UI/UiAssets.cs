@@ -20,10 +20,29 @@ namespace StoreAndCraft
         public static Sprite ToggleOff => Get("toggle_button_off.png");
         public static Sprite LinkSelected => Get("link_selected.png");
         public static Sprite ShowDisplayDisabled => Get("show_display_disabled.png");
-        public static Sprite PanelWood => GetSliced("panel_wood.png", 14f);
-        public static Sprite BtnWood => GetSliced("btn_wood.png", 8f);
-        public static Sprite BtnWoodAccent => GetSliced("btn_wood_accent.png", 8f);
-        public static Sprite RowFocus => Get("row_focus.png");
+
+        // Select Types — Photoshop mockup assets (Content/UI)
+        public static Sprite PanelLeft => GetSliced("panel_left.png", 48f);
+        public static Sprite PanelRight => GetSliced("panel_right.png", 48f);
+        public static Sprite PanelLeftInset => GetSliced("panel_left_inset.png", 24f);
+        public static Sprite PanelRightInset => GetSliced("panel_right_inset.png", 24f);
+        public static Sprite RawCategory => GetSliced("raw_category.png", 12f);
+        public static Sprite RawCategoryFocus => GetSliced("raw_category_focus.png", 12f);
+        public static Sprite ItemCell => GetSliced("item_cell.png", 12f);
+        public static Sprite BtnApply => GetSliced("btn_apply.png", 8f);
+        public static Sprite ScrollTrack => GetSliced("scroll_track.png", 6f);
+        public static Sprite ScrollThumb => Get("scroll_thumb.png");
+
+        // Legacy aliases (older chrome — keep if still referenced elsewhere)
+        public static Sprite PanelWood => PanelLeft;
+        public static Sprite PanelInset => PanelRightInset;
+        public static Sprite BtnWood => BtnApply;
+        public static Sprite BtnWoodAccent => BtnApply;
+        public static Sprite RowFocus => RawCategoryFocus;
+        public static Sprite RowIdle => RawCategory;
+        public static Sprite HeaderBar => null;
+        public static Sprite IconWell => null;
+        public static Sprite Divider => null;
 
         public static Sprite Link(int id)
         {
@@ -106,11 +125,17 @@ namespace StoreAndCraft
                             continue;
                         tex.wrapMode = TextureWrapMode.Clamp;
                         tex.filterMode = FilterMode.Bilinear;
-                        // Toggle buttons / wood panels keep their dark chrome — do not punch near-black to alpha.
+                        // Keep dark chrome / wood (do not punch near-black to alpha).
                         if (!file.StartsWith("toggle_button_")
                             && !file.StartsWith("panel_")
                             && !file.StartsWith("btn_")
-                            && file != "row_focus.png")
+                            && !file.StartsWith("raw_")
+                            && !file.StartsWith("row_")
+                            && !file.StartsWith("scroll_")
+                            && !file.StartsWith("item_")
+                            && !file.StartsWith("header_")
+                            && !file.StartsWith("icon_")
+                            && file != "divider.png")
                             MakeNearBlackTransparent(tex);
                         // Link / outline sprites are padded in a wide canvas — crop tight.
                         Rect rect = (file.StartsWith("link") || file == "link_selected.png")

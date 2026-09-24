@@ -69,6 +69,16 @@ namespace StoreAndCraft
             ZRoutedRpc.instance.InvokeRoutedRPC(peerId, RpcSyncName, pkg);
         }
 
+        public static void AcceptLocalFallback(string reason)
+        {
+            if (HasReceivedConfig)
+                return;
+            HasReceivedConfig = true;
+            Plugin.Log.LogWarning(
+                "StoreAndCraft: using local config (" + reason + "). " +
+                "Install the same StoreAndCraft version on the server if settings should sync.");
+        }
+
         public static void RequestConfigFromServer()
         {
             if (AdminUtil.IsServer() || ZRoutedRpc.instance == null)
@@ -104,6 +114,7 @@ namespace StoreAndCraft
             {
                 Plugin.Log.LogWarning("StoreAndCraft config protocol mismatch: " + version
                     + " (want " + ModConfig.ProtocolVersion + ")");
+                AcceptLocalFallback("protocol mismatch " + version + "/" + ModConfig.ProtocolVersion);
                 Player player = Player.m_localPlayer;
                 if (player != null)
                 {
@@ -136,6 +147,8 @@ namespace StoreAndCraft
                 Plugin.Log.LogWarning(
                     "StoreAndCraft: failed to apply server config: " + ex.GetType().Name +
                     ": " + ex.Message + " (server/client version mismatch?)");
+                // Stop the forever-wait loop; keep local config so the client stays playable.
+                HasReceivedConfig = true;
             }
             finally
             {

@@ -8,7 +8,8 @@ namespace StoreAndCraft
 {
     /// <summary>
     /// Per-station auto-fill for every input station we can feed: kiln, smelter,
-    /// blast furnace, eitr, windmill, cooking / stone oven, fermenter, torches / fires.
+    /// blast furnace, eitr, windmill, Frost Foundry, cooking / stone oven, fermenter,
+    /// torches / fires, Mistlands ballistas (Turret), and food serving trays (ItemStand).
     /// Hover the station with the inventory closed and press B to toggle.
     /// Inventory-open F stays favorites. Chest pull filters still apply.
     /// </summary>
@@ -17,9 +18,9 @@ namespace StoreAndCraft
         public const string ZdoKey = "SAC_autoFill";
         private const float Interval = 5f;
         private const float QuietEmptySeconds = 25f;
-        private const int MaxBurstsPerPulse = 1;
+        private const int MaxBurstsPerPulse = 4;
         /// <summary>Cap how many needy stations we evaluate per pulse (after range/IsOn filters).</summary>
-        private const int MaxChecksPerPulse = 4;
+        private const int MaxChecksPerPulse = 12;
 
         internal static int Silence;
 
@@ -31,9 +32,14 @@ namespace StoreAndCraft
         private static readonly HashSet<int> OvenIds = new HashSet<int>();
         private static readonly List<Fermenter> Fermenters = new List<Fermenter>();
         private static readonly HashSet<int> FermenterIds = new HashSet<int>();
+        private static readonly List<Turret> Turrets = new List<Turret>();
+        private static readonly HashSet<int> TurretIds = new HashSet<int>();
+        private static readonly List<ItemStand> FoodTrays = new List<ItemStand>();
+        private static readonly HashSet<int> FoodTrayIds = new HashSet<int>();
         private static readonly Dictionary<string, float> QuietUntil = new Dictionary<string, float>();
 
         private static readonly MethodInfo SmelterGetFuel = AccessTools.Method(typeof(Smelter), "GetFuel");
+        private static readonly MethodInfo SmelterSetFuel = AccessTools.Method(typeof(Smelter), "SetFuel");
         private static readonly MethodInfo SmelterGetQueue = AccessTools.Method(typeof(Smelter), "GetQueueSize");
         private static readonly MethodInfo SmelterAddFuel = AccessTools.Method(typeof(Smelter), "OnAddFuel");
         private static readonly MethodInfo SmelterAddOre = AccessTools.Method(typeof(Smelter), "OnAddOre");
@@ -45,6 +51,13 @@ namespace StoreAndCraft
         private static readonly MethodInfo CookIsFull = AccessTools.Method(typeof(CookingStation), "IsStationFull");
         private static readonly MethodInfo FermenterAddItem = AccessTools.Method(typeof(Fermenter), "AddItem");
         private static readonly MethodInfo FermenterGetStatus = AccessTools.Method(typeof(Fermenter), "GetStatus");
+        private static readonly MethodInfo TurretGetAmmo = AccessTools.Method(typeof(Turret), "GetAmmo");
+        private static readonly MethodInfo TurretGetAmmoType = AccessTools.Method(typeof(Turret), "GetAmmoType");
+        private static readonly MethodInfo TurretFindAmmo = AccessTools.Method(typeof(Turret), "FindAmmoItem");
+        private static readonly MethodInfo TurretUseItem = AccessTools.Method(typeof(Turret), "UseItem");
+        private static readonly MethodInfo ItemStandUseItem = AccessTools.Method(typeof(ItemStand), "UseItem");
+        private static readonly MethodInfo ItemStandHaveAttachment = AccessTools.Method(typeof(ItemStand), "HaveAttachment");
+        private static readonly MethodInfo ItemStandCanAttach = AccessTools.Method(typeof(ItemStand), "CanAttach");
         private static readonly int FuelHash = ReadFuelHash();
 
         private static float _nextPulse;
@@ -53,6 +66,8 @@ namespace StoreAndCraft
         private static int _fireCursor;
         private static int _ovenCursor;
         private static int _fermenterCursor;
+        private static int _turretCursor;
+        private static int _trayCursor;
 
         public static void Register(Smelter smelter)
         {
@@ -94,6 +109,90 @@ namespace StoreAndCraft
             Fermenters.Add(fermenter);
         }
 
+        public static void Register(Turret turret)
+        {
+            if (turret == null)
+                return;
+            int id = turret.GetInstanceID();
+            if (!TurretIds.Add(id))
+                return;
+            Turrets.Add(turret);
+        }
+
+        public static void Register(ItemStand stand)
+        {
+            if (stand == null || !IsFoodServingTray(stand))
+                return;
+            int id = stand.GetInstanceID();
+            if (!FoodTrayIds.Add(id))
+                return;
+            FoodTrays.Add(stand);
+        }
+
+        internal static IReadOnlyList<Smelter> RegisteredSmelters { get { return Smelters; } }
+        internal static IReadOnlyList<Fireplace> RegisteredFires { get { return Fires; } }
+        internal static IReadOnlyList<CookingStation> RegisteredOvens { get { return Ovens; } }
+        internal static IReadOnlyList<Fermenter> RegisteredFermenters { get { return Fermenters; } }
+
+        /// <summary>Remote Automation feed — caller must BeginStationPull / EndStationPull.</summary>
+        internal static bool RemoteFillSmelter(Smelter smelter, Player player)
+        {
+            if (smelter == null)
+                return false;
+            bool did = false;
+            if (HasFuelSlot(smelter))
+                did |= FillFuelToMax(smelter, player);
+            if (HasOreSlot(smelter))
+                did |= FillOreToMax(smelter, player);
+            return did;
+        }
+
+        internal static bool RemoteFillOven(CookingStation oven, Player player)
+        {
+            return oven != null && FillOvenWhenEmpty(oven, player);
+        }
+
+        internal static bool RemoteFillFire(Fireplace fire, Player player)
+        {
+            return fire != null && FillFireWhenEmpty(fire, player);
+        }
+
+        internal static bool RemoteFillFermenter(Fermenter fermenter, Player player)
+        {
+            return fermenter != null && FillFermenterWhenEmpty(fermenter, player);
+        }
+
+        /// <summary>Serving trays accept consumable food; weapon stands / boss trophies do not.</summary>
+        internal static bool IsFoodServingTray(ItemStand stand)
+        {
+            if (stand == null)
+                return false;
+            if (stand.m_guardianPower != null)
+                return false;
+
+            if (stand.m_supportedTypes != null)
+            {
+                for (int i = 0; i < stand.m_supportedTypes.Count; i++)
+                {
+                    if (stand.m_supportedTypes[i] == ItemDrop.ItemData.ItemType.Consumable)
+                        return true;
+                }
+            }
+
+            if (stand.m_supportedItems != null)
+            {
+                for (int i = 0; i < stand.m_supportedItems.Count; i++)
+                {
+                    ItemDrop drop = stand.m_supportedItems[i];
+                    if (drop?.m_itemData?.m_shared != null
+                        && drop.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Consumable)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         public static void BootstrapExisting()
         {
             Smelter[] smelters = Resources.FindObjectsOfTypeAll<Smelter>();
@@ -130,13 +229,36 @@ namespace StoreAndCraft
             }
 
             Fermenter[] fermenters = Resources.FindObjectsOfTypeAll<Fermenter>();
-            if (fermenters == null)
-                return;
-            foreach (Fermenter fermenter in fermenters)
+            if (fermenters != null)
             {
-                if (fermenter == null || !fermenter.gameObject.scene.IsValid())
-                    continue;
-                Register(fermenter);
+                foreach (Fermenter fermenter in fermenters)
+                {
+                    if (fermenter == null || !fermenter.gameObject.scene.IsValid())
+                        continue;
+                    Register(fermenter);
+                }
+            }
+
+            Turret[] turrets = Resources.FindObjectsOfTypeAll<Turret>();
+            if (turrets != null)
+            {
+                foreach (Turret turret in turrets)
+                {
+                    if (turret == null || !turret.gameObject.scene.IsValid())
+                        continue;
+                    Register(turret);
+                }
+            }
+
+            ItemStand[] stands = Resources.FindObjectsOfTypeAll<ItemStand>();
+            if (stands != null)
+            {
+                foreach (ItemStand stand in stands)
+                {
+                    if (stand == null || !stand.gameObject.scene.IsValid())
+                        continue;
+                    Register(stand);
+                }
             }
         }
 
@@ -159,31 +281,95 @@ namespace StoreAndCraft
 
         public static void AppendHover(ref string text, ZNetView nv)
         {
+            AppendHover(ref text, nv, includeManualFill: true);
+        }
+
+        public static void AppendHover(ref string text, ZNetView nv, bool includeManualFill)
+        {
             if (!StationFeed.Ready())
                 return;
             if (nv == null || !nv.IsValid())
                 return;
 
-            string key = KeyUtil.Format(Plugin.Settings.AutoFillKey.Value);
-            if (string.IsNullOrEmpty(key))
-                key = "B";
+            if (string.IsNullOrEmpty(text))
+                text = "";
+
+            // Chord keys first, then single keys (same order everywhere).
+            if (includeManualFill)
+                AppendFillToMaxLine(ref text);
+            AppendAutoFillLine(ref text, nv);
+        }
+
+        /// <summary>
+        /// After vanilla hover: Alt+E filter → Shift+E fill to max → B auto-fill.
+        /// Link / remote are status (link stays on top).
+        /// </summary>
+        public static void AppendSmelterHover(ref string text, Smelter smelter)
+        {
+            if (smelter == null || !StationFeed.Ready())
+                return;
+
+            ZNetView nv = smelter.GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid())
+                return;
 
             if (string.IsNullOrEmpty(text))
                 text = "";
+
+            StationPullFilter.AppendFilterHover(ref text, smelter, prependLink: false);
+            AppendFillToMaxLine(ref text);
+            AppendAutoFillLine(ref text, nv);
+            RemoteAutomation.AppendHover(ref text, smelter);
+            StationLink.PrependHover(ref text, StationLink.Get(smelter), chest: false);
+        }
+
+        private static void AppendFillToMaxLine(ref string text)
+        {
+            text += "\n[<color=yellow><b>" + Loc.T("Shift+E", "Umschalt+E") + "</b></color>] "
+                + Loc.T("Fill to max", "Auffüllen bis voll");
+        }
+
+        private static void AppendAutoFillLine(ref string text, ZNetView nv)
+        {
+            string key = KeyUtil.Format(Plugin.Settings.AutoFillKey.Value);
+            if (string.IsNullOrEmpty(key))
+                key = "B";
 
             text += "\n[<color=yellow><b>" + key + "</b></color>] "
                 + Loc.T("Auto-fill", "Auto-Fill")
                 + " (" + (IsOn(nv) ? Loc.T("on", "an") : Loc.T("off", "aus")) + ")";
         }
 
-        /// <summary>Cooking hover extras in fixed order: filter → auto-drop → auto-fill.</summary>
+        /// <summary>
+        /// After vanilla [E] / [1-8]: Alt+E → Shift+E → B → N. Link on top.
+        /// </summary>
         public static void AppendCookingHover(ref string text, CookingStation station)
         {
             if (station == null)
                 return;
+
             StationPullFilter.AppendFilterHover(ref text, station);
-            CookingAutoDrop.AppendHover(ref text, station);
             AppendHover(ref text, station.GetComponent<ZNetView>());
+            CookingAutoDrop.AppendHover(ref text, station);
+            RemoteAutomation.AppendHover(ref text, station);
+            StationLink.PrependHover(ref text, StationLink.Get(station), chest: false);
+        }
+
+        /// <summary>
+        /// Fireplace / fermenter: Alt+E (if filter) → Shift+E → B. Same chord→single order.
+        /// </summary>
+        public static void AppendFuelStationHover(ref string text, Component station, ZNetView nv)
+        {
+            if (station == null || nv == null || !nv.IsValid() || !StationFeed.Ready())
+                return;
+
+            if (station is Fireplace fire)
+                StationPullFilter.AppendFilterHover(ref text, fire);
+            else if (station is Fermenter fermenter)
+                StationPullFilter.AppendFilterHover(ref text, fermenter);
+
+            AppendHover(ref text, nv);
+            RemoteAutomation.AppendHover(ref text, station);
         }
 
         public static bool TryToggle()
@@ -201,8 +387,13 @@ namespace StoreAndCraft
             CookingStation oven = smelter == null ? HoveredOven() : null;
             Fermenter fermenter = smelter == null && oven == null ? HoveredFermenter() : null;
             Fireplace fire = smelter == null && oven == null && fermenter == null ? HoveredFireplace() : null;
+            Turret turret = smelter == null && oven == null && fermenter == null && fire == null
+                ? HoveredTurret() : null;
+            ItemStand tray = smelter == null && oven == null && fermenter == null && fire == null && turret == null
+                ? HoveredFoodTray() : null;
 
-            Component station = (Component)smelter ?? oven ?? (Component)fermenter ?? fire;
+            Component station = (Component)smelter ?? oven ?? (Component)fermenter ?? fire
+                ?? (Component)turret ?? tray;
             ZNetView nv = station != null ? station.GetComponent<ZNetView>() : null;
             if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
                 return false;
@@ -223,6 +414,8 @@ namespace StoreAndCraft
             ClearQuiet(oven);
             ClearQuiet(fermenter);
             ClearQuiet(fire);
+            ClearQuiet(turret);
+            ClearQuiet(tray);
 
             player.Message(
                 MessageHud.MessageType.Center,
@@ -267,18 +460,19 @@ namespace StoreAndCraft
             StationFeed.BeginAutoFillPulse(player, range);
             try
             {
+                // Fires/torches first: cheap RPC; used to starve behind smelters (MaxBursts=1).
                 checks = RoundRobinFill(
-                    Smelters, ref _smelterCursor, origin, rangeSq, player, ref bursts, checks,
-                    s => IsOn(s) && PrivateArea.CheckAccess(s.transform.position, 0f, false, true),
-                    FillSmelterWhenEmpty);
+                    Fires, ref _fireCursor, origin, rangeSq, player, ref bursts, checks,
+                    f => f != null && f.m_canRefill && !IsQuiet(f, "fire") && IsOn(f)
+                        && PrivateArea.CheckAccess(f.transform.position, 0f, false, true),
+                    FillFireWhenEmpty);
 
                 if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
                 {
                     checks = RoundRobinFill(
-                        Fires, ref _fireCursor, origin, rangeSq, player, ref bursts, checks,
-                        f => f != null && f.m_canRefill && !IsQuiet(f, "fire") && IsOn(f)
-                            && PrivateArea.CheckAccess(f.transform.position, 0f, false, true),
-                        FillFireWhenEmpty);
+                        Smelters, ref _smelterCursor, origin, rangeSq, player, ref bursts, checks,
+                        s => IsOn(s) && PrivateArea.CheckAccess(s.transform.position, 0f, false, true),
+                        FillSmelterWhenEmpty);
                 }
 
                 if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
@@ -292,11 +486,29 @@ namespace StoreAndCraft
 
                 if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
                 {
-                    RoundRobinFill(
+                    checks = RoundRobinFill(
                         Fermenters, ref _fermenterCursor, origin, rangeSq, player, ref bursts, checks,
                         f => f != null && !IsQuiet(f, "mead") && IsOn(f.GetComponent<ZNetView>())
                             && PrivateArea.CheckAccess(f.transform.position, 0f, false, true),
                         FillFermenterWhenEmpty);
+                }
+
+                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
+                {
+                    checks = RoundRobinFill(
+                        Turrets, ref _turretCursor, origin, rangeSq, player, ref bursts, checks,
+                        t => t != null && !IsQuiet(t, "ammo") && IsOn(t.GetComponent<ZNetView>())
+                            && PrivateArea.CheckAccess(t.transform.position, 0f, false, true),
+                        FillTurretWhenEmpty);
+                }
+
+                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
+                {
+                    RoundRobinFill(
+                        FoodTrays, ref _trayCursor, origin, rangeSq, player, ref bursts, checks,
+                        s => s != null && !IsQuiet(s, "tray") && IsOn(s.GetComponent<ZNetView>())
+                            && PrivateArea.CheckAccess(s.transform.position, 0f, false, true),
+                        FillFoodTrayWhenEmpty);
                 }
             }
             finally
@@ -352,6 +564,28 @@ namespace StoreAndCraft
                     return true;
             }
 
+            for (int i = 0; i < Turrets.Count; i++)
+            {
+                Turret t = Turrets[i];
+                if (t == null)
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, t.transform.position) > rangeSq)
+                    continue;
+                if (IsOn(t.GetComponent<ZNetView>()))
+                    return true;
+            }
+
+            for (int i = 0; i < FoodTrays.Count; i++)
+            {
+                ItemStand s = FoodTrays[i];
+                if (s == null)
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, s.transform.position) > rangeSq)
+                    continue;
+                if (IsOn(s.GetComponent<ZNetView>()))
+                    return true;
+            }
+
             return false;
         }
 
@@ -404,6 +638,31 @@ namespace StoreAndCraft
             return checks;
         }
 
+        /// <summary>
+        /// Manual Shift+[E] fill: top up fuel and/or ore from bag/chests without waiting for auto-fill.
+        /// </summary>
+        internal static bool ManualFillSmelterToMax(Smelter smelter, Player player, bool fuel, bool ore)
+        {
+            if (smelter == null || player == null)
+                return false;
+            StationLink.PushStation(smelter);
+            StationFeed.PullRangeOverride = Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 0f;
+            try
+            {
+                bool did = false;
+                if (fuel && HasFuelSlot(smelter))
+                    did |= FillFuelToMax(smelter, player);
+                if (ore && HasOreSlot(smelter))
+                    did |= FillOreToMax(smelter, player);
+                return did;
+            }
+            finally
+            {
+                StationFeed.PullRangeOverride = 0f;
+                StationLink.Pop();
+            }
+        }
+
         private static bool FillSmelterWhenEmpty(Smelter smelter, Player player)
         {
             bool did = false;
@@ -416,16 +675,20 @@ namespace StoreAndCraft
 
         private static bool HasFuelSlot(Smelter smelter)
         {
-            return smelter.m_fuelItem != null && smelter.m_addWoodSwitch != null && smelter.m_maxFuel > 0;
+            // Fuel works via OnAddFuel or RPC_AddFuel; Switch refs are optional.
+            return smelter != null && smelter.m_fuelItem != null && smelter.m_maxFuel > 0;
         }
 
         private static bool HasOreSlot(Smelter smelter)
         {
-            return smelter.m_addOreSwitch != null && smelter.m_maxOre > 0;
+            return smelter != null && smelter.m_maxOre > 0
+                && smelter.m_conversion != null && smelter.m_conversion.Count > 0;
         }
 
         private static bool UsePlayerInventory()
         {
+            if (StationFeed.ForceChestOnly)
+                return false;
             return Plugin.Settings == null || !Plugin.Settings.StationFillSkipInventory.Value;
         }
 
@@ -443,6 +706,71 @@ namespace StoreAndCraft
             return HasLocalAny(player, sharedNames);
         }
 
+        /// <summary>Vanilla RPC_AddFuel accepts while fuel ≤ max−1.</summary>
+        private static int SmelterFuelFree(Smelter smelter)
+        {
+            if (smelter == null || smelter.m_maxFuel <= 0)
+                return 0;
+            float fuel = ReadSmelterFuel(smelter);
+            // Prior remote bug could push ZDO past max — clamp so we can run again.
+            if (fuel > smelter.m_maxFuel)
+            {
+                WriteSmelterFuel(smelter, smelter.m_maxFuel);
+                fuel = smelter.m_maxFuel;
+            }
+            if (fuel > smelter.m_maxFuel - 1f)
+                return 0;
+            return Mathf.Max(0, Mathf.FloorToInt(smelter.m_maxFuel - fuel));
+        }
+
+        private static int SmelterOreFree(Smelter smelter)
+        {
+            if (smelter == null || smelter.m_maxOre <= 0)
+                return 0;
+            int have = Mathf.Max(0, Mathf.RoundToInt(ReadNumber(SmelterGetQueue, smelter)));
+            if (have >= smelter.m_maxOre)
+                return 0;
+            return smelter.m_maxOre - have;
+        }
+
+        private static float ReadSmelterFuel(Smelter smelter)
+        {
+            float viaMethod = ReadNumber(SmelterGetFuel, smelter);
+            ZNetView nv = smelter != null ? smelter.GetComponent<ZNetView>() : null;
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return viaMethod;
+            if (FuelHash != 0)
+                return zdo.GetFloat(FuelHash, viaMethod);
+            return zdo.GetFloat("fuel", viaMethod);
+        }
+
+        private static void WriteSmelterFuel(Smelter smelter, float fuel)
+        {
+            if (smelter == null)
+                return;
+            if (SmelterSetFuel != null)
+            {
+                try
+                {
+                    SmelterSetFuel.Invoke(smelter, new object[] { fuel });
+                    return;
+                }
+                catch
+                {
+                }
+            }
+
+            ZNetView nv = smelter.GetComponent<ZNetView>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo == null)
+                return;
+            if (FuelHash != 0)
+                zdo.Set(FuelHash, fuel);
+            else
+                zdo.Set("fuel", fuel);
+        }
+
         private static bool FillFuelToMax(Smelter smelter, Player player)
         {
             string fuel = StationFeed.SharedFrom(smelter.m_fuelItem);
@@ -450,27 +778,59 @@ namespace StoreAndCraft
                 return false;
 
             ZNetView nv = smelter.GetComponent<ZNetView>();
-            int need = smelter.m_maxFuel;
+            int need = SmelterFuelFree(smelter);
+            if (need <= 0)
+                return false;
+
             int added = 0;
             for (int i = 0; i < need; i++)
             {
+                // Match vanilla: full when fuel > max−1 (do not consume if RPC would no-op).
+                if (ReadSmelterFuel(smelter) > smelter.m_maxFuel - 1f)
+                    break;
+
                 if (AutoFillLocalCount(player, fuel) >= 1)
                 {
-                    if (SmelterAddFuel == null || !InvokeAdd(SmelterAddFuel, smelter, smelter.m_addWoodSwitch, player))
+                    if (smelter.m_addWoodSwitch != null
+                        && SmelterAddFuel != null
+                        && InvokeAdd(SmelterAddFuel, smelter, smelter.m_addWoodSwitch, player))
+                    {
+                        added++;
+                        continue;
+                    }
+
+                    // No add-fuel Switch: take from bag and RPC like the chest path.
+                    Inventory inv = player.GetInventory();
+                    if (inv == null || nv == null || !nv.IsValid() || !PlayerBag.RemoveOneFromBag(inv, fuel))
                         break;
+                    if (!nv.IsOwner())
+                        nv.ClaimOwnership();
+                    BeginSilence();
+                    try
+                    {
+                        nv.InvokeRPC("RPC_AddFuel");
+                    }
+                    finally
+                    {
+                        EndSilence();
+                    }
                     added++;
                     continue;
                 }
 
                 if (added == 0 && !StationFeed.ChestsHave(player, fuel))
                 {
-                    Quiet(smelter, "fuel", QuietEmptySeconds);
+                    // Remote misses must not Quiet — that blocks near Auto-fill for 25s.
+                    if (!StationFeed.ForceChestOnly)
+                        Quiet(smelter, "fuel", QuietEmptySeconds);
                     return false;
                 }
 
                 if (nv == null || !nv.IsValid() || StationFeed.ConsumeFromChests(player, fuel, 1) < 1)
                     break;
 
+                if (!nv.IsOwner())
+                    nv.ClaimOwnership();
                 BeginSilence();
                 try
                 {
@@ -491,26 +851,60 @@ namespace StoreAndCraft
             List<string> allowed = StationPullFilter.AllowedOreNames(smelter);
             if (allowed == null || allowed.Count == 0)
             {
-                Quiet(smelter, "ore", QuietEmptySeconds);
+                if (!StationFeed.ForceChestOnly)
+                    Quiet(smelter, "ore", QuietEmptySeconds);
                 return false;
             }
 
             ZNetView nv = smelter.GetComponent<ZNetView>();
-            int need = smelter.m_maxOre;
+            int need = SmelterOreFree(smelter);
+            if (need <= 0)
+                return false;
+
             int added = 0;
             for (int i = 0; i < need; i++)
             {
+                if (Mathf.RoundToInt(ReadNumber(SmelterGetQueue, smelter)) >= smelter.m_maxOre)
+                    break;
+
                 if (AutoFillHasLocalAny(player, allowed))
                 {
-                    if (SmelterAddOre == null || !InvokeAdd(SmelterAddOre, smelter, smelter.m_addOreSwitch, player))
+                    if (smelter.m_addOreSwitch != null
+                        && SmelterAddOre != null
+                        && InvokeAdd(SmelterAddOre, smelter, smelter.m_addOreSwitch, player))
+                    {
+                        added++;
+                        continue;
+                    }
+
+                    ItemDrop.ItemData local = FirstLocal(player, allowed);
+                    string sharedLocal = local?.m_shared != null ? local.m_shared.m_name : null;
+                    string prefabLocal = local != null ? ItemIds.PrefabName(local) : PrefabName(sharedLocal);
+                    if (string.IsNullOrEmpty(prefabLocal))
+                        prefabLocal = PrefabName(sharedLocal);
+                    Inventory inv = player.GetInventory();
+                    if (local == null || inv == null || nv == null || !nv.IsValid()
+                        || string.IsNullOrEmpty(prefabLocal) || !inv.RemoveOneItem(local))
                         break;
+                    if (!nv.IsOwner())
+                        nv.ClaimOwnership();
+                    BeginSilence();
+                    try
+                    {
+                        nv.InvokeRPC("RPC_AddOre", prefabLocal, false);
+                    }
+                    finally
+                    {
+                        EndSilence();
+                    }
                     added++;
                     continue;
                 }
 
                 if (added == 0 && !ChestsHaveAny(player, allowed))
                 {
-                    Quiet(smelter, "ore", QuietEmptySeconds);
+                    if (!StationFeed.ForceChestOnly)
+                        Quiet(smelter, "ore", QuietEmptySeconds);
                     return false;
                 }
 
@@ -520,6 +914,8 @@ namespace StoreAndCraft
                     || StationFeed.ConsumeFromChests(player, shared, 1) < 1)
                     break;
 
+                if (!nv.IsOwner())
+                    nv.ClaimOwnership();
                 BeginSilence();
                 try
                 {
@@ -537,20 +933,55 @@ namespace StoreAndCraft
 
         private static bool FillFireWhenEmpty(Fireplace fire, Player player)
         {
+            if (fire == null)
+                return false;
+            if (ReadFireFuel(fire) > 0.01f)
+                return false;
+            return FillFireToMax(fire, player);
+        }
+
+        /// <summary>Top up fireplace/torch fuel to m_maxFuel from bag and chests (Shift+[E]).</summary>
+        internal static bool ManualFillFireToMax(Fireplace fire, Player player)
+        {
+            if (fire == null || player == null || !fire.m_canRefill)
+                return false;
+            StationLink.PushStation(fire);
+            StationFeed.PullRangeOverride = Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 0f;
+            try
+            {
+                return FillFireToMax(fire, player);
+            }
+            finally
+            {
+                StationFeed.PullRangeOverride = 0f;
+                StationLink.Pop();
+            }
+        }
+
+        private static bool FillFireToMax(Fireplace fire, Player player)
+        {
             ZNetView nv = fire.GetComponent<ZNetView>();
             if (nv == null || !nv.IsValid())
                 return false;
 
             string fuel = StationFeed.SharedFrom(fire.m_fuelItem);
-            if (string.IsNullOrEmpty(fuel) || fire.m_maxFuel <= 0f)
+            if (string.IsNullOrEmpty(fuel) || fire.m_maxFuel <= 0f || fire.m_infiniteFuel)
                 return false;
 
-            if (ReadFireFuel(fire) > 0.01f)
+            // Vanilla: add while Ceil(fuel) < m_maxFuel.
+            int have = Mathf.Max(0, Mathf.CeilToInt(ReadFireFuel(fire)));
+            int max = Mathf.Max(1, Mathf.FloorToInt(fire.m_maxFuel));
+            int need = max - have;
+            if (need <= 0)
                 return false;
 
-            int need = Mathf.Max(1, Mathf.FloorToInt(fire.m_maxFuel));
-            Inventory inv = player.GetInventory();
-            if (inv == null)
+            bool remotePull = StationFeed.ForceChestOnly;
+            if (!remotePull)
+                QuietUntil.Remove(QuietKey(fire, "fire"));
+
+            bool useBag = !remotePull && UsePlayerInventory() && player != null;
+            Inventory inv = useBag ? player.GetInventory() : null;
+            if (useBag && inv == null)
                 return false;
 
             int added = 0;
@@ -559,7 +990,10 @@ namespace StoreAndCraft
             {
                 for (int i = 0; i < need; i++)
                 {
-                    if (AutoFillLocalCount(player, fuel) >= 1)
+                    if (Mathf.CeilToInt(ReadFireFuel(fire)) >= max)
+                        break;
+
+                    if (inv != null && AutoFillLocalCount(player, fuel) >= 1)
                     {
                         if (!PlayerBag.RemoveOneFromBag(inv, fuel))
                             break;
@@ -568,13 +1002,16 @@ namespace StoreAndCraft
                     {
                         if (added == 0 && !StationFeed.ChestsHave(player, fuel))
                         {
-                            Quiet(fire, "fire", QuietEmptySeconds);
+                            if (!remotePull)
+                                Quiet(fire, "fire", QuietEmptySeconds);
                             return false;
                         }
                         if (StationFeed.ConsumeFromChests(player, fuel, 1) < 1)
                             break;
                     }
 
+                    if (!nv.IsOwner())
+                        nv.ClaimOwnership();
                     nv.InvokeRPC("RPC_AddFuel");
                     added++;
                 }
@@ -608,10 +1045,17 @@ namespace StoreAndCraft
                 return false;
 
             ZNetView nv = oven.GetComponent<ZNetView>();
-            int need = Mathf.Max(1, oven.m_maxFuel);
+            int have = Mathf.Max(0, Mathf.FloorToInt(ReadNumber(CookGetFuel, oven)));
+            int need = Mathf.Max(0, oven.m_maxFuel - have);
+            if (need <= 0)
+                return false;
+
             int added = 0;
             for (int i = 0; i < need; i++)
             {
+                if (ReadNumber(CookGetFuel, oven) > oven.m_maxFuel - 1f)
+                    break;
+
                 if (AutoFillLocalCount(player, fuel) >= 1)
                 {
                     if (CookAddFuel == null || !InvokeWith(CookAddFuel, oven, oven.m_addFuelSwitch, player))
@@ -629,6 +1073,8 @@ namespace StoreAndCraft
                 if (nv == null || !nv.IsValid() || StationFeed.ConsumeFromChests(player, fuel, 1) < 1)
                     break;
 
+                if (!nv.IsOwner())
+                    nv.ClaimOwnership();
                 BeginSilence();
                 try
                 {
@@ -644,6 +1090,24 @@ namespace StoreAndCraft
             return added > 0;
         }
 
+        /// <summary>Shift+[E] on cooking fuel: top up wood/fuel to max.</summary>
+        internal static bool ManualFillOvenFuelToMax(CookingStation oven, Player player)
+        {
+            if (oven == null || player == null || !oven.m_useFuel || oven.m_fuelItem == null || oven.m_maxFuel <= 0)
+                return false;
+            StationLink.PushStation(oven);
+            StationFeed.PullRangeOverride = Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 0f;
+            try
+            {
+                return FillOvenFuel(oven, player);
+            }
+            finally
+            {
+                StationFeed.PullRangeOverride = 0f;
+                StationLink.Pop();
+            }
+        }
+
         private static bool FillOvenFood(CookingStation oven, Player player)
         {
             List<string> foods = CookingOnInteractPatch.FoodNames(oven);
@@ -654,26 +1118,46 @@ namespace StoreAndCraft
             if (nv == null || !nv.IsValid())
                 return false;
 
-            Inventory inv = player.GetInventory();
+            // Remote / chest-only: pull straight into the oven via RPC (no bag staging).
+            if (!UsePlayerInventory())
+                return FillOvenFoodFromChests(oven, player, foods, nv);
+
             int added = 0;
             int guard = oven.m_slots != null ? oven.m_slots.Length : 5;
             while (guard-- > 0 && !IsTrue(CookIsFull, oven))
             {
-                string shared = null;
-                string prefab = null;
-
-                if (AutoFillHasLocalAny(player, foods))
+                // Same pull as pressing [E]: move one cookable from chests into the bag.
+                if (!StationFeed.EnsureAny(player, foods, 1))
                 {
-                    ItemDrop.ItemData item = FirstLocal(player, foods);
-                    if (item == null || item.m_shared == null)
-                        break;
-                    shared = item.m_shared.m_name;
-                    prefab = PrefabName(shared);
+                    if (added == 0)
+                        Quiet(oven, "food", QuietEmptySeconds);
+                    break;
+                }
+
+                ItemDrop.ItemData item = FirstLocal(player, foods);
+                if (item == null || item.m_shared == null)
+                    break;
+
+                StationFeed.EnsureCookDropPrefab(oven, item);
+
+                // Campfire spit / sticks: OnUseItem matches manual [E].
+                // Stone oven: OnUseItem can no-op when m_requireFire and the under-fire is out —
+                // fall back to RPC_AddItem like before.
+                bool placed = CookUseItem != null && InvokeWith(CookUseItem, oven, player, item);
+                if (!placed)
+                {
+                    string prefab = StationFeed.CookPrefabName(oven, item.m_shared.m_name);
+                    if (string.IsNullOrEmpty(prefab))
+                        prefab = ItemIds.PrefabName(item);
+                    if (string.IsNullOrEmpty(prefab))
+                        prefab = PrefabName(item.m_shared.m_name);
                     if (string.IsNullOrEmpty(prefab))
                         break;
 
-                    // Do not call OnUseItem: stone oven m_requireFire blocks adds when
-                    // the under-fire is out. RPC_AddItem matches vanilla network add.
+                    Inventory inv = player.GetInventory();
+                    if (inv == null)
+                        break;
+
                     InventoryCountPatches.Skip++;
                     try
                     {
@@ -684,25 +1168,55 @@ namespace StoreAndCraft
                     {
                         InventoryCountPatches.Skip--;
                     }
-                }
-                else
-                {
-                    if (added == 0 && !ChestsHaveAny(player, foods))
-                    {
-                        Quiet(oven, "food", QuietEmptySeconds);
-                        return added > 0;
-                    }
 
-                    shared = FirstChestItem(player, foods);
-                    prefab = PrefabName(shared);
-                    if (string.IsNullOrEmpty(prefab)
-                        || StationFeed.ConsumeFromChests(player, shared, 1) < 1)
-                        break;
+                    if (!nv.IsOwner())
+                        nv.ClaimOwnership();
+
+                    BeginSilence();
+                    try
+                    {
+                        nv.InvokeRPC("RPC_AddItem", prefab, false);
+                    }
+                    finally
+                    {
+                        EndSilence();
+                    }
                 }
+
+                added++;
+            }
+
+            return added > 0;
+        }
+
+        private static bool FillOvenFoodFromChests(
+            CookingStation oven,
+            Player player,
+            List<string> foods,
+            ZNetView nv)
+        {
+            int added = 0;
+            int guard = oven.m_slots != null ? oven.m_slots.Length : 5;
+            while (guard-- > 0 && !IsTrue(CookIsFull, oven))
+            {
+                if (!ChestsHaveAny(player, foods))
+                {
+                    if (added == 0)
+                        Quiet(oven, "food", QuietEmptySeconds);
+                    break;
+                }
+
+                string shared = FirstChestItem(player, foods);
+                string prefab = StationFeed.CookPrefabName(oven, shared);
+                if (string.IsNullOrEmpty(prefab))
+                    prefab = PrefabName(shared);
+                if (string.IsNullOrEmpty(prefab) || string.IsNullOrEmpty(shared))
+                    break;
+                if (StationFeed.ConsumeFromChests(player, shared, 1) < 1)
+                    break;
 
                 if (!nv.IsOwner())
                     nv.ClaimOwnership();
-
                 BeginSilence();
                 try
                 {
@@ -714,7 +1228,6 @@ namespace StoreAndCraft
                 }
                 added++;
             }
-
             return added > 0;
         }
 
@@ -763,6 +1276,264 @@ namespace StoreAndCraft
                 EndSilence();
             }
             return true;
+        }
+
+        private static bool FillTurretWhenEmpty(Turret turret, Player player)
+        {
+            if (turret == null || player == null || turret.m_maxAmmo <= 0)
+                return false;
+
+            int ammo = Mathf.RoundToInt(ReadNumber(TurretGetAmmo, turret));
+            if (ammo >= turret.m_maxAmmo)
+                return false;
+
+            ZNetView nv = turret.GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid())
+                return false;
+
+            bool lockType = ammo > 0;
+            Inventory inv = player.GetInventory();
+            int added = 0;
+            int need = turret.m_maxAmmo - ammo;
+
+            for (int i = 0; i < need; i++)
+            {
+                ItemDrop.ItemData local = null;
+                if (UsePlayerInventory() && inv != null && TurretFindAmmo != null)
+                {
+                    try
+                    {
+                        local = TurretFindAmmo.Invoke(turret, new object[] { inv, lockType }) as ItemDrop.ItemData;
+                    }
+                    catch
+                    {
+                        local = null;
+                    }
+                }
+
+                if (local != null)
+                {
+                    if (!InvokeWith(TurretUseItem, turret, player, local))
+                    {
+                        // Fallback: remove + RPC with prefab name.
+                        string prefab = ItemIds.PrefabName(local);
+                        if (string.IsNullOrEmpty(prefab) || !inv.RemoveOneItem(local))
+                            break;
+                        if (!nv.IsOwner())
+                            nv.ClaimOwnership();
+                        BeginSilence();
+                        try
+                        {
+                            nv.InvokeRPC("RPC_AddAmmo", prefab);
+                        }
+                        finally
+                        {
+                            EndSilence();
+                        }
+                    }
+                    added++;
+                    lockType = true;
+                    continue;
+                }
+
+                List<string> allowed = TurretAmmoSharedNames(turret, lockType);
+                if (allowed == null || allowed.Count == 0)
+                {
+                    if (added == 0)
+                        Quiet(turret, "ammo", QuietEmptySeconds);
+                    break;
+                }
+
+                if (!StationFeed.EnsureAny(player, allowed, 1))
+                {
+                    if (added == 0)
+                        Quiet(turret, "ammo", QuietEmptySeconds);
+                    break;
+                }
+
+                ItemDrop.ItemData pulled = FirstLocal(player, allowed);
+                if (pulled == null)
+                    break;
+
+                string name = ItemIds.PrefabName(pulled);
+                if (string.IsNullOrEmpty(name))
+                    name = PrefabName(pulled.m_shared != null ? pulled.m_shared.m_name : null);
+                if (string.IsNullOrEmpty(name))
+                    break;
+
+                Inventory bag = player.GetInventory();
+                if (bag == null || !bag.RemoveOneItem(pulled))
+                    break;
+
+                if (!nv.IsOwner())
+                    nv.ClaimOwnership();
+                BeginSilence();
+                try
+                {
+                    nv.InvokeRPC("RPC_AddAmmo", name);
+                }
+                finally
+                {
+                    EndSilence();
+                }
+                added++;
+                lockType = true;
+            }
+
+            return added > 0;
+        }
+
+        private static List<string> TurretAmmoSharedNames(Turret turret, bool onlyLoadedType)
+        {
+            var names = new List<string>();
+            if (turret == null)
+                return names;
+
+            if (onlyLoadedType)
+            {
+                string loaded = TurretGetAmmoType != null
+                    ? TurretGetAmmoType.Invoke(turret, null) as string
+                    : null;
+
+                if (!string.IsNullOrEmpty(loaded))
+                {
+                    // GetAmmoType returns prefab name; map to shared token when possible.
+                    GameObject go = ItemIds.PrefabFromToken(loaded);
+                    ItemDrop drop = go != null ? go.GetComponent<ItemDrop>() : null;
+                    string shared = StationFeed.SharedFrom(drop);
+                    if (!string.IsNullOrEmpty(shared))
+                        names.Add(shared);
+                    else
+                        names.Add(loaded);
+                    return names;
+                }
+            }
+
+            if (turret.m_defaultAmmo != null)
+            {
+                string shared = StationFeed.SharedFrom(turret.m_defaultAmmo);
+                if (!string.IsNullOrEmpty(shared))
+                    names.Add(shared);
+            }
+
+            if (turret.m_allowedAmmo != null)
+            {
+                for (int i = 0; i < turret.m_allowedAmmo.Count; i++)
+                {
+                    ItemDrop ammoDrop = turret.m_allowedAmmo[i].m_ammo;
+                    if (ammoDrop == null)
+                        continue;
+                    string shared = StationFeed.SharedFrom(ammoDrop);
+                    if (string.IsNullOrEmpty(shared) || names.Contains(shared))
+                        continue;
+                    names.Add(shared);
+                }
+            }
+
+            return names;
+        }
+
+        private static bool FillFoodTrayWhenEmpty(ItemStand stand, Player player)
+        {
+            if (stand == null || player == null)
+                return false;
+
+            if (IsTrue(ItemStandHaveAttachment, stand))
+                return false;
+
+            ItemDrop.ItemData local = FindLocalTrayFood(player, stand);
+            if (local != null)
+            {
+                if (InvokeWith(ItemStandUseItem, stand, player, local))
+                    return true;
+            }
+
+            List<string> foods = TrayFoodSharedNames(stand);
+            if (foods.Count == 0)
+            {
+                // Type-only trays: only bag items that CanAttach; no chest scan without a whitelist.
+                if (local == null)
+                    Quiet(stand, "tray", QuietEmptySeconds);
+                return false;
+            }
+
+            if (!StationFeed.EnsureAny(player, foods, 1))
+            {
+                Quiet(stand, "tray", QuietEmptySeconds);
+                return false;
+            }
+
+            ItemDrop.ItemData item = FirstLocal(player, foods);
+            if (item == null || !TrayCanAttach(stand, item))
+            {
+                Quiet(stand, "tray", QuietEmptySeconds);
+                return false;
+            }
+
+            return InvokeWith(ItemStandUseItem, stand, player, item);
+        }
+
+        private static List<string> TrayFoodSharedNames(ItemStand stand)
+        {
+            var names = new List<string>();
+            if (stand?.m_supportedItems == null)
+                return names;
+
+            for (int i = 0; i < stand.m_supportedItems.Count; i++)
+            {
+                ItemDrop drop = stand.m_supportedItems[i];
+                if (drop?.m_itemData?.m_shared == null)
+                    continue;
+                if (drop.m_itemData.m_shared.m_itemType != ItemDrop.ItemData.ItemType.Consumable)
+                    continue;
+                string shared = StationFeed.SharedFrom(drop);
+                if (string.IsNullOrEmpty(shared) || names.Contains(shared))
+                    continue;
+                names.Add(shared);
+            }
+
+            return names;
+        }
+
+        private static ItemDrop.ItemData FindLocalTrayFood(Player player, ItemStand stand)
+        {
+            if (!UsePlayerInventory() || player == null || stand == null)
+                return null;
+            Inventory inv = player.GetInventory();
+            if (inv == null)
+                return null;
+
+            List<ItemDrop.ItemData> all = inv.GetAllItems();
+            if (all == null)
+                return null;
+
+            for (int i = 0; i < all.Count; i++)
+            {
+                ItemDrop.ItemData item = all[i];
+                if (item?.m_shared == null)
+                    continue;
+                if (item.m_shared.m_itemType != ItemDrop.ItemData.ItemType.Consumable)
+                    continue;
+                if (TrayCanAttach(stand, item))
+                    return item;
+            }
+
+            return null;
+        }
+
+        private static bool TrayCanAttach(ItemStand stand, ItemDrop.ItemData item)
+        {
+            if (stand == null || item == null || ItemStandCanAttach == null)
+                return false;
+            try
+            {
+                object result = ItemStandCanAttach.Invoke(stand, new object[] { item });
+                return result is bool && (bool)result;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static ItemDrop.ItemData FirstLocal(Player player, List<string> sharedNames)
@@ -948,6 +1719,8 @@ namespace StoreAndCraft
             QuietUntil.Remove(id + ":fire");
             QuietUntil.Remove(id + ":food");
             QuietUntil.Remove(id + ":mead");
+            QuietUntil.Remove(id + ":ammo");
+            QuietUntil.Remove(id + ":tray");
         }
 
         private static string QuietKey(UnityEngine.Object obj, string slot)
@@ -1064,6 +1837,17 @@ namespace StoreAndCraft
             return HoveredComponent<Fermenter>();
         }
 
+        private static Turret HoveredTurret()
+        {
+            return HoveredComponent<Turret>();
+        }
+
+        private static ItemStand HoveredFoodTray()
+        {
+            ItemStand stand = HoveredComponent<ItemStand>();
+            return IsFoodServingTray(stand) ? stand : null;
+        }
+
         private static T HoveredComponent<T>() where T : Component
         {
             Player player = Player.m_localPlayer;
@@ -1119,6 +1903,28 @@ namespace StoreAndCraft
                     continue;
                 }
                 FermenterIds.Add(Fermenters[i].GetInstanceID());
+            }
+
+            TurretIds.Clear();
+            for (int i = Turrets.Count - 1; i >= 0; i--)
+            {
+                if (Turrets[i] == null)
+                {
+                    Turrets.RemoveAt(i);
+                    continue;
+                }
+                TurretIds.Add(Turrets[i].GetInstanceID());
+            }
+
+            FoodTrayIds.Clear();
+            for (int i = FoodTrays.Count - 1; i >= 0; i--)
+            {
+                if (FoodTrays[i] == null)
+                {
+                    FoodTrays.RemoveAt(i);
+                    continue;
+                }
+                FoodTrayIds.Add(FoodTrays[i].GetInstanceID());
             }
 
             if (QuietUntil.Count == 0)
@@ -1195,7 +2001,7 @@ namespace StoreAndCraft
         {
             if (__instance == null)
                 return;
-            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
+            StationAutoFill.AppendSmelterHover(ref __result, __instance);
         }
     }
 
@@ -1226,6 +2032,24 @@ namespace StoreAndCraft
         }
     }
 
+    [HarmonyPatch(typeof(Turret), "Awake")]
+    internal static class TurretAwakeAutoFillPatch
+    {
+        private static void Postfix(Turret __instance)
+        {
+            StationAutoFill.Register(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(ItemStand), "Awake")]
+    internal static class ItemStandAwakeAutoFillPatch
+    {
+        private static void Postfix(ItemStand __instance)
+        {
+            StationAutoFill.Register(__instance);
+        }
+    }
+
     [HarmonyPatch(typeof(Smelter), "OnHoverAddFuel")]
     internal static class SmelterHoverAddFuelAutoFillPatch
     {
@@ -1233,8 +2057,7 @@ namespace StoreAndCraft
         {
             if (__instance == null)
                 return;
-            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
-            StationLink.PrependHover(ref __result, StationLink.Get(__instance), chest: false);
+            StationAutoFill.AppendSmelterHover(ref __result, __instance);
         }
     }
 
@@ -1245,7 +2068,7 @@ namespace StoreAndCraft
         {
             if (__instance == null || !__instance.m_canRefill)
                 return;
-            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
+            StationAutoFill.AppendFuelStationHover(ref __result, __instance, __instance.GetComponent<ZNetView>());
         }
     }
 
@@ -1254,6 +2077,12 @@ namespace StoreAndCraft
     {
         private static void Postfix(CookingStation __instance, ref string __result)
         {
+            // Stone oven: vanilla returns "" when m_addFoodSwitch is set (food = Switch,
+            // wood = OnHoverFuelSwitch). Appending here invented a third empty-body hover.
+            if (__instance == null || __instance.m_addFoodSwitch != null)
+                return;
+            if (string.IsNullOrEmpty(__result))
+                return;
             StationAutoFill.AppendCookingHover(ref __result, __instance);
         }
     }
@@ -1293,7 +2122,29 @@ namespace StoreAndCraft
         {
             if (__instance == null)
                 return;
-            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>());
+            StationAutoFill.AppendFuelStationHover(ref __result, __instance, __instance.GetComponent<ZNetView>());
+        }
+    }
+
+    [HarmonyPatch(typeof(Turret), nameof(Turret.GetHoverText))]
+    internal static class TurretHoverAutoFillPatch
+    {
+        private static void Postfix(Turret __instance, ref string __result)
+        {
+            if (__instance == null)
+                return;
+            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>(), includeManualFill: false);
+        }
+    }
+
+    [HarmonyPatch(typeof(ItemStand), nameof(ItemStand.GetHoverText))]
+    internal static class ItemStandHoverAutoFillPatch
+    {
+        private static void Postfix(ItemStand __instance, ref string __result)
+        {
+            if (__instance == null || !StationAutoFill.IsFoodServingTray(__instance))
+                return;
+            StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>(), includeManualFill: false);
         }
     }
 }

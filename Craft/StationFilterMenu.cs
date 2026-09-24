@@ -2,38 +2,65 @@ using System.Collections.Generic;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Multi-select SkillsDialog UI: toggle which Smelter/kiln inputs may be
-    /// auto-pulled from chests. Same visual language as Storage Display type menu.
+    /// Chest pull filter — centered panel_left chrome (same assets as Select Types left panel).
+    /// Link l1–l9 grid stays bottom-left on the panel.
     /// </summary>
     internal static class StationFilterMenu
     {
         public static bool IsOpen { get; private set; }
 
+        private const float RefW = 1920f;
+        private const float RefH = 1080f;
+        private const float PanelW = 552f;
+        private const float PanelH = 887f;
+
+        private const float InsetL = 40f;
+        private const float InsetT = 74f;
+        private const float InsetR = 32f;
+        private const float InsetB = 93f;
+        private const float ClipL = 48f;
+        private const float ClipT = 86f;
+        private const float ClipR = 40f;
+        private const float ClipB = 105f;
+        private const float ContentPad = 12f;
+
+        private const float RowW = 400f;
+        private const float RowH = 54f;
+        private const float RowGap = 8f;
+        private const float RowPadL = 16f;
+        private const float ToggleW = 36f;
+        private const float ToggleH = 18f;
+        private const float ApplyW = 140f;
+        private const float ApplyH = 38f;
+        private const float LetterSpace = 14f;
+        private const float RowFont = 22f;
+        private const float ApplyFont = 20f;
+        private const float HeaderFont = 22f;
+
+        private static readonly Color Gold = new Color(0.925f, 0.77f, 0.29f, 1f);
+        private static readonly Color Muted = new Color(0.70f, 0.64f, 0.52f, 1f);
+        private static readonly Color OnGreen = new Color(0.45f, 0.95f, 0.45f, 1f);
+        private static readonly Color OffRed = new Color(1f, 0.45f, 0.4f, 1f);
+
         private static Smelter _smelter;
         private static CookingStation _cook;
-        private static SkillsDialog _skills;
-        private static bool _skillsWasEnabled;
-        private static bool _openedInventory;
+        private static Fermenter _fermenter;
+        private static Fireplace _fire;
         private static float _openedAt;
         private static int _suppressMenuFrame;
-        private static readonly List<GameObject> _rows = new List<GameObject>();
-        private static readonly List<GameObject> _hiddenVanilla = new List<GameObject>();
-        private static readonly List<TMP_Text> _titleTexts = new List<TMP_Text>();
-        private static readonly List<string> _titleBackup = new List<string>();
-        private static readonly List<bool> _titleLocalize = new List<bool>();
         private static bool _closing;
+
+        private static GameObject _root;
+        private static RectTransform _listContent;
+        private static ScrollRect _listScroll;
         private static GameObject _linkGrid;
-        private static Button _footerButton;
-        private static bool _footerButtonAdded;
-        private static readonly List<TMP_Text> _footerTexts = new List<TMP_Text>();
-        private static readonly List<string> _footerTextBackups = new List<string>();
-        private static readonly List<bool> _footerLocalize = new List<bool>();
-        private static readonly List<bool> _footerRaycast = new List<bool>();
+        private static RectTransform _panelRt;
 
         public static bool AnySkillsMenuOpen
         {
@@ -42,50 +69,57 @@ namespace StoreAndCraft
 
         public static void Open(Smelter smelter)
         {
-            OpenInternal(smelter, null);
+            OpenInternal(smelter, null, null, null);
         }
 
         public static void Open(CookingStation cook)
         {
-            OpenInternal(null, cook);
+            OpenInternal(null, cook, null, null);
         }
 
-        private static void OpenInternal(Smelter smelter, CookingStation cook)
+        public static void Open(Fermenter fermenter)
         {
-            if ((smelter == null && cook == null) || Player.m_localPlayer == null)
-                return;
+            OpenInternal(null, null, fermenter, null);
+        }
 
-            InventoryGui gui = InventoryGui.instance;
-            if (gui == null || gui.m_skillsDialog == null)
+        public static void Open(Fireplace fire)
+        {
+            OpenInternal(null, null, null, fire);
+        }
+
+        private static void OpenInternal(
+            Smelter smelter,
+            CookingStation cook,
+            Fermenter fermenter,
+            Fireplace fire)
+        {
+            if ((smelter == null && cook == null && fermenter == null && fire == null)
+                || Player.m_localPlayer == null)
                 return;
 
             if (DisplayTypeMenu.IsOpen)
                 DisplayTypeMenu.Close();
             if (DisplayRangeMenu.IsOpen)
                 DisplayRangeMenu.Close();
+            if (DisplaySmallOptions.IsOpen)
+                DisplaySmallOptions.Close();
             if (IsOpen)
                 Close();
 
+            if (InventoryGui.instance != null && InventoryGui.IsVisible())
+                InventoryGui.instance.Hide();
+
             _smelter = smelter;
             _cook = cook;
-            _skills = gui.m_skillsDialog;
+            _fermenter = fermenter;
+            _fire = fire;
             _openedAt = Time.unscaledTime;
-            _openedInventory = false;
-            _skillsWasEnabled = _skills.enabled;
-            _skills.enabled = false;
 
-            GameObject panel = _skills.gameObject;
-            panel.SetActive(true);
-            if (!panel.activeInHierarchy)
-            {
-                gui.Show(null, 0);
-                _openedInventory = true;
-                panel.SetActive(true);
-            }
-
-            panel.transform.SetAsLastSibling();
-            HideVanillaRows();
-            ApplyTitle();
+            UiFonts.ThinNorse();
+            EnsureRoot();
+            if (_root == null)
+                return;
+            _root.SetActive(true);
             RebuildRows();
             IsOpen = true;
         }
@@ -97,31 +131,13 @@ namespace StoreAndCraft
             _closing = true;
             try
             {
-                bool wasOpen = IsOpen;
-                bool openedInv = _openedInventory;
-                SkillsDialog skills = _skills;
                 IsOpen = false;
-                _openedInventory = false;
                 _smelter = null;
                 _cook = null;
+                _fermenter = null;
+                _fire = null;
                 _suppressMenuFrame = Time.frameCount;
-
-                ClearOurRows();
-                DestroyLinkGrid();
-                UnbindFooterDone();
-                RestoreVanillaRows();
-                RestoreTitle();
-
-                if (skills != null)
-                {
-                    skills.enabled = _skillsWasEnabled;
-                    if (skills.gameObject.activeSelf)
-                        skills.OnClose();
-                }
-                _skills = null;
-
-                if (wasOpen && openedInv && InventoryGui.instance != null)
-                    InventoryGui.instance.Hide();
+                DestroyRoot();
             }
             finally
             {
@@ -141,6 +157,18 @@ namespace StoreAndCraft
                 Close();
         }
 
+        public static void CloseIf(Fermenter fermenter)
+        {
+            if (IsOpen && _fermenter == fermenter)
+                Close();
+        }
+
+        public static void CloseIf(Fireplace fire)
+        {
+            if (IsOpen && _fire == fire)
+                Close();
+        }
+
         public static bool ShouldBlockPause()
         {
             return IsOpen || Time.frameCount == _suppressMenuFrame;
@@ -150,23 +178,17 @@ namespace StoreAndCraft
         {
             if (!IsOpen)
                 return;
-            if ((_smelter == null && _cook == null) || _skills == null || Player.m_localPlayer == null)
+            if ((_smelter == null && _cook == null && _fermenter == null && _fire == null)
+                || Player.m_localPlayer == null)
             {
                 Close();
                 return;
             }
 
-            if (Time.unscaledTime < _openedAt + 0.2f)
+            if (Time.unscaledTime < _openedAt + 0.15f)
                 return;
             if (ZInput.GetKeyDown(KeyCode.Escape, true) || ZInput.GetButtonDown("JoyButtonB"))
                 Close();
-        }
-
-        internal static void OnSkillsClosed(SkillsDialog dialog)
-        {
-            if (!IsOpen || _closing || dialog == null || dialog != _skills)
-                return;
-            Close();
         }
 
         private static void Toggle(string shared)
@@ -184,21 +206,23 @@ namespace StoreAndCraft
                 StationPullFilter.SetDenied(_cook, shared, nowDenied);
             }
             else
-            {
                 return;
-            }
-            RebuildRows();
+            RebuildRows(preserveScroll: true);
         }
 
         private static void SetLink(int linkId)
         {
-            Component station = (Component)_smelter ?? _cook;
+            Component station = ActiveStation();
             if (station == null)
                 return;
-            // Same id again clears (uncheck).
             StationLink.Toggle(station, linkId);
             if (_linkGrid != null)
                 UiLinkGrid.RefreshSelection(_linkGrid, StationLink.Get(station));
+        }
+
+        private static Component ActiveStation()
+        {
+            return (Component)_smelter ?? _cook ?? (Component)_fermenter ?? _fire;
         }
 
         private static void AllowAll()
@@ -209,561 +233,390 @@ namespace StoreAndCraft
                 StationPullFilter.Clear(_cook);
             else
                 return;
-            RebuildRows();
+            RebuildRows(preserveScroll: true);
         }
 
-        private static void HideVanillaRows()
+        private static void EnsureRoot()
         {
-            _hiddenVanilla.Clear();
-            if (_skills == null || _skills.m_listRoot == null)
-                return;
-            for (int i = 0; i < _skills.m_listRoot.childCount; i++)
-            {
-                GameObject child = _skills.m_listRoot.GetChild(i).gameObject;
-                if (!child.activeSelf)
-                    continue;
-                child.SetActive(false);
-                _hiddenVanilla.Add(child);
-            }
-        }
-
-        private static void RestoreVanillaRows()
-        {
-            for (int i = 0; i < _hiddenVanilla.Count; i++)
-            {
-                GameObject row = _hiddenVanilla[i];
-                if (row != null)
-                    row.SetActive(true);
-            }
-            _hiddenVanilla.Clear();
-        }
-
-        private static void ClearOurRows()
-        {
-            for (int i = 0; i < _rows.Count; i++)
-            {
-                if (_rows[i] != null)
-                    Object.Destroy(_rows[i]);
-            }
-            _rows.Clear();
-        }
-
-        private static void DestroyLinkGrid()
-        {
-            if (_linkGrid != null)
-            {
-                Object.Destroy(_linkGrid);
-                _linkGrid = null;
-            }
-        }
-
-        private static void RefreshLinkGrid()
-        {
-            Component station = (Component)_smelter ?? _cook;
-            int currentLink = StationLink.Get(station);
-            if (_linkGrid == null)
-                BuildLinkGrid(currentLink);
-            else
-                UiLinkGrid.RefreshSelection(_linkGrid, currentLink);
-        }
-
-        private static Transform LinkGridHost()
-        {
-            if (_skills == null)
-                return null;
-            // Same chrome as the bottom "Chest pull filter" label — not the scroll list.
-            if (_skills.m_totalSkillText != null && _skills.m_totalSkillText.transform.parent != null)
-                return _skills.m_totalSkillText.transform.parent;
-            if (_skills.m_listRoot != null && _skills.m_listRoot.parent != null)
-                return _skills.m_listRoot.parent;
-            return _skills.transform;
-        }
-
-        private static void BuildLinkGrid(int currentLink)
-        {
-            DestroyLinkGrid();
-            Transform host = LinkGridHost();
-            if (host == null)
+            if (_root != null)
                 return;
 
-            _linkGrid = UiLinkGrid.Build(host, "SAC_StationLinks", currentLink, id => SetLink(id));
+            _root = new GameObject("SAC_StationFilter", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            Object.DontDestroyOnLoad(_root);
+            Canvas canvas = _root.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 1000;
+            CanvasScaler scaler = _root.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(RefW, RefH);
+            scaler.matchWidthOrHeight = 0.5f;
+
+            var dim = new GameObject("Dim", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            dim.transform.SetParent(_root.transform, false);
+            Stretch(dim.transform as RectTransform);
+            Image dimImg = dim.GetComponent<Image>();
+            dimImg.color = new Color(0f, 0f, 0f, 0.55f);
+            dimImg.raycastTarget = true;
+            dim.GetComponent<Button>().transition = Selectable.Transition.None;
+            dim.GetComponent<Button>().onClick.AddListener(Close);
+
+            var host = new GameObject("Host", typeof(RectTransform));
+            host.transform.SetParent(_root.transform, false);
+            RectTransform hostRt = host.transform as RectTransform;
+            hostRt.anchorMin = hostRt.anchorMax = new Vector2(0.5f, 0.5f);
+            hostRt.pivot = new Vector2(0.5f, 0.5f);
+            hostRt.sizeDelta = new Vector2(RefW, RefH);
+            hostRt.anchoredPosition = Vector2.zero;
+
+            BuildPanel(hostRt);
+        }
+
+        private static void DestroyRoot()
+        {
+            _listContent = null;
+            _listScroll = null;
+            _linkGrid = null;
+            _panelRt = null;
+            if (_root != null)
+            {
+                Object.Destroy(_root);
+                _root = null;
+            }
+        }
+
+        private static void BuildPanel(RectTransform host)
+        {
+            var panel = new GameObject("PanelLeft", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            panel.transform.SetParent(host, false);
+            _panelRt = panel.transform as RectTransform;
+            // Center the left panel on the 1920×1080 host.
+            _panelRt.anchorMin = _panelRt.anchorMax = new Vector2(0.5f, 0.5f);
+            _panelRt.pivot = new Vector2(0.5f, 0.5f);
+            _panelRt.sizeDelta = new Vector2(PanelW, PanelH);
+            _panelRt.anchoredPosition = Vector2.zero;
+            ApplySprite(_panelRt.GetComponent<Image>(), UiAssets.PanelLeft, Color.white);
+
+            PlaceInsetBg(_panelRt, UiAssets.PanelLeftInset, InsetL, InsetT, InsetR, InsetB);
+            PlaceHeader(_panelRt, Loc.T("Chest pull filter", "Chest pull filter"));
+
+            var scrollGo = new GameObject("ListScroll", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(ScrollRect));
+            scrollGo.transform.SetParent(_panelRt, false);
+            RectTransform scrollRt = scrollGo.transform as RectTransform;
+            scrollRt.anchorMin = Vector2.zero;
+            scrollRt.anchorMax = Vector2.one;
+            scrollRt.offsetMin = new Vector2(ClipL + ContentPad, ClipB + ContentPad);
+            scrollRt.offsetMax = new Vector2(-(ClipR + ContentPad), -(ClipT + ContentPad));
+            Image scrollBg = scrollGo.GetComponent<Image>();
+            scrollBg.color = new Color(0f, 0f, 0f, 0f);
+            scrollBg.raycastTarget = true;
+
+            var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(RectMask2D));
+            viewport.transform.SetParent(scrollRt, false);
+            RectTransform vpRt = viewport.transform as RectTransform;
+            Stretch(vpRt);
+            Image vpImg = viewport.GetComponent<Image>();
+            vpImg.color = new Color(1f, 1f, 1f, 0f);
+            vpImg.raycastTarget = true;
+
+            var content = new GameObject("Content", typeof(RectTransform));
+            content.transform.SetParent(vpRt, false);
+            _listContent = content.transform as RectTransform;
+            _listContent.anchorMin = new Vector2(0f, 1f);
+            _listContent.anchorMax = new Vector2(1f, 1f);
+            _listContent.pivot = new Vector2(0.5f, 1f);
+            _listContent.anchoredPosition = Vector2.zero;
+            _listContent.sizeDelta = Vector2.zero;
+
+            _listScroll = scrollGo.GetComponent<ScrollRect>();
+            _listScroll.viewport = vpRt;
+            _listScroll.content = _listContent;
+            _listScroll.horizontal = false;
+            _listScroll.vertical = true;
+            _listScroll.movementType = ScrollRect.MovementType.Clamped;
+            _listScroll.scrollSensitivity = 360f;
+            _listScroll.inertia = true;
+            _listScroll.verticalScrollbar = null;
+
+            // Apply / Done — same spot as Select Types.
+            var apply = new GameObject("Apply", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            apply.transform.SetParent(_panelRt, false);
+            RectTransform applyRt = apply.transform as RectTransform;
+            applyRt.anchorMin = applyRt.anchorMax = new Vector2(0.5f, 0f);
+            applyRt.pivot = new Vector2(0.5f, 0f);
+            applyRt.anchoredPosition = new Vector2(0f, 44f);
+            applyRt.sizeDelta = new Vector2(ApplyW, ApplyH);
+            ApplySprite(apply.GetComponent<Image>(), UiAssets.BtnApply, Color.white);
+            Button applyBtn = apply.GetComponent<Button>();
+            applyBtn.transition = Selectable.Transition.None;
+            applyBtn.onClick.AddListener(Close);
+
+            var applyTextGo = new GameObject("Text", typeof(RectTransform));
+            applyTextGo.transform.SetParent(apply.transform, false);
+            Stretch(applyTextGo.transform as RectTransform);
+            TextMeshProUGUI applyTmp = UiFonts.CreateLabel(applyTextGo, ApplyFont);
+            StyleLabel(applyTmp, ApplyFont, LetterSpace);
+            applyTmp.alignment = TextAlignmentOptions.Center;
+            applyTmp.color = Gold;
+            applyTmp.text = Loc.T("Apply", "Apply");
+
+            // Link buttons — same size/art, bottom-left of this panel (same relative spot as before).
+            BuildLinkGrid();
+        }
+
+        private static void BuildLinkGrid()
+        {
+            if (_panelRt == null)
+                return;
+            Component station = ActiveStation();
+            int current = StationLink.Get(station);
+            _linkGrid = UiLinkGrid.Build(_panelRt, "SAC_StationLinks", current, id => SetLink(id));
             RectTransform rt = _linkGrid.transform as RectTransform;
             rt.anchorMin = new Vector2(0f, 0f);
             rt.anchorMax = new Vector2(0f, 0f);
             rt.pivot = new Vector2(0f, 0f);
-            // Bottom-left of the parchment, beside the footer label (see mockup).
             rt.anchoredPosition = new Vector2(14f, 10f);
             rt.SetAsLastSibling();
         }
 
-        private static void BindFooterDone()
+        private static void RebuildRows(bool preserveScroll = false)
         {
-            if (_skills == null)
+            EnsureRoot();
+            if (_listContent == null)
                 return;
 
-            string done = Loc.T("Done", "Fertig");
-            string title = Loc.T("Chest pull filter", "Truhen-Zug Filter");
-            CollectFooterTexts();
+            float scrollPos = _listScroll != null ? _listScroll.verticalNormalizedPosition : 1f;
+            ClearContent(_listContent);
 
-            // Demote every non-header copy of the filter title to Done (bottom button).
-            Transform listRoot = _skills.m_listRoot;
-            TMP_Text header = null;
-            float headerY = float.NegativeInfinity;
-            TMP_Text[] texts = _skills.GetComponentsInChildren<TMP_Text>(true);
-            for (int i = 0; i < texts.Length; i++)
-            {
-                TMP_Text tmp = texts[i];
-                if (tmp == null)
-                    continue;
-                if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
-                    continue;
-                if (tmp.text != title && !_titleTexts.Contains(tmp))
-                    continue;
-                float y = tmp.transform.position.y;
-                if (y > headerY)
-                {
-                    headerY = y;
-                    header = tmp;
-                }
-            }
-
-            for (int i = 0; i < texts.Length; i++)
-            {
-                TMP_Text tmp = texts[i];
-                if (tmp == null || tmp == header)
-                    continue;
-                if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
-                    continue;
-                bool match = tmp == _skills.m_totalSkillText
-                    || tmp.text == title
-                    || IsFooterText(tmp, listRoot);
-                if (!match)
-                    continue;
-                if (!_footerTexts.Contains(tmp))
-                {
-                    Component localize = tmp.GetComponent("Localize");
-                    bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
-                    if (hadLocalize)
-                        ((MonoBehaviour)localize).enabled = false;
-                    _footerTexts.Add(tmp);
-                    _footerTextBackups.Add(tmp.text ?? "");
-                    _footerLocalize.Add(hadLocalize);
-                    _footerRaycast.Add(tmp.raycastTarget);
-                }
-            }
-
-            for (int i = 0; i < _footerTexts.Count; i++)
-            {
-                TMP_Text tmp = _footerTexts[i];
-                if (tmp == null || tmp == header)
-                    continue;
-                tmp.text = done;
-            }
-
-            TMP_Text primary = null;
-            for (int i = 0; i < _footerTexts.Count; i++)
-            {
-                if (_footerTexts[i] != null && _footerTexts[i] != header)
-                {
-                    primary = _footerTexts[i];
-                    break;
-                }
-            }
-            if (primary == null)
-                primary = _skills.m_totalSkillText;
-            if (primary == null)
-                return;
-
-            if (_footerButton == null)
-            {
-                _footerButton = primary.GetComponentInParent<Button>();
-                if (_footerButton == null)
-                {
-                    primary.raycastTarget = true;
-                    _footerButton = primary.gameObject.GetComponent<Button>();
-                    if (_footerButton == null)
-                    {
-                        _footerButton = primary.gameObject.AddComponent<Button>();
-                        _footerButton.transition = Selectable.Transition.None;
-                        _footerButtonAdded = true;
-                    }
-                }
-            }
-
-            _footerButton.onClick.RemoveListener(OnFooterDone);
-            _footerButton.onClick.AddListener(OnFooterDone);
-
-            UIInputHandler input = _footerButton.GetComponent<UIInputHandler>()
-                ?? _footerButton.GetComponentInChildren<UIInputHandler>(true)
-                ?? primary.GetComponentInParent<UIInputHandler>();
-            if (input != null)
-                input.m_onLeftClick = go => OnFooterDone();
-        }
-
-        private static void CollectFooterTexts()
-        {
-            if (_footerTexts.Count > 0 || _skills == null)
-                return;
-
-            Transform listRoot = _skills.m_listRoot;
-            TMP_Text[] texts = _skills.GetComponentsInChildren<TMP_Text>(true);
-            for (int i = 0; i < texts.Length; i++)
-            {
-                TMP_Text tmp = texts[i];
-                if (tmp == null || !IsFooterText(tmp, listRoot))
-                    continue;
-
-                Component localize = tmp.GetComponent("Localize");
-                bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
-                if (hadLocalize)
-                    ((MonoBehaviour)localize).enabled = false;
-
-                _footerTexts.Add(tmp);
-                _footerTextBackups.Add(tmp.text ?? "");
-                _footerLocalize.Add(hadLocalize);
-                _footerRaycast.Add(tmp.raycastTarget);
-            }
-
-            // Always include total skill text even if heuristics miss it.
-            if (_skills.m_totalSkillText != null && !_footerTexts.Contains(_skills.m_totalSkillText))
-            {
-                TMP_Text tmp = _skills.m_totalSkillText;
-                Component localize = tmp.GetComponent("Localize");
-                bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
-                if (hadLocalize)
-                    ((MonoBehaviour)localize).enabled = false;
-                _footerTexts.Add(tmp);
-                _footerTextBackups.Add(tmp.text ?? "");
-                _footerLocalize.Add(hadLocalize);
-                _footerRaycast.Add(tmp.raycastTarget);
-            }
-        }
-
-        private static bool IsFooterText(TMP_Text tmp, Transform listRoot)
-        {
-            if (tmp == null)
-                return false;
-            if (_skills != null && tmp == _skills.m_totalSkillText)
-                return true;
-            if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
-                return false;
-
-            RectTransform rt = tmp.rectTransform;
-            if (rt != null && rt.anchorMax.y <= 0.35f && rt.anchorMin.y <= 0.35f)
-                return true;
-
-            string n = tmp.gameObject.name.ToLowerInvariant();
-            if (n.Contains("total") || n.Contains("ok") || n.Contains("close") || n.Contains("done"))
-                return true;
-
-            // World-space: anything in the bottom band of the skills panel (the brown Done button).
-            if (IsInBottomBand(tmp))
-                return true;
-
-            return false;
-        }
-
-        private static bool IsInBottomBand(TMP_Text tmp)
-        {
-            if (_skills == null || tmp == null)
-                return false;
-            RectTransform skillsRt = _skills.transform as RectTransform;
-            RectTransform rt = tmp.rectTransform;
-            if (skillsRt == null || rt == null)
-                return false;
-
-            Vector3[] sc = new Vector3[4];
-            Vector3[] tc = new Vector3[4];
-            skillsRt.GetWorldCorners(sc);
-            rt.GetWorldCorners(tc);
-            float midY = (tc[0].y + tc[1].y) * 0.5f;
-            float bottom = sc[0].y;
-            float top = sc[1].y;
-            float span = top - bottom;
-            if (span < 0.01f)
-                return false;
-            float t = (midY - bottom) / span;
-            return t < 0.30f;
-        }
-
-        private static void OnFooterDone()
-        {
-            Close();
-        }
-
-        private static void UnbindFooterDone()
-        {
-            if (_footerButton != null)
-            {
-                _footerButton.onClick.RemoveListener(OnFooterDone);
-                UIInputHandler input = _footerButton.GetComponent<UIInputHandler>()
-                    ?? _footerButton.GetComponentInChildren<UIInputHandler>(true);
-                if (input != null)
-                    input.m_onLeftClick = null;
-
-                if (_footerButtonAdded)
-                {
-                    Object.Destroy(_footerButton);
-                    _footerButtonAdded = false;
-                }
-                _footerButton = null;
-            }
-
-            for (int i = 0; i < _footerTexts.Count; i++)
-            {
-                TMP_Text tmp = _footerTexts[i];
-                if (tmp == null)
-                    continue;
-                if (i < _footerTextBackups.Count)
-                    tmp.text = _footerTextBackups[i];
-                if (i < _footerRaycast.Count)
-                    tmp.raycastTarget = _footerRaycast[i];
-                if (i < _footerLocalize.Count && _footerLocalize[i])
-                {
-                    Component localize = tmp.GetComponent("Localize");
-                    if (localize is MonoBehaviour mb)
-                        mb.enabled = true;
-                }
-            }
-            _footerTexts.Clear();
-            _footerTextBackups.Clear();
-            _footerLocalize.Clear();
-            _footerRaycast.Clear();
-        }
-
-        private static void RebuildRows()
-        {
-            if (_skills == null || _skills.m_elementPrefab == null || _skills.m_listRoot == null)
-                return;
-
-            ClearOurRows();
             List<string> choices = _cook != null
                 ? StationPullFilter.FoodChoices(_cook)
                 : (_smelter != null ? StationPullFilter.OreChoices(_smelter) : new List<string>());
 
-            // Ore/food rows + Allow all. Footer button is Done; link grid sits beside it.
-            int count = choices.Count + 1;
             int rowIndex = 0;
+            Component station = ActiveStation();
+            // Remote Automation toggle hidden while RemoteUiExposed is false.
+            if (RemoteAutomation.UiExposed)
+            {
+                bool remoteOn = RemoteAutomation.IsOn(station);
+                AddToggleRow(
+                    rowIndex++,
+                    Loc.T("Remote Automation", "Remote Automation"),
+                    remoteOn,
+                    ToggleRemote);
+            }
 
             for (int i = 0; i < choices.Count; i++)
             {
-                GameObject row = SpawnRow(rowIndex++);
                 string shared = choices[i];
                 bool allowed = _cook != null
                     ? StationPullFilter.IsAllowed(_cook, shared)
                     : StationPullFilter.IsAllowed(_smelter, shared);
-                string mark = allowed ? "[+]" : "[-]";
                 string label = StationPullFilter.DisplayName(shared);
-                BindToggleRow(row, shared, mark + "  " + label, allowed);
-                _rows.Add(row);
+                string captured = shared;
+                AddToggleRow(rowIndex++, label, allowed, () => Toggle(captured));
             }
 
-            {
-                GameObject row = SpawnRow(rowIndex++);
-                BindActionRow(row, Loc.T("Allow all inputs", "Alle Inputs erlauben"), AllowAll);
-                _rows.Add(row);
-            }
+            if (_smelter != null || _cook != null)
+                AddActionRow(rowIndex++, Loc.T("Allow all inputs", "Allow all inputs"), AllowAll);
 
-            float height = Mathf.Max(_skills.m_listRoot.rect.height, count * _skills.m_spacing);
-            _skills.m_listRoot.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+            _listContent.sizeDelta = new Vector2(0f, rowIndex * (RowH + RowGap) + 4f);
+            if (_listScroll != null)
+                _listScroll.verticalNormalizedPosition = preserveScroll ? scrollPos : 1f;
 
-            RefreshLinkGrid();
-            BindFooterDone();
+            if (_linkGrid != null)
+                UiLinkGrid.RefreshSelection(_linkGrid, StationLink.Get(station));
+            else
+                BuildLinkGrid();
         }
 
-        private static GameObject SpawnRow(int index)
+        private static void ToggleRemote()
         {
-            GameObject row = Object.Instantiate(
-                _skills.m_elementPrefab,
-                Vector3.zero,
-                Quaternion.identity,
-                _skills.m_listRoot);
-            row.SetActive(true);
+            Component station = ActiveStation();
+            if (station == null)
+                return;
+            RemoteAutomation.Toggle(station);
+            RebuildRows(preserveScroll: true);
+        }
+
+        private static void AddToggleRow(int index, string label, bool on, UnityAction onToggle)
+        {
+            var row = new GameObject("Row" + index, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            row.transform.SetParent(_listContent, false);
             RectTransform rt = row.transform as RectTransform;
-            if (rt != null)
-                rt.anchoredPosition = new Vector2(0f, -index * _skills.m_spacing);
-            return row;
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 1f);
+            rt.sizeDelta = new Vector2(RowW, RowH);
+            rt.anchoredPosition = new Vector2(RowPadL, -index * (RowH + RowGap));
+
+            Sprite rowSp = on ? UiAssets.RawCategoryFocus : UiAssets.RawCategory;
+            Image rowImg = row.GetComponent<Image>();
+            if (rowSp != null)
+            {
+                rowImg.sprite = rowSp;
+                rowImg.type = Image.Type.Simple;
+                rowImg.preserveAspect = false;
+                rowImg.color = Color.white;
+            }
+            else
+            {
+                rowImg.color = new Color(0.2f, 0.15f, 0.1f, 0.9f);
+            }
+            rowImg.raycastTarget = true;
+
+            var labelGo = new GameObject("Label", typeof(RectTransform));
+            labelGo.transform.SetParent(rt, false);
+            RectTransform labelRt = labelGo.transform as RectTransform;
+            labelRt.anchorMin = Vector2.zero;
+            labelRt.anchorMax = Vector2.one;
+            labelRt.offsetMin = new Vector2(36f, 2f);
+            labelRt.offsetMax = new Vector2(-(ToggleW + 36f), -2f);
+            TextMeshProUGUI tmp = UiFonts.CreateLabel(labelGo, RowFont);
+            StyleLabel(tmp, RowFont, LetterSpace);
+            tmp.alignment = TextAlignmentOptions.MidlineLeft;
+            tmp.color = on ? OnGreen : OffRed;
+            tmp.text = label;
+
+            GameObject toggle = UiToggle.Create(
+                rt, "Toggle", on, true, onToggle, UiFonts.ThinNorse(),
+                ToggleW, ToggleH);
+            RectTransform togRt = toggle.transform as RectTransform;
+            togRt.anchorMin = new Vector2(1f, 0.5f);
+            togRt.anchorMax = new Vector2(1f, 0.5f);
+            togRt.pivot = new Vector2(1f, 0.5f);
+            togRt.anchoredPosition = new Vector2(-28f, 0f);
+            togRt.sizeDelta = new Vector2(ToggleW, ToggleH);
+            Image togImg = toggle.GetComponent<Image>();
+            if (togImg != null)
+                togImg.preserveAspect = true;
+            togRt.SetAsLastSibling();
         }
 
-        private static void BindToggleRow(GameObject row, string shared, string label, bool allowed)
+        private static void AddActionRow(int index, string label, UnityAction action)
         {
-            Transform t = row.transform;
-            SetChildText(t, "name", label, allowed ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
-            SetChildText(t, "leveltext", allowed ? "ON" : "OFF", allowed ? new Color(0.45f, 0.95f, 0.45f, 1f) : new Color(1f, 0.45f, 0.4f, 1f));
-            StripSkillChrome(t);
+            var row = new GameObject("Action" + index, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            row.transform.SetParent(_listContent, false);
+            RectTransform rt = row.transform as RectTransform;
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 1f);
+            rt.sizeDelta = new Vector2(RowW, RowH);
+            rt.anchoredPosition = new Vector2(RowPadL, -index * (RowH + RowGap));
 
-            Button button = EnsureButton(row);
-            string captured = shared;
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(() => Toggle(captured));
+            Image rowImg = row.GetComponent<Image>();
+            if (UiAssets.RawCategory != null)
+            {
+                rowImg.sprite = UiAssets.RawCategory;
+                rowImg.type = Image.Type.Simple;
+                rowImg.color = Color.white;
+            }
+            else
+            {
+                rowImg.color = new Color(0.2f, 0.15f, 0.1f, 0.9f);
+            }
+            rowImg.raycastTarget = true;
 
-            UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
-            if (input != null)
-                input.m_onLeftClick = go => Toggle(captured);
+            Button btn = row.GetComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.onClick.AddListener(action);
+
+            var labelGo = new GameObject("Label", typeof(RectTransform));
+            labelGo.transform.SetParent(rt, false);
+            Stretch(labelGo.transform as RectTransform);
+            RectTransform labelRt = labelGo.transform as RectTransform;
+            labelRt.offsetMin = new Vector2(36f, 2f);
+            labelRt.offsetMax = new Vector2(-16f, -2f);
+            TextMeshProUGUI tmp = UiFonts.CreateLabel(labelGo, RowFont);
+            StyleLabel(tmp, RowFont, LetterSpace);
+            tmp.alignment = TextAlignmentOptions.MidlineLeft;
+            tmp.color = Gold;
+            tmp.text = label;
         }
 
-        private static void BindActionRow(GameObject row, string label, UnityEngine.Events.UnityAction action)
+        private static void PlaceInsetBg(RectTransform panel, Sprite sprite, float padL, float padT, float padR, float padB)
         {
-            Transform t = row.transform;
-            Color accent = new Color(1f, 0.85f, 0.4f, 1f);
-            SetChildText(t, "name", label, accent);
-            SetChildText(t, "leveltext", "", Color.white);
-            StripSkillChrome(t);
-
-            Button button = EnsureButton(row);
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(action);
-
-            UIInputHandler input = row.GetComponent<UIInputHandler>() ?? row.GetComponentInChildren<UIInputHandler>(true);
-            if (input != null)
-                input.m_onLeftClick = go => action();
-        }
-
-        /// <summary>
-        /// Skills rows ship with an empty icon slot (square). Hide bars/icons so only the name remains.
-        /// </summary>
-        private static void StripSkillChrome(Transform root)
-        {
-            HideChild(root, "bonustext");
-            HideChild(root, "levelbar");
-            HideChild(root, "levelbar_total");
-            HideChild(root, "currentlevel");
-            HideChild(root, "icon");
-
-            if (root == null)
+            if (sprite == null)
                 return;
-
-            Transform[] all = root.GetComponentsInChildren<Transform>(true);
-            for (int i = 0; i < all.Length; i++)
-            {
-                Transform child = all[i];
-                if (child == null || child == root)
-                    continue;
-
-                string n = child.gameObject.name.ToLowerInvariant();
-                // Empty skill icon / icon frame shows as a square slot beside the name.
-                if (!(n.Contains("icon") || n.Contains("skillicon") || n.EndsWith("_icon")))
-                    continue;
-                if (child.GetComponent<TMP_Text>() != null)
-                    continue;
-                child.gameObject.SetActive(false);
-            }
+            var go = new GameObject("Inset", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(panel, false);
+            RectTransform rt = go.transform as RectTransform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = new Vector2(padL, padB);
+            rt.offsetMax = new Vector2(-padR, -padT);
+            Image img = go.GetComponent<Image>();
+            img.sprite = sprite;
+            img.type = Image.Type.Sliced;
+            img.color = Color.white;
+            img.raycastTarget = false;
         }
 
-        private static Button EnsureButton(GameObject row)
+        private static void PlaceHeader(RectTransform panel, string text)
         {
-            Button button = row.GetComponent<Button>() ?? row.GetComponentInChildren<Button>(true);
-            if (button != null)
-                return button;
-            if (row.GetComponent<Image>() == null)
-            {
-                Image bg = row.AddComponent<Image>();
-                bg.color = new Color(0f, 0f, 0f, 0.01f);
-            }
-            return row.AddComponent<Button>();
-        }
-
-        private static void ApplyTitle()
-        {
-            CacheTitles();
-            string title = Loc.T("Chest pull filter", "Truhen-Zug Filter");
-            for (int i = 0; i < _titleTexts.Count; i++)
-            {
-                TMP_Text tmp = _titleTexts[i];
-                if (tmp != null)
-                    tmp.text = title;
-            }
-        }
-
-        private static void RestoreTitle()
-        {
-            for (int i = 0; i < _titleTexts.Count && i < _titleBackup.Count; i++)
-            {
-                TMP_Text tmp = _titleTexts[i];
-                if (tmp != null)
-                    tmp.text = _titleBackup[i];
-                if (i < _titleLocalize.Count && _titleLocalize[i] && tmp != null)
-                {
-                    Component localize = tmp.GetComponent("Localize");
-                    if (localize is MonoBehaviour mb)
-                        mb.enabled = true;
-                }
-            }
-            _titleTexts.Clear();
-            _titleBackup.Clear();
-            _titleLocalize.Clear();
-        }
-
-        private static void CacheTitles()
-        {
-            _titleTexts.Clear();
-            _titleBackup.Clear();
-            _titleLocalize.Clear();
-            if (_skills == null)
-                return;
-
-            Transform listRoot = _skills.m_listRoot;
-            TMP_Text[] texts = _skills.GetComponentsInChildren<TMP_Text>(true);
-            for (int i = 0; i < texts.Length; i++)
-            {
-                TMP_Text tmp = texts[i];
-                if (tmp == null || IsFooterText(tmp, listRoot))
-                    continue;
-                if (listRoot != null && tmp.transform != listRoot && tmp.transform.IsChildOf(listRoot))
-                    continue;
-
-                string n = tmp.gameObject.name.ToLowerInvariant();
-                if (!(n.Contains("title") || n.Contains("header") || n.Contains("topic") || n.Contains("label")
-                    || n == "text" || n.Contains("skill")))
-                    continue;
-
-                Component localize = tmp.GetComponent("Localize");
-                bool hadLocalize = localize is MonoBehaviour mb && mb.enabled;
-                if (hadLocalize)
-                    ((MonoBehaviour)localize).enabled = false;
-
-                _titleTexts.Add(tmp);
-                _titleBackup.Add(tmp.text ?? "");
-                _titleLocalize.Add(hadLocalize);
-            }
-        }
-
-        private static void SetChildText(Transform root, string name, string text, Color color)
-        {
-            Transform child = FindChild(root, name);
-            if (child == null)
-                return;
-            TMP_Text tmp = child.GetComponent<TMP_Text>();
-            if (tmp == null)
-                return;
-            Component localize = child.GetComponent("Localize");
-            if (localize is MonoBehaviour mb)
-                mb.enabled = false;
+            var go = new GameObject("Header", typeof(RectTransform));
+            go.transform.SetParent(panel, false);
+            RectTransform rt = go.transform as RectTransform;
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            float bandMid = InsetT * 0.5f + 10f;
+            rt.anchoredPosition = new Vector2(0f, -bandMid);
+            rt.sizeDelta = new Vector2(-80f, InsetT - 8f);
+            TextMeshProUGUI tmp = UiFonts.CreateBoldLabel(go, HeaderFont);
+            tmp.enableAutoSizing = false;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.overflowMode = TextOverflowModes.Ellipsis;
+            tmp.maxVisibleLines = 1;
+            tmp.raycastTarget = false;
+            tmp.characterSpacing = LetterSpace;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.color = Gold;
             tmp.text = text;
-            tmp.color = color;
         }
 
-        private static void HideChild(Transform root, string name)
+        private static void StyleLabel(TMP_Text tmp, float size, float letterSpace = 0f)
         {
-            Transform child = FindChild(root, name);
-            if (child != null)
-                child.gameObject.SetActive(false);
+            UiFonts.StyleThinLabel(tmp, size);
+            tmp.enableAutoSizing = false;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.overflowMode = TextOverflowModes.Ellipsis;
+            tmp.maxVisibleLines = 1;
+            tmp.raycastTarget = false;
+            tmp.characterSpacing = letterSpace;
         }
 
-        private static Transform FindChild(Transform root, string name)
+        private static void ApplySprite(Image img, Sprite sprite, Color fallback)
         {
-            if (root == null)
-                return null;
-            Transform direct = root.Find(name);
-            if (direct != null)
-                return direct;
-            for (int i = 0; i < root.childCount; i++)
+            if (img == null)
+                return;
+            if (sprite != null)
             {
-                Transform found = FindChild(root.GetChild(i), name);
-                if (found != null)
-                    return found;
+                img.sprite = sprite;
+                img.type = Image.Type.Sliced;
+                img.color = Color.white;
             }
-            return null;
+            else
+            {
+                img.sprite = null;
+                img.color = fallback;
+            }
+            img.raycastTarget = true;
+        }
+
+        private static void ClearContent(RectTransform content)
+        {
+            if (content == null)
+                return;
+            for (int i = content.childCount - 1; i >= 0; i--)
+                Object.Destroy(content.GetChild(i).gameObject);
+        }
+
+        private static void Stretch(RectTransform rt)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.pivot = new Vector2(0.5f, 0.5f);
         }
     }
 
@@ -785,7 +638,7 @@ namespace StoreAndCraft
             if (!StationFilterMenu.IsOpen)
                 return true;
             StationFilterMenu.Close();
-            return false;
+            return true;
         }
     }
 
@@ -808,24 +661,6 @@ namespace StoreAndCraft
                 return true;
             StationFilterMenu.Close();
             return false;
-        }
-    }
-
-    [HarmonyPatch(typeof(SkillsDialog), nameof(SkillsDialog.OnClose))]
-    internal static class StationFilterSkillsClosePatch
-    {
-        private static void Prefix(SkillsDialog __instance)
-        {
-            StationFilterMenu.OnSkillsClosed(__instance);
-        }
-    }
-
-    [HarmonyPatch(typeof(SkillsDialog), nameof(SkillsDialog.Setup))]
-    internal static class StationFilterSkillsSetupPatch
-    {
-        private static bool Prefix()
-        {
-            return !StationFilterMenu.IsOpen;
         }
     }
 }

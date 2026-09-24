@@ -13,6 +13,7 @@ namespace StoreAndCraft
         private static readonly FieldInfo ContainerName = AccessTools.Field(typeof(Container), "m_name");
         private static readonly FieldInfo GuiRecipe = AccessTools.Field(typeof(InventoryGui), "m_craftRecipe");
         private static readonly FieldInfo GuiMulti = AccessTools.Field(typeof(InventoryGui), "m_multiCrafting");
+        private static readonly FieldInfo GuiMultiAmount = AccessTools.Field(typeof(InventoryGui), "m_multiCraftAmount");
         private static readonly FieldInfo GuiUpgrade = AccessTools.Field(typeof(InventoryGui), "m_craftUpgradeItem");
         private static readonly MethodInfo InventoryChanged = AccessTools.Method(typeof(Inventory), "Changed", System.Type.EmptyTypes)
             ?? AccessTools.Method(typeof(Inventory), "Changed");
@@ -73,6 +74,14 @@ namespace StoreAndCraft
                 return false;
             object v = GuiMulti.GetValue(gui);
             return v is bool && (bool)v;
+        }
+
+        public static int MultiCraftAmount(InventoryGui gui)
+        {
+            if (gui == null || GuiMultiAmount == null)
+                return 1;
+            object v = GuiMultiAmount.GetValue(gui);
+            return v is int ? Mathf.Max(1, (int)v) : 1;
         }
 
         public static void NotifyChanged(Inventory inventory)

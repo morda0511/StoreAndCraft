@@ -21,6 +21,8 @@ namespace StoreAndCraft
         private static readonly List<StorageDisplayBoard> All = new List<StorageDisplayBoard>();
 
         private DisplayKind _kind = DisplayKind.Medium;
+        internal string VisualBase;
+        internal string AppliedVisual;
         private int _slotCount = 12;
         private int _columns = 4;
         private int _rows = 3;
@@ -183,15 +185,9 @@ namespace StoreAndCraft
             if (zdo.GetInt(ZdoScaleKey, 0) == step)
                 return;
             zdo.Set(ZdoScaleKey, step);
-            InvalidateUi();
-            // Drop the live grid immediately so Update/TryBuild rebuilds with the new columns.
-            if (_gridRoot != null)
-            {
-                Destroy(_gridRoot.gameObject);
-                _gridRoot = null;
-            }
-            _slots = null;
-            MarkDirty();
+            // Rebuild + Paint same frame — do not Destroy the grid first (that blanked the board
+            // until the throttled Paint ran 0.3–0.5s later).
+            RebuildUiNow();
         }
 
         /// <summary>
@@ -232,6 +228,18 @@ namespace StoreAndCraft
                 && (_kind == DisplayKind.Medium || _kind == DisplayKind.Large);
         }
 
+        /// <summary>Folder under displays/. Medium and Large swap mesh with Classic / Compact.</summary>
+        public string CurrentVisualId()
+        {
+            if (string.IsNullOrEmpty(VisualBase))
+                return null;
+            if (VisualBase == "medium")
+                return IsCompactLayout() ? "medium_horizontal" : "medium_vertical";
+            if (VisualBase == "large")
+                return IsCompactLayout() ? "large_horizontal" : "large_vertical";
+            return VisualBase;
+        }
+
         public void SetLayoutMode(int mode)
         {
             if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
@@ -246,14 +254,8 @@ namespace StoreAndCraft
             if (zdo.GetInt(ZdoLayoutKey, LayoutClassic) == mode)
                 return;
             zdo.Set(ZdoLayoutKey, mode);
-            InvalidateUi();
-            if (_gridRoot != null)
-            {
-                Destroy(_gridRoot.gameObject);
-                _gridRoot = null;
-            }
-            _slots = null;
-            MarkDirty();
+            // Same as scale: replace UI and Paint immediately so Classic↔Compact does not flash empty.
+            RebuildUiNow();
         }
 
         /// <summary>Shift+RMB: Classic ↔ Compact on this board only.</summary>
@@ -493,14 +495,27 @@ namespace StoreAndCraft
                 return;
 
             // Layout (icon position) depends on flags — rebuild, don't only hide labels.
+            RebuildUiNow();
+        }
+
+        /// <summary>
+        /// Tear down cached slot state, rebuild the grid, and Paint immediately.
+        /// Avoids the empty-board flash from Destroy-then-wait-for-_nextPaint.
+        /// </summary>
+        private void RebuildUiNow()
+        {
             InvalidateUi();
-            if (_gridRoot != null)
-            {
-                Destroy(_gridRoot.gameObject);
-                _gridRoot = null;
-            }
             _slots = null;
-            MarkDirty();
+            TryBuild();
+            if (_slots == null)
+            {
+                MarkDirty();
+                return;
+            }
+
+            _dirty = false;
+            _nextPaint = Time.time + (_kind == DisplayKind.Large ? 0.5f : 0.3f);
+            Paint();
         }
 
         public void InvalidateUi()
@@ -794,6 +809,7 @@ namespace StoreAndCraft
                 : new BepInEx.Configuration.KeyboardShortcut(KeyCode.R, KeyCode.LeftAlt));
             if (string.IsNullOrEmpty(rangeKey))
                 rangeKey = "Alt+R";
+            // Chord keys first, then single keys (same rule as stations).
             string rangeLine = "[<color=yellow><b>" + rangeKey + "</b></color>] "
                 + Loc.T("Range", "Reichweite")
                 + " (" + Mathf.RoundToInt(EffectiveDisplayRange()) + " m)";
@@ -804,27 +820,29 @@ namespace StoreAndCraft
                     + Loc.T("Set item from hotbar", "Item aus Hotbar setzen");
                 string modeLine = "[<color=yellow><b>Shift+LMB</b></color>] " + FormatHoverSmallModeLine();
                 string token = ItemToken();
-                if (string.IsNullOrEmpty(token))
-                    return BoardTitle() + "\n" + hotbar + "\n" + modeLine + "\n" + rangeLine;
-                return BoardTitle() + " (" + ItemLabel(token) + ")\n" + hotbar + "\n" + modeLine + "\n" + rangeLine;
+                string head = string.IsNullOrEmpty(token)
+                    ? BoardTitle()
+                    : BoardTitle() + " (" + ItemLabel(token) + ")";
+                return head + "\n" + modeLine + "\n" + rangeLine + "\n" + hotbar;
             }
 
             List<int> filters = FilterIds();
             List<string> items = ItemTokens();
             string name = DisplayFilters.Label(filters, items);
             string use = "[<color=yellow><b>E</b></color>] " + Loc.T("Select type", "Typ wählen");
-            string scaleKey = "[<color=yellow><b>Shift+LMB</b></color>] ";
-            string scaleLine = scaleKey + FormatHoverScaleLine();
-            string layoutKey = "[<color=yellow><b>Shift+RMB</b></color>] ";
-            string layoutLine = layoutKey + FormatHoverLayoutLine();
-            if (filters.Count == 0 && items.Count == 0)
-                return BoardTitle() + "\n" + use + "\n" + scaleLine + "\n" + layoutLine + "\n" + rangeLine;
+            string scaleLine = "[<color=yellow><b>Shift+LMB</b></color>] " + FormatHoverScaleLine();
+            string layoutLine = "[<color=yellow><b>Shift+RMB</b></color>] " + FormatHoverLayoutLine();
 
-            RefreshClusterPages();
-            string title = BoardTitle() + " (" + name + ")";
-            if (_pages > 1)
-                title += " (" + (_page + 1) + "/" + _pages + ")";
-            return title + "\n" + use + "\n" + scaleLine + "\n" + layoutLine + "\n" + rangeLine;
+            string title = BoardTitle();
+            if (filters.Count > 0 || items.Count > 0)
+            {
+                title = BoardTitle() + " (" + name + ")";
+                RefreshClusterPages();
+                if (_pages > 1)
+                    title += " (" + (_page + 1) + "/" + _pages + ")";
+            }
+
+            return title + "\n" + scaleLine + "\n" + layoutLine + "\n" + rangeLine + "\n" + use;
         }
 
         public string ItemToken()
@@ -1192,41 +1210,57 @@ namespace StoreAndCraft
 
         private void Update()
         {
+            // Any chassis mismatch must RebuildUiNow — nulling _slots + throttled Paint
+            // flashes an empty board for 0.3–0.5s (Scale / Layout feels like flicker).
+            bool needsRebuild = false;
+
             // Force UI rebuild when switching to small layout tweaks / slot count changes.
             if (_slots != null && _slots.Length != _slotCount)
-                _slots = null;
+                needsRebuild = true;
             // Content scale or Classic/Compact layout changed (Medium / Large).
             if (_slots != null && (_kind == DisplayKind.Medium || _kind == DisplayKind.Large)
                 && (ContentScaleStep() != _builtScaleStep || ContentLayoutMode() != _builtLayoutMode))
-                _slots = null;
+                needsRebuild = true;
             // Small name/amount layout changed — rebuild so icon can recenter.
             if (_slots != null && _kind == DisplayKind.Small
                 && ((ShowName() ? 1 : 0) != _builtShowName || (ShowAmount() ? 1 : 0) != _builtShowAmount))
-                _slots = null;
+                needsRebuild = true;
             // Medium Classic: need category header strip. Only force rebuild when headers are expected.
             if (_slots != null && _kind == DisplayKind.Medium && !IsCompactLayout()
                 && _columnHeaders && _headerColumns > 0 && _headers == null)
-                _slots = null;
-            // Large Classic switched from fixed 3-column headers to flowing sections.
-            if (_slots != null && _kind == DisplayKind.Large && !IsCompactLayout()
-                && (_headers != null || !_flowSections || _columnMajor))
-                _slots = null;
+                needsRebuild = true;
+            // Large: migrate leftover 3-col header chassis once (not every frame on flow boards).
+            if (_slots != null && _kind == DisplayKind.Large && !IsCompactLayout() && _flowSections
+                && (_headers != null || _columnMajor))
+                needsRebuild = true;
             // Compact: fixed left category rail + item grid must match current rows/cols.
             if (_slots != null && IsCompactLayout()
                 && (_bandLabels == null || _bandLabels.Length != _rows
                     || _slots.Length != _columns * _rows))
-                _slots = null;
+                needsRebuild = true;
             // Large Classic: chassis matches current scale row count (taller cells at higher scale).
             if (_slots != null && _kind == DisplayKind.Large && !IsCompactLayout() && _flowSections
                 && (_bandLabels == null || _bandLabels.Length != _rows
                     || _slots.Length != _columns * _rows))
-                _slots = null;
+                needsRebuild = true;
             if (_slots != null && _kind == DisplayKind.Small && _slots.Length == 1
                 && (_slots[0].Name == null
                     || (_slots[0].Amount != null && _slots[0].Amount.fontSize < 1f)))
-                _slots = null;
-            if (_slots == null)
+                needsRebuild = true;
+
+            if (needsRebuild)
+            {
+                RebuildUiNow();
+                if (_slots == null)
+                    return;
+            }
+            else if (_slots == null)
+            {
                 TryBuild();
+                if (_slots == null)
+                    return;
+            }
+
             if (_slots == null)
                 return;
 
@@ -1271,6 +1305,7 @@ namespace StoreAndCraft
             TextMeshProUGUI template = sign != null ? sign.m_textWidget : null;
             if (template == null)
                 return;
+            DisplayVisual.Ensure(this);
             CaptureBoardMetrics(template);
             ApplyScaleToLayout();
             BuildUi();
@@ -1340,7 +1375,15 @@ namespace StoreAndCraft
 
             Transform existing = board.parent.Find("SacDisplayGrid");
             if (existing != null)
+            {
+                // Hide immediately — deferred Destroy alone leaves the old grid visible for a frame
+                // (and a second SacDisplayGrid while the new one is empty → Scale/Layout flicker).
+                existing.name = "SacDisplayGrid_old";
+                existing.gameObject.SetActive(false);
+                if (_gridRoot != null && _gridRoot.transform == existing)
+                    _gridRoot = null;
                 Destroy(existing.gameObject);
+            }
 
             var root = new GameObject("SacDisplayGrid", typeof(RectTransform));
             root.transform.SetParent(board.parent, false);
@@ -1840,8 +1883,17 @@ namespace StoreAndCraft
 
                 // Unopened chests often have null/empty inv until Load — read-only for displays.
                 // Never force-Load over a full bag (that was the old wipe race).
-                NearbyIndex.EnsureInventory(container);
                 Inventory inv = container.GetInventory();
+                if (inv == null)
+                {
+                    NearbyIndex.EnsureInventory(container);
+                    inv = container.GetInventory();
+                }
+                else if (inv.NrOfItems() <= 0 && ContainerFilter.ZdoHasItemPayload(Refs.View(container)?.GetZDO()))
+                {
+                    NearbyIndex.EnsureInventory(container);
+                    inv = container.GetInventory();
+                }
                 if (inv == null)
                     continue;
 
@@ -2061,8 +2113,17 @@ namespace StoreAndCraft
                 {
                     if (container == null || !seenChest.Add(container.GetInstanceID()))
                         continue;
-                    NearbyIndex.EnsureInventory(container);
                     Inventory inv = container.GetInventory();
+                    if (inv == null)
+                    {
+                        NearbyIndex.EnsureInventory(container);
+                        inv = container.GetInventory();
+                    }
+                    else if (inv.NrOfItems() <= 0 && ContainerFilter.ZdoHasItemPayload(Refs.View(container)?.GetZDO()))
+                    {
+                        NearbyIndex.EnsureInventory(container);
+                        inv = container.GetInventory();
+                    }
                     if (inv == null)
                         continue;
 
@@ -2499,16 +2560,22 @@ namespace StoreAndCraft
                 {
                     if (container == null || !seenChest.Add(container.GetInstanceID()))
                         continue;
-                    // Prefer already-loaded inventories; only ZDO-load empty/unopened chests.
-                    // Display is read-only: a brief "0" on the board must never Save/wipe the chest.
-                    Inventory inv = container.GetInventory();
-                    if (inv == null || inv.NrOfItems() <= 0)
-                    {
-                        NearbyIndex.EnsureInventory(container);
-                        inv = container.GetInventory();
-                    }
-                    if (inv == null || inv.NrOfItems() <= 0)
-                        continue;
+            // Prefer already-loaded inventories; only ZDO-load when the bag is missing.
+            // Never Load over a populated bag, and never Load when the ZDO has no payload
+            // (that empty Load + Save race wiped iron chests next to Storage Displays).
+            Inventory inv = container.GetInventory();
+            if (inv == null)
+            {
+                NearbyIndex.EnsureInventory(container);
+                inv = container.GetInventory();
+            }
+            else if (inv.NrOfItems() <= 0 && ContainerFilter.ZdoHasItemPayload(Refs.View(container)?.GetZDO()))
+            {
+                NearbyIndex.EnsureInventory(container);
+                inv = container.GetInventory();
+            }
+            if (inv == null || inv.NrOfItems() <= 0)
+                continue;
                     foreach (ItemDrop.ItemData item in inv.GetAllItems())
                     {
                         if (item?.m_shared == null || item.m_stack <= 0)

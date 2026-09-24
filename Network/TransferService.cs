@@ -128,6 +128,8 @@ namespace StoreAndCraft
             if (chest == null || playerInv == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
                 return 0;
 
+            leaveOne = ItemIds.ShouldLeaveOne(leaveOne, sharedName);
+
             if (IsChestOwner(chest))
                 return WithdrawLocal(chest, sharedName, amount, playerInv, leaveOne);
 
@@ -166,6 +168,7 @@ namespace StoreAndCraft
 
             if (!ContainerFilter.TryReadyForWrite(chest))
                 return 0;
+            leaveOne = ItemIds.ShouldLeaveOne(leaveOne, sharedName);
             return WithdrawLocal(chest, sharedName, amount, playerInv, leaveOne);
         }
 
@@ -177,6 +180,8 @@ namespace StoreAndCraft
         {
             if (chest == null || amount <= 0 || string.IsNullOrEmpty(sharedName))
                 return 0;
+
+            leaveOne = ItemIds.ShouldLeaveOne(leaveOne, sharedName);
 
             if (IsChestOwner(chest))
                 return ConsumeLocal(chest, sharedName, amount, leaveOne, quality);
