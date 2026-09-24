@@ -44,11 +44,14 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade, and build str
 ### Station refill `[E]`
 Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters, turrets, etc.:
 - Pulls fuel / ore / food from nearby chests when you don’t have it.
-- **Inventory first:** if you already hold a valid item (e.g. deer meat), that is used before chest contents (e.g. boar meat).
+- **Inventory first** on manual **[E]**: if you already hold a valid item (e.g. deer meat), that is used before chest contents (e.g. boar meat).
 
 ### Kiln / smelter / cooking auto-fill
 - Look at a kiln, smelter, blast furnace, cooking spit, iron cooking station, stone oven, fermenter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station (saved on the station).
-- When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from inventory first, then chests within `AutoFillRange`. Set **`StationFillSkipInventory = true`** in config section `3 - Craft` to skip your bag entirely (chests only — hotbar, extra rows, and Z/V/B quick slots stay untouched). Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
+- When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from nearby chests within `AutoFillRange`. **By default your bag is not touched** (`StationFillSkipInventory = true`) — many players hated auto-fill emptying the inventory. Same for Shift+[E] fill-to-max.
+- **If auto-fill still steals from your bag** (old config): open `BepInEx/config/com.morda.storeandcraft.cfg`, set `StationFillSkipInventory = true`, save — **or** delete that `.cfg` once and restart the game so it regenerates with the new default. Existing values are never overwritten by an update.
+- Want bag-first again? Set `StationFillSkipInventory = false` in section `3 - Craft`.
+- Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
 - Cooking / ovens top up **free slots** (not only when fully empty). Stone oven door hover shows the toggle; food is added even if the under-fire is out (baking still needs fire to cook).
 - No chest scans and no “it’s full” spam while the station is still running. Filter still applies (Wood OFF stays OFF).
 - **F** with inventory open is still favorites. Manual **[E]** refill is unchanged.
@@ -208,6 +211,7 @@ Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `Lo
 | `StorageRange` | Take-stack / search / displays (m) |
 | `CraftRange` | Craft / build / station `[E]` (m) |
 | `AutoFillRange` | Auto-fill: player → station and player → chests (m). Default 20 |
+| `StationFillSkipInventory` | `true` (default) = auto-fill / Shift+[E] use chests only, never your bag. `false` = bag first. Old configs keep their saved value — set `true` or delete the `.cfg` once and restart to pick up the new default |
 | `IntakeInterval` | Seconds between ground-item scans |
 | Hotkeys (`DumpKey`, `TakeStackKey`, `FavoriteKey`, `AutoFillKey`, `SortKey`, …) | Local only |
 

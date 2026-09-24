@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.41
+
+### FIX
+- Station auto-fill / Shift+[E] fill-to-max no longer take from your bag by default (`StationFillSkipInventory` defaults to on). Set it to false in config if you want bag-first
+
 ## 1.3.40
 
 ### FIX

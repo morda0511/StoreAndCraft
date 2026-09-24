@@ -81,8 +81,8 @@ namespace StoreAndCraft
                 "Craft / build / station-[E] pull range in meters (player → chest). Synced from server when LockConfig is on.");
             AutoFillRange = file.Bind("3 - Craft", "AutoFillRange", 20f,
                 "Auto-fill range in meters: player → station (kiln/smelter/blast furnace/oven/fermenter/torch), and player → chests for auto-fill materials. Independent from CraftRange. Synced from server when LockConfig is on.");
-            StationFillSkipInventory = file.Bind("3 - Craft", "StationFillSkipInventory", false,
-                "If enabled, station auto-fill (B) takes fuel / ore / food from nearby chests only — never from your bag, hotbar, or equipment/quick-slot mod overflow. Wider/Deeper Pockets bag rows still count as bag. Manual [E] refill is unchanged. Synced from server when LockConfig is on.");
+            StationFillSkipInventory = file.Bind("3 - Craft", "StationFillSkipInventory", true,
+                "If enabled (default), station auto-fill (B) and Shift+[E] fill-to-max take fuel / ore / food from nearby chests only — never from your bag, hotbar, or equipment/quick-slot mod overflow. Set to false if you want bag-first. Wider/Deeper Pockets bag rows still count as bag. Manual [E] refill is unchanged. Synced from server when LockConfig is on.");
             RemoteAutomationEnabled = file.Bind("3 - Craft", "RemoteAutomationEnabled", true,
                 "If enabled, stations with Remote Automation toggled on (Alt+E filter) and a link l1–l9 keep feeding from / emptying into matching [lN] chests while far away. Soft-off if LazyVikings is loaded. Synced from server when LockConfig is on.");
             RemoteStationRange = file.Bind("3 - Craft", "RemoteStationRange", 20f,
