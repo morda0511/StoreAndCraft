@@ -46,12 +46,6 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - Pulls fuel / ore / food from nearby chests when you don’t have it.
 - **Inventory first:** if you already hold a valid item (e.g. deer meat), that is used before chest contents (e.g. boar meat).
 
-### Fill to max `Shift+E`
-- Hold **Shift** and press **[E]** on a kiln, smelter, blast furnace, fireplace / torch, or cooking-station fuel to fill that slot **to max** from your bag and nearby chests.
-- Uses **`CraftRange`** (same meters as craft / build / station `[E]` pull) — not `AutoFillRange`.
-- Inventory first unless **`StationFillSkipInventory`** is on. Pull filter and station **l1–l9** links still apply.
-- Hover shows **Shift+E → Fill to max** before the **B** auto-fill line.
-
 ### Kiln / smelter / cooking auto-fill
 - Look at a kiln, smelter, blast furnace, cooking spit, iron cooking station, stone oven, fermenter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station (saved on the station).
 - When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from inventory first, then chests within `AutoFillRange`. Set **`StationFillSkipInventory = true`** in config section `3 - Craft` to skip your bag entirely (chests only — hotbar, extra rows, and Z/V/B quick slots stay untouched). Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
@@ -126,7 +120,6 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 | **Middle mouse** | Store hovered inventory item (inventory open) |
 | **Ctrl + Middle mouse** | **Pull Stack** — fill hovered stack from nearby chests |
 | **Alt + E** | Rename looked-at chest (Ignore / Show on Display toggles + l1–l9) **or** station pull filter / Small Display options |
-| **Shift + E** | Fill looked-at kiln / smelter / blast furnace / fireplace / torch / cooking fuel **to max** from bag + chests (`CraftRange`) |
 | **F** | Favorite / unfavorite hovered inventory item |
 | **B** | Toggle auto-fill on the station you are looking at (inventory closed) |
 | **N** | Toggle auto-drop on a cooking spit / iron station / stone oven / beehive (inventory closed) |
@@ -213,7 +206,7 @@ Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `Lo
 | `PlayerDumpRange` | Dump / middle-click / pull-stack (m) |
 | `StoreRange` | Auto-store ground items (m) |
 | `StorageRange` | Take-stack / search / displays (m) |
-| `CraftRange` | Craft / build / station `[E]` / **Shift+[E]** fill to max (m) |
+| `CraftRange` | Craft / build / station `[E]` (m) |
 | `AutoFillRange` | Auto-fill: player → station and player → chests (m). Default 20 |
 | `IntakeInterval` | Seconds between ground-item scans |
 | Hotkeys (`DumpKey`, `TakeStackKey`, `FavoriteKey`, `AutoFillKey`, `SortKey`, …) | Local only |

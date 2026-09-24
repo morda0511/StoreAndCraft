@@ -2,9 +2,6 @@
 
 ## 1.3.40
 
-### NEW FEATURES
-- Hold **Shift+[E]** on a kiln, smelter, blast furnace, fireplace, torch, or cooking-station fuel to fill that slot to max from your bag and nearby chests within **`CraftRange`**
-
 ### FIX
 - Storage Displays no longer flicker when changing Scale or Layout
 - Kiln / smelter chest pull no longer takes wood or ore from unlinked chests
