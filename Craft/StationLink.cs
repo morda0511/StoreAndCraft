@@ -56,6 +56,12 @@ namespace StoreAndCraft
             Hex(0xE8B8FF)
         };
 
+        public static void ResetFrame()
+        {
+            IdStack.Clear();
+            ActiveId = -1;
+        }
+
         public static void Push(int linkId)
         {
             IdStack.Add(ActiveId);

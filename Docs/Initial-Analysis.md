@@ -1,6 +1,6 @@
 # StoreAndCraft – Initial Analysis Report
 
-Analysis-only pass. **No StoreAndCraft gameplay source was modified for this documentation task.** (Working tree may already contain unrelated WIP C# changes from prior sessions.)
+Analysis-only pass at **1.3.39**. **Update:** Remote Automation was fully removed in **1.3.43** — sections below that describe a gated `RemoteAutomation` system are historical.
 
 ---
 

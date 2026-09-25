@@ -10,7 +10,7 @@ Reuse these. Do not invent a parallel system for the same problem.
 
 **How:** Periodic `Tick` builds `Current` list; helpers count items with LeaveOne; `EnsureInventory` hydrates views.
 
-**Used by:** AutoStore, StagingPull, RequirementBridge, StationFeed/AutoFill, BuildGrab, displays, EpicLootBridge, RemoteAutomation (if enabled).
+**Used by:** AutoStore, StagingPull, RequirementBridge, StationFeed/AutoFill, BuildGrab, displays, EpicLootBridge.
 
 **Why:** One scan avoids N× FindObjects; consistent ignore/range rules.
 
@@ -124,7 +124,7 @@ Reuse these. Do not invent a parallel system for the same problem.
 
 ## 11. Feature soft-disable flags
 
-**Where:** Plugin / config / csproj (`RemoteUiExposed`, `CarvedDisplaysExposed`, `IncludeDisplayBundle`)
+**Where:** Plugin / config / csproj (`CarvedDisplaysExposed`, `IncludeDisplayBundle`)
 
 **How:** Keep code in tree; hide UI and omit bundles from packs.
 

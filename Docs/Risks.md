@@ -9,7 +9,7 @@ Sensitive areas. Changing these without a dependency trace is likely to cause re
 | | |
 |--|--|
 | **Classes** | `Network/TransferService.cs` |
-| **Dependents** | AutoStore, StagingPull, StationFeed/AutoFill, BuildGrab, drop-store, RemoteAutomation |
+| **Dependents** | AutoStore, StagingPull, StationFeed/AutoFill, BuildGrab, drop-store |
 | **Shared state** | Move queue, `FillsQueued`, grant RPC registration, ownership decisions |
 | **Why sensitive** | Wrong claim/save wipes chests; wrong RPC orphans items; stealing ownership kicks players |
 | **Before change** | Trace every caller of `StoreItem` / consume / deposit; re-read ownership comments; MP test open chest + travel unload |
@@ -103,15 +103,9 @@ Sensitive areas. Changing these without a dependency trace is likely to cause re
 
 ---
 
-## Soft-disabled RemoteAutomation
+## Remote Automation (removed)
 
-| | |
-|--|--|
-| **Classes** | `Craft/RemoteAutomation.cs` (`RemoteUiExposed => false`), Plugin dedicated/client ticks |
-| **Why sensitive** | Large surface (keep-alive, output deposit, ForceChestOnly). Distinct from removed remote dump (1.3.1). |
-| **Current state** | Hard-gated off; config flag alone cannot enable |
-| **Before change** | Do not flip `RemoteUiExposed` without explicit user request + dedicated + MP tests |
-| **Regression** | Unexpected remote pulls, zone load cost, item loss, conflict with LazyVikings |
+Deleted in **1.3.43**. Do not reintroduce keep-alive / zone-load patches without an explicit request and dedicated + MP testing. Distinct from remote dump removal in 1.3.1.
 
 ---
 

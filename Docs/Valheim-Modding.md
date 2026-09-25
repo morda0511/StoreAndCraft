@@ -92,7 +92,7 @@ StagingPull mirrors vanilla skip rules for upgrader resources when consuming fro
 
 - Dedicated Update does **not** run `NearbyIndex` / `StationAutoFill` / `Hotkeys` (no local player loop).
 - Dedicated still runs `TransferService.Tick` and `AutoIntake.TickDedicated`.
-- `RemoteAutomation.TickDedicated` exists for host-side remote feed but is inert while `RemoteUiExposed` is false.
+- Dedicated host ticks: `TransferService` + `AutoIntake.TickDedicated` (Remote Automation removed in 1.3.43).
 - Config edit UI: `AdminUtil.CanEditSettings()` is false on dedicated.
 
 `UNKNOWN – VERIFY BEFORE USE`: full sector ownership migration when all players leave (outside inactive Remote keep-alive).

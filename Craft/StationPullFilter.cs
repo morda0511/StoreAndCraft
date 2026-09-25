@@ -6,9 +6,9 @@ using UnityEngine;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Per-station (ZDO) deny-list for chest pulls into Smelter ore slots
-    /// and CookingStation food slots. Empty = allow all.
-    /// Inventory use is never blocked — only auto-pull from chests / autofill.
+    /// Per-station (ZDO) deny-list for Smelter ore slots and CookingStation food slots.
+    /// Empty = allow all. Denied types cannot be chest-pulled, auto-filled, or manually
+    /// inserted from the bag on that station.
     /// </summary>
     internal static class StationPullFilter
     {

@@ -41,23 +41,13 @@ namespace StoreAndCraft
         private static readonly MethodInfo SmelterGetFuel = AccessTools.Method(typeof(Smelter), "GetFuel");
         private static readonly MethodInfo SmelterSetFuel = AccessTools.Method(typeof(Smelter), "SetFuel");
         private static readonly MethodInfo SmelterGetQueue = AccessTools.Method(typeof(Smelter), "GetQueueSize");
-        private static readonly MethodInfo SmelterAddFuel = AccessTools.Method(typeof(Smelter), "OnAddFuel");
-        private static readonly MethodInfo SmelterAddOre = AccessTools.Method(typeof(Smelter), "OnAddOre");
         private static readonly MethodInfo FireGetFuel = AccessTools.Method(typeof(Fireplace), "GetFuel");
-        private static readonly MethodInfo CookAddFuel = AccessTools.Method(typeof(CookingStation), "OnAddFuelSwitch");
-        private static readonly MethodInfo CookUseItem = AccessTools.Method(typeof(CookingStation), "OnUseItem");
         private static readonly MethodInfo CookGetFuel = AccessTools.Method(typeof(CookingStation), "GetFuel");
-        private static readonly MethodInfo CookIsEmpty = AccessTools.Method(typeof(CookingStation), "IsEmpty");
         private static readonly MethodInfo CookIsFull = AccessTools.Method(typeof(CookingStation), "IsStationFull");
-        private static readonly MethodInfo FermenterAddItem = AccessTools.Method(typeof(Fermenter), "AddItem");
         private static readonly MethodInfo FermenterGetStatus = AccessTools.Method(typeof(Fermenter), "GetStatus");
         private static readonly MethodInfo TurretGetAmmo = AccessTools.Method(typeof(Turret), "GetAmmo");
         private static readonly MethodInfo TurretGetAmmoType = AccessTools.Method(typeof(Turret), "GetAmmoType");
-        private static readonly MethodInfo TurretFindAmmo = AccessTools.Method(typeof(Turret), "FindAmmoItem");
-        private static readonly MethodInfo TurretUseItem = AccessTools.Method(typeof(Turret), "UseItem");
-        private static readonly MethodInfo ItemStandUseItem = AccessTools.Method(typeof(ItemStand), "UseItem");
         private static readonly MethodInfo ItemStandHaveAttachment = AccessTools.Method(typeof(ItemStand), "HaveAttachment");
-        private static readonly MethodInfo ItemStandCanAttach = AccessTools.Method(typeof(ItemStand), "CanAttach");
         private static readonly int FuelHash = ReadFuelHash();
 
         private static float _nextPulse;
@@ -133,34 +123,6 @@ namespace StoreAndCraft
         internal static IReadOnlyList<Fireplace> RegisteredFires { get { return Fires; } }
         internal static IReadOnlyList<CookingStation> RegisteredOvens { get { return Ovens; } }
         internal static IReadOnlyList<Fermenter> RegisteredFermenters { get { return Fermenters; } }
-
-        /// <summary>Remote Automation feed — caller must BeginStationPull / EndStationPull.</summary>
-        internal static bool RemoteFillSmelter(Smelter smelter, Player player)
-        {
-            if (smelter == null)
-                return false;
-            bool did = false;
-            if (HasFuelSlot(smelter))
-                did |= FillFuelToMax(smelter, player);
-            if (HasOreSlot(smelter))
-                did |= FillOreToMax(smelter, player);
-            return did;
-        }
-
-        internal static bool RemoteFillOven(CookingStation oven, Player player)
-        {
-            return oven != null && FillOvenWhenEmpty(oven, player);
-        }
-
-        internal static bool RemoteFillFire(Fireplace fire, Player player)
-        {
-            return fire != null && FillFireWhenEmpty(fire, player);
-        }
-
-        internal static bool RemoteFillFermenter(Fermenter fermenter, Player player)
-        {
-            return fermenter != null && FillFermenterWhenEmpty(fermenter, player);
-        }
 
         /// <summary>Serving trays accept consumable food; weapon stands / boss trophies do not.</summary>
         internal static bool IsFoodServingTray(ItemStand stand)
@@ -319,7 +281,6 @@ namespace StoreAndCraft
             StationPullFilter.AppendFilterHover(ref text, smelter, prependLink: false);
             AppendFillToMaxLine(ref text);
             AppendAutoFillLine(ref text, nv);
-            RemoteAutomation.AppendHover(ref text, smelter);
             StationLink.PrependHover(ref text, StationLink.Get(smelter), chest: false);
         }
 
@@ -351,7 +312,6 @@ namespace StoreAndCraft
             StationPullFilter.AppendFilterHover(ref text, station);
             AppendHover(ref text, station.GetComponent<ZNetView>());
             CookingAutoDrop.AppendHover(ref text, station);
-            RemoteAutomation.AppendHover(ref text, station);
             StationLink.PrependHover(ref text, StationLink.Get(station), chest: false);
         }
 
@@ -369,7 +329,6 @@ namespace StoreAndCraft
                 StationPullFilter.AppendFilterHover(ref text, fermenter);
 
             AppendHover(ref text, nv);
-            RemoteAutomation.AppendHover(ref text, station);
         }
 
         public static bool TryToggle()
@@ -438,6 +397,9 @@ namespace StoreAndCraft
             if (Time.unscaledTime < _nextPulse)
                 return;
             _nextPulse = Time.unscaledTime + Interval;
+
+            // Nested Push/Pop can leave ActiveId stuck if a path returns early.
+            StationLink.ResetFrame();
 
             if (Time.unscaledTime >= _nextPrune)
             {
@@ -685,26 +647,8 @@ namespace StoreAndCraft
                 && smelter.m_conversion != null && smelter.m_conversion.Count > 0;
         }
 
-        private static bool UsePlayerInventory()
-        {
-            if (StationFeed.ForceChestOnly)
-                return false;
-            return Plugin.Settings == null || !Plugin.Settings.StationFillSkipInventory.Value;
-        }
-
-        private static int AutoFillLocalCount(Player player, string shared)
-        {
-            if (!UsePlayerInventory())
-                return 0;
-            return StationFeed.LocalCount(player, shared);
-        }
-
-        private static bool AutoFillHasLocalAny(Player player, List<string> sharedNames)
-        {
-            if (!UsePlayerInventory())
-                return false;
-            return HasLocalAny(player, sharedNames);
-        }
+        // Auto-fill / Shift+[E] fill-to-max never touch the bag — chests only
+        // (StationLink + [I]/[H] still apply).
 
         /// <summary>Vanilla RPC_AddFuel accepts while fuel ≤ max−1.</summary>
         private static int SmelterFuelFree(Smelter smelter)
@@ -789,61 +733,42 @@ namespace StoreAndCraft
                 if (ReadSmelterFuel(smelter) > smelter.m_maxFuel - 1f)
                     break;
 
-                if (AutoFillLocalCount(player, fuel) >= 1)
+                if (!TryAddOneFuelFromChests(smelter, player, nv, fuel, ref added))
                 {
-                    if (smelter.m_addWoodSwitch != null
-                        && SmelterAddFuel != null
-                        && InvokeAdd(SmelterAddFuel, smelter, smelter.m_addWoodSwitch, player))
+                    if (added == 0)
                     {
-                        added++;
-                        continue;
-                    }
-
-                    // No add-fuel Switch: take from bag and RPC like the chest path.
-                    Inventory inv = player.GetInventory();
-                    if (inv == null || nv == null || !nv.IsValid() || !PlayerBag.RemoveOneFromBag(inv, fuel))
-                        break;
-                    if (!nv.IsOwner())
-                        nv.ClaimOwnership();
-                    BeginSilence();
-                    try
-                    {
-                        nv.InvokeRPC("RPC_AddFuel");
-                    }
-                    finally
-                    {
-                        EndSilence();
-                    }
-                    added++;
-                    continue;
-                }
-
-                if (added == 0 && !StationFeed.ChestsHave(player, fuel))
-                {
-                    // Remote misses must not Quiet — that blocks near Auto-fill for 25s.
-                    if (!StationFeed.ForceChestOnly)
                         Quiet(smelter, "fuel", QuietEmptySeconds);
-                    return false;
-                }
-
-                if (nv == null || !nv.IsValid() || StationFeed.ConsumeFromChests(player, fuel, 1) < 1)
+                        return false;
+                    }
                     break;
-
-                if (!nv.IsOwner())
-                    nv.ClaimOwnership();
-                BeginSilence();
-                try
-                {
-                    nv.InvokeRPC("RPC_AddFuel");
                 }
-                finally
-                {
-                    EndSilence();
-                }
-                added++;
             }
 
             return added > 0;
+        }
+
+        private static bool TryAddOneFuelFromChests(
+            Smelter smelter, Player player, ZNetView nv, string fuel, ref int added)
+        {
+            int linkId = StationLink.Get(smelter);
+            if (!StationFeed.ChestsHave(player, fuel, linkId))
+                return false;
+            if (nv == null || !nv.IsValid() || StationFeed.ConsumeFromChests(player, fuel, 1, linkId) < 1)
+                return false;
+
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+            BeginSilence();
+            try
+            {
+                nv.InvokeRPC("RPC_AddFuel");
+            }
+            finally
+            {
+                EndSilence();
+            }
+            added++;
+            return true;
         }
 
         private static bool FillOreToMax(Smelter smelter, Player player)
@@ -851,8 +776,7 @@ namespace StoreAndCraft
             List<string> allowed = StationPullFilter.AllowedOreNames(smelter);
             if (allowed == null || allowed.Count == 0)
             {
-                if (!StationFeed.ForceChestOnly)
-                    Quiet(smelter, "ore", QuietEmptySeconds);
+                Quiet(smelter, "ore", QuietEmptySeconds);
                 return false;
             }
 
@@ -867,68 +791,46 @@ namespace StoreAndCraft
                 if (Mathf.RoundToInt(ReadNumber(SmelterGetQueue, smelter)) >= smelter.m_maxOre)
                     break;
 
-                if (AutoFillHasLocalAny(player, allowed))
+                if (!TryAddOneOreFromChests(smelter, player, nv, allowed, ref added))
                 {
-                    if (smelter.m_addOreSwitch != null
-                        && SmelterAddOre != null
-                        && InvokeAdd(SmelterAddOre, smelter, smelter.m_addOreSwitch, player))
+                    if (added == 0)
                     {
-                        added++;
-                        continue;
-                    }
-
-                    ItemDrop.ItemData local = FirstLocal(player, allowed);
-                    string sharedLocal = local?.m_shared != null ? local.m_shared.m_name : null;
-                    string prefabLocal = local != null ? ItemIds.PrefabName(local) : PrefabName(sharedLocal);
-                    if (string.IsNullOrEmpty(prefabLocal))
-                        prefabLocal = PrefabName(sharedLocal);
-                    Inventory inv = player.GetInventory();
-                    if (local == null || inv == null || nv == null || !nv.IsValid()
-                        || string.IsNullOrEmpty(prefabLocal) || !inv.RemoveOneItem(local))
-                        break;
-                    if (!nv.IsOwner())
-                        nv.ClaimOwnership();
-                    BeginSilence();
-                    try
-                    {
-                        nv.InvokeRPC("RPC_AddOre", prefabLocal, false);
-                    }
-                    finally
-                    {
-                        EndSilence();
-                    }
-                    added++;
-                    continue;
-                }
-
-                if (added == 0 && !ChestsHaveAny(player, allowed))
-                {
-                    if (!StationFeed.ForceChestOnly)
                         Quiet(smelter, "ore", QuietEmptySeconds);
-                    return false;
-                }
-
-                string shared = FirstChestItem(player, allowed);
-                string prefab = PrefabName(shared);
-                if (nv == null || !nv.IsValid() || string.IsNullOrEmpty(prefab)
-                    || StationFeed.ConsumeFromChests(player, shared, 1) < 1)
+                        return false;
+                    }
                     break;
-
-                if (!nv.IsOwner())
-                    nv.ClaimOwnership();
-                BeginSilence();
-                try
-                {
-                    nv.InvokeRPC("RPC_AddOre", prefab, false);
                 }
-                finally
-                {
-                    EndSilence();
-                }
-                added++;
             }
 
             return added > 0;
+        }
+
+        private static bool TryAddOneOreFromChests(
+            Smelter smelter, Player player, ZNetView nv, List<string> allowed, ref int added)
+        {
+            int linkId = StationLink.Get(smelter);
+            if (!ChestsHaveAny(player, allowed, linkId))
+                return false;
+
+            string shared = FirstChestItem(player, allowed, linkId);
+            string prefab = PrefabName(shared);
+            if (nv == null || !nv.IsValid() || string.IsNullOrEmpty(prefab)
+                || StationFeed.ConsumeFromChests(player, shared, 1, linkId) < 1)
+                return false;
+
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+            BeginSilence();
+            try
+            {
+                nv.InvokeRPC("RPC_AddOre", prefab, false);
+            }
+            finally
+            {
+                EndSilence();
+            }
+            added++;
+            return true;
         }
 
         private static bool FillFireWhenEmpty(Fireplace fire, Player player)
@@ -975,15 +877,9 @@ namespace StoreAndCraft
             if (need <= 0)
                 return false;
 
-            bool remotePull = StationFeed.ForceChestOnly;
-            if (!remotePull)
-                QuietUntil.Remove(QuietKey(fire, "fire"));
+            QuietUntil.Remove(QuietKey(fire, "fire"));
 
-            bool useBag = !remotePull && UsePlayerInventory() && player != null;
-            Inventory inv = useBag ? player.GetInventory() : null;
-            if (useBag && inv == null)
-                return false;
-
+            int linkId = StationLink.Get(fire);
             int added = 0;
             BeginSilence();
             try
@@ -993,21 +889,14 @@ namespace StoreAndCraft
                     if (Mathf.CeilToInt(ReadFireFuel(fire)) >= max)
                         break;
 
-                    if (inv != null && AutoFillLocalCount(player, fuel) >= 1)
+                    if (!TryTakeOneFireFuelFromChests(player, fuel, linkId))
                     {
-                        if (!PlayerBag.RemoveOneFromBag(inv, fuel))
-                            break;
-                    }
-                    else
-                    {
-                        if (added == 0 && !StationFeed.ChestsHave(player, fuel))
+                        if (added == 0)
                         {
-                            if (!remotePull)
-                                Quiet(fire, "fire", QuietEmptySeconds);
+                            Quiet(fire, "fire", QuietEmptySeconds);
                             return false;
                         }
-                        if (StationFeed.ConsumeFromChests(player, fuel, 1) < 1)
-                            break;
+                        break;
                     }
 
                     if (!nv.IsOwner())
@@ -1022,6 +911,13 @@ namespace StoreAndCraft
             }
 
             return added > 0;
+        }
+
+        private static bool TryTakeOneFireFuelFromChests(Player player, string fuel, int linkId)
+        {
+            if (!StationFeed.ChestsHave(player, fuel, linkId))
+                return false;
+            return StationFeed.ConsumeFromChests(player, fuel, 1, linkId) >= 1;
         }
 
         private static bool FillOvenWhenEmpty(CookingStation oven, Player player)
@@ -1056,38 +952,42 @@ namespace StoreAndCraft
                 if (ReadNumber(CookGetFuel, oven) > oven.m_maxFuel - 1f)
                     break;
 
-                if (AutoFillLocalCount(player, fuel) >= 1)
+                if (!TryAddOneOvenFuelFromChests(oven, player, nv, fuel, ref added))
                 {
-                    if (CookAddFuel == null || !InvokeWith(CookAddFuel, oven, oven.m_addFuelSwitch, player))
-                        break;
-                    added++;
-                    continue;
-                }
-
-                if (added == 0 && !StationFeed.ChestsHave(player, fuel))
-                {
-                    Quiet(oven, "fuel", QuietEmptySeconds);
-                    return false;
-                }
-
-                if (nv == null || !nv.IsValid() || StationFeed.ConsumeFromChests(player, fuel, 1) < 1)
+                    if (added == 0)
+                    {
+                        Quiet(oven, "fuel", QuietEmptySeconds);
+                        return false;
+                    }
                     break;
-
-                if (!nv.IsOwner())
-                    nv.ClaimOwnership();
-                BeginSilence();
-                try
-                {
-                    nv.InvokeRPC("RPC_AddFuel");
                 }
-                finally
-                {
-                    EndSilence();
-                }
-                added++;
             }
 
             return added > 0;
+        }
+
+        private static bool TryAddOneOvenFuelFromChests(
+            CookingStation oven, Player player, ZNetView nv, string fuel, ref int added)
+        {
+            int linkId = StationLink.Get(oven);
+            if (!StationFeed.ChestsHave(player, fuel, linkId))
+                return false;
+            if (nv == null || !nv.IsValid() || StationFeed.ConsumeFromChests(player, fuel, 1, linkId) < 1)
+                return false;
+
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+            BeginSilence();
+            try
+            {
+                nv.InvokeRPC("RPC_AddFuel");
+            }
+            finally
+            {
+                EndSilence();
+            }
+            added++;
+            return true;
         }
 
         /// <summary>Shift+[E] on cooking fuel: top up wood/fuel to max.</summary>
@@ -1118,101 +1018,25 @@ namespace StoreAndCraft
             if (nv == null || !nv.IsValid())
                 return false;
 
-            // Remote / chest-only: pull straight into the oven via RPC (no bag staging).
-            if (!UsePlayerInventory())
-                return FillOvenFoodFromChests(oven, player, foods, nv);
-
+            int linkId = StationLink.Get(oven);
             int added = 0;
             int guard = oven.m_slots != null ? oven.m_slots.Length : 5;
             while (guard-- > 0 && !IsTrue(CookIsFull, oven))
             {
-                // Same pull as pressing [E]: move one cookable from chests into the bag.
-                if (!StationFeed.EnsureAny(player, foods, 1))
+                if (!ChestsHaveAny(player, foods, linkId))
                 {
                     if (added == 0)
                         Quiet(oven, "food", QuietEmptySeconds);
                     break;
                 }
 
-                ItemDrop.ItemData item = FirstLocal(player, foods);
-                if (item == null || item.m_shared == null)
-                    break;
-
-                StationFeed.EnsureCookDropPrefab(oven, item);
-
-                // Campfire spit / sticks: OnUseItem matches manual [E].
-                // Stone oven: OnUseItem can no-op when m_requireFire and the under-fire is out —
-                // fall back to RPC_AddItem like before.
-                bool placed = CookUseItem != null && InvokeWith(CookUseItem, oven, player, item);
-                if (!placed)
-                {
-                    string prefab = StationFeed.CookPrefabName(oven, item.m_shared.m_name);
-                    if (string.IsNullOrEmpty(prefab))
-                        prefab = ItemIds.PrefabName(item);
-                    if (string.IsNullOrEmpty(prefab))
-                        prefab = PrefabName(item.m_shared.m_name);
-                    if (string.IsNullOrEmpty(prefab))
-                        break;
-
-                    Inventory inv = player.GetInventory();
-                    if (inv == null)
-                        break;
-
-                    InventoryCountPatches.Skip++;
-                    try
-                    {
-                        if (!inv.RemoveOneItem(item))
-                            break;
-                    }
-                    finally
-                    {
-                        InventoryCountPatches.Skip--;
-                    }
-
-                    if (!nv.IsOwner())
-                        nv.ClaimOwnership();
-
-                    BeginSilence();
-                    try
-                    {
-                        nv.InvokeRPC("RPC_AddItem", prefab, false);
-                    }
-                    finally
-                    {
-                        EndSilence();
-                    }
-                }
-
-                added++;
-            }
-
-            return added > 0;
-        }
-
-        private static bool FillOvenFoodFromChests(
-            CookingStation oven,
-            Player player,
-            List<string> foods,
-            ZNetView nv)
-        {
-            int added = 0;
-            int guard = oven.m_slots != null ? oven.m_slots.Length : 5;
-            while (guard-- > 0 && !IsTrue(CookIsFull, oven))
-            {
-                if (!ChestsHaveAny(player, foods))
-                {
-                    if (added == 0)
-                        Quiet(oven, "food", QuietEmptySeconds);
-                    break;
-                }
-
-                string shared = FirstChestItem(player, foods);
+                string shared = FirstChestItem(player, foods, linkId);
                 string prefab = StationFeed.CookPrefabName(oven, shared);
                 if (string.IsNullOrEmpty(prefab))
                     prefab = PrefabName(shared);
                 if (string.IsNullOrEmpty(prefab) || string.IsNullOrEmpty(shared))
                     break;
-                if (StationFeed.ConsumeFromChests(player, shared, 1) < 1)
+                if (StationFeed.ConsumeFromChests(player, shared, 1, linkId) < 1)
                     break;
 
                 if (!nv.IsOwner())
@@ -1228,6 +1052,7 @@ namespace StoreAndCraft
                 }
                 added++;
             }
+
             return added > 0;
         }
 
@@ -1243,24 +1068,19 @@ namespace StoreAndCraft
                 return false;
             }
 
-            if (AutoFillHasLocalAny(player, meads))
-            {
-                ItemDrop.ItemData item = FirstLocal(player, meads);
-                return item != null && InvokeWith(FermenterAddItem, fermenter, player, item);
-            }
-
-            if (!ChestsHaveAny(player, meads))
+            int linkId = StationLink.Get(fermenter);
+            if (!ChestsHaveAny(player, meads, linkId))
             {
                 Quiet(fermenter, "mead", QuietEmptySeconds);
                 return false;
             }
 
-            string shared = FirstChestItem(player, meads);
+            string shared = FirstChestItem(player, meads, linkId);
             string prefab = PrefabName(shared);
             int hash = PrefabHash(prefab);
             ZNetView nv = fermenter.GetComponent<ZNetView>();
             if (nv == null || !nv.IsValid() || hash == 0
-                || StationFeed.ConsumeFromChests(player, shared, 1) < 1)
+                || StationFeed.ConsumeFromChests(player, shared, 1, linkId) < 1)
             {
                 Quiet(fermenter, "mead", QuietEmptySeconds);
                 return false;
@@ -1291,51 +1111,13 @@ namespace StoreAndCraft
             if (nv == null || !nv.IsValid())
                 return false;
 
+            int linkId = StationLink.Get(turret);
             bool lockType = ammo > 0;
-            Inventory inv = player.GetInventory();
             int added = 0;
             int need = turret.m_maxAmmo - ammo;
 
             for (int i = 0; i < need; i++)
             {
-                ItemDrop.ItemData local = null;
-                if (UsePlayerInventory() && inv != null && TurretFindAmmo != null)
-                {
-                    try
-                    {
-                        local = TurretFindAmmo.Invoke(turret, new object[] { inv, lockType }) as ItemDrop.ItemData;
-                    }
-                    catch
-                    {
-                        local = null;
-                    }
-                }
-
-                if (local != null)
-                {
-                    if (!InvokeWith(TurretUseItem, turret, player, local))
-                    {
-                        // Fallback: remove + RPC with prefab name.
-                        string prefab = ItemIds.PrefabName(local);
-                        if (string.IsNullOrEmpty(prefab) || !inv.RemoveOneItem(local))
-                            break;
-                        if (!nv.IsOwner())
-                            nv.ClaimOwnership();
-                        BeginSilence();
-                        try
-                        {
-                            nv.InvokeRPC("RPC_AddAmmo", prefab);
-                        }
-                        finally
-                        {
-                            EndSilence();
-                        }
-                    }
-                    added++;
-                    lockType = true;
-                    continue;
-                }
-
                 List<string> allowed = TurretAmmoSharedNames(turret, lockType);
                 if (allowed == null || allowed.Count == 0)
                 {
@@ -1344,33 +1126,31 @@ namespace StoreAndCraft
                     break;
                 }
 
-                if (!StationFeed.EnsureAny(player, allowed, 1))
+                if (!ChestsHaveAny(player, allowed, linkId))
                 {
                     if (added == 0)
                         Quiet(turret, "ammo", QuietEmptySeconds);
                     break;
                 }
 
-                ItemDrop.ItemData pulled = FirstLocal(player, allowed);
-                if (pulled == null)
+                string shared = FirstChestItem(player, allowed, linkId);
+                string prefab = PrefabName(shared);
+                if (string.IsNullOrEmpty(prefab))
+                    prefab = shared;
+                if (string.IsNullOrEmpty(prefab)
+                    || StationFeed.ConsumeFromChests(player, shared, 1, linkId) < 1)
+                {
+                    if (added == 0)
+                        Quiet(turret, "ammo", QuietEmptySeconds);
                     break;
-
-                string name = ItemIds.PrefabName(pulled);
-                if (string.IsNullOrEmpty(name))
-                    name = PrefabName(pulled.m_shared != null ? pulled.m_shared.m_name : null);
-                if (string.IsNullOrEmpty(name))
-                    break;
-
-                Inventory bag = player.GetInventory();
-                if (bag == null || !bag.RemoveOneItem(pulled))
-                    break;
+                }
 
                 if (!nv.IsOwner())
                     nv.ClaimOwnership();
                 BeginSilence();
                 try
                 {
-                    nv.InvokeRPC("RPC_AddAmmo", name);
+                    nv.InvokeRPC("RPC_AddAmmo", prefab);
                 }
                 finally
                 {
@@ -1435,130 +1215,28 @@ namespace StoreAndCraft
 
         private static bool FillFoodTrayWhenEmpty(ItemStand stand, Player player)
         {
+            // ItemStand.UseItem needs a bag stack — auto-fill is chests-only and must not
+            // stage through inventory. No safe chest→tray RPC in this mod; skip quietly.
             if (stand == null || player == null)
                 return false;
-
             if (IsTrue(ItemStandHaveAttachment, stand))
                 return false;
-
-            ItemDrop.ItemData local = FindLocalTrayFood(player, stand);
-            if (local != null)
-            {
-                if (InvokeWith(ItemStandUseItem, stand, player, local))
-                    return true;
-            }
-
-            List<string> foods = TrayFoodSharedNames(stand);
-            if (foods.Count == 0)
-            {
-                // Type-only trays: only bag items that CanAttach; no chest scan without a whitelist.
-                if (local == null)
-                    Quiet(stand, "tray", QuietEmptySeconds);
-                return false;
-            }
-
-            if (!StationFeed.EnsureAny(player, foods, 1))
-            {
-                Quiet(stand, "tray", QuietEmptySeconds);
-                return false;
-            }
-
-            ItemDrop.ItemData item = FirstLocal(player, foods);
-            if (item == null || !TrayCanAttach(stand, item))
-            {
-                Quiet(stand, "tray", QuietEmptySeconds);
-                return false;
-            }
-
-            return InvokeWith(ItemStandUseItem, stand, player, item);
-        }
-
-        private static List<string> TrayFoodSharedNames(ItemStand stand)
-        {
-            var names = new List<string>();
-            if (stand?.m_supportedItems == null)
-                return names;
-
-            for (int i = 0; i < stand.m_supportedItems.Count; i++)
-            {
-                ItemDrop drop = stand.m_supportedItems[i];
-                if (drop?.m_itemData?.m_shared == null)
-                    continue;
-                if (drop.m_itemData.m_shared.m_itemType != ItemDrop.ItemData.ItemType.Consumable)
-                    continue;
-                string shared = StationFeed.SharedFrom(drop);
-                if (string.IsNullOrEmpty(shared) || names.Contains(shared))
-                    continue;
-                names.Add(shared);
-            }
-
-            return names;
-        }
-
-        private static ItemDrop.ItemData FindLocalTrayFood(Player player, ItemStand stand)
-        {
-            if (!UsePlayerInventory() || player == null || stand == null)
-                return null;
-            Inventory inv = player.GetInventory();
-            if (inv == null)
-                return null;
-
-            List<ItemDrop.ItemData> all = inv.GetAllItems();
-            if (all == null)
-                return null;
-
-            for (int i = 0; i < all.Count; i++)
-            {
-                ItemDrop.ItemData item = all[i];
-                if (item?.m_shared == null)
-                    continue;
-                if (item.m_shared.m_itemType != ItemDrop.ItemData.ItemType.Consumable)
-                    continue;
-                if (TrayCanAttach(stand, item))
-                    return item;
-            }
-
-            return null;
-        }
-
-        private static bool TrayCanAttach(ItemStand stand, ItemDrop.ItemData item)
-        {
-            if (stand == null || item == null || ItemStandCanAttach == null)
-                return false;
-            try
-            {
-                object result = ItemStandCanAttach.Invoke(stand, new object[] { item });
-                return result is bool && (bool)result;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static ItemDrop.ItemData FirstLocal(Player player, List<string> sharedNames)
-        {
-            Inventory inv = player != null ? player.GetInventory() : null;
-            if (inv == null || sharedNames == null)
-                return null;
-            foreach (string shared in sharedNames)
-            {
-                if (string.IsNullOrEmpty(shared))
-                    continue;
-                ItemDrop.ItemData item = PlayerBag.FindInBag(inv, shared);
-                if (item != null)
-                    return item;
-            }
-            return null;
+            Quiet(stand, "tray", QuietEmptySeconds);
+            return false;
         }
 
         private static string FirstChestItem(Player player, List<string> sharedNames)
+        {
+            return FirstChestItem(player, sharedNames, StationLink.ActiveId);
+        }
+
+        private static string FirstChestItem(Player player, List<string> sharedNames, int linkId)
         {
             if (sharedNames == null)
                 return null;
             foreach (string shared in sharedNames)
             {
-                if (!string.IsNullOrEmpty(shared) && StationFeed.ChestsHave(player, shared))
+                if (!string.IsNullOrEmpty(shared) && StationFeed.ChestsHave(player, shared, linkId))
                     return shared;
             }
             return null;
@@ -1590,97 +1268,21 @@ namespace StoreAndCraft
             }
         }
 
-        private static bool InvokeWith(MethodInfo method, object target, params object[] candidates)
-        {
-            if (method == null || target == null)
-                return false;
-
-            ParameterInfo[] ps;
-            try
-            {
-                ps = method.GetParameters();
-            }
-            catch
-            {
-                return false;
-            }
-
-            object[] args = new object[ps.Length];
-            var used = new bool[candidates.Length];
-            for (int i = 0; i < ps.Length; i++)
-            {
-                Type need = ps[i].ParameterType;
-                bool found = false;
-                for (int c = 0; c < candidates.Length; c++)
-                {
-                    if (used[c] || candidates[c] == null)
-                        continue;
-                    if (!need.IsInstanceOfType(candidates[c]))
-                        continue;
-                    args[i] = candidates[c];
-                    used[c] = true;
-                    found = true;
-                    break;
-                }
-
-                if (!found && need.IsValueType)
-                    args[i] = Activator.CreateInstance(need);
-            }
-
-            BeginSilence();
-            try
-            {
-                object result = method.Invoke(target, args);
-                return !(result is bool) || (bool)result;
-            }
-            catch
-            {
-                return false;
-            }
-            finally
-            {
-                EndSilence();
-            }
-        }
-
         private static bool ChestsHaveAny(Player player, List<string> sharedNames)
         {
+            return ChestsHaveAny(player, sharedNames, StationLink.ActiveId);
+        }
+
+        private static bool ChestsHaveAny(Player player, List<string> sharedNames, int linkId)
+        {
+            if (sharedNames == null)
+                return false;
             foreach (string shared in sharedNames)
             {
-                if (StationFeed.ChestsHave(player, shared))
+                if (StationFeed.ChestsHave(player, shared, linkId))
                     return true;
             }
             return false;
-        }
-
-        private static bool HasLocalAny(Player player, List<string> sharedNames)
-        {
-            foreach (string shared in sharedNames)
-            {
-                if (StationFeed.LocalCount(player, shared) >= 1)
-                    return true;
-            }
-            return false;
-        }
-
-        private static bool InvokeAdd(MethodInfo method, Smelter smelter, Switch sw, Player player)
-        {
-            if (method == null || smelter == null)
-                return false;
-            BeginSilence();
-            try
-            {
-                object result = method.Invoke(smelter, new object[] { sw, player, null });
-                return !(result is bool) || (bool)result;
-            }
-            catch
-            {
-                return false;
-            }
-            finally
-            {
-                EndSilence();
-            }
         }
 
         private static void BeginSilence()

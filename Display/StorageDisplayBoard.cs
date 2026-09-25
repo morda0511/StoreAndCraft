@@ -124,16 +124,16 @@ namespace StoreAndCraft
                     _columns = 13;
                     _rows = DisplayFilters.MaxCategories; // 12
                     _slotCount = _columns * _rows;
-                    _fontFactor = 0.14f;
-                    // Category labels stay at the old scale-0 size and never follow content scale.
-                    _bandFontFactor = 0.18f / 3f;
-                    _titleFactor = 0.10f / 3f;
+                    // Match Medium readability — 0.14 + band/3 made Compact/rebuild text microscopic.
+                    _fontFactor = 0.20f;
+                    _bandFontFactor = 0.13f;
+                    _titleFactor = 0.10f;
                     _columnMajor = false;
                     _columnHeaders = false;
                     _tightSlots = true;
                     _flowSections = true;
-                    // Room for WEAPONS; label X nudge is BuildLargeUi offsetMin (-0.3).
-                    _labelWidth = 0.10f;
+                    // Room for WEAPONS / INGREDIENTS; label X nudge is BuildLargeUi offsetMin (-0.3).
+                    _labelWidth = 0.16f;
                     break;
                 default:
                     // Category title strip + denser item cells; sort grouped by category.
@@ -631,7 +631,9 @@ namespace StoreAndCraft
 
         private void EnforceClassicColumnFloor(float contentWFrac, float contentHFrac)
         {
-            if (_baseAmountFont <= 0.01f || _boardW <= 1.01f)
+            // Do not treat boardW≈1 as "unmeasured" — vanilla wood-sign text rects are often ~1 unit,
+            // and skipping the floor left Large at 13–18 tiny columns after Scale/Layout rebuilds.
+            if (_baseAmountFont <= 0.01f || _boardW < 0.05f || _boardH < 0.05f)
                 return;
             float cellH = contentHFrac * _boardH / Mathf.Max(1, _rows);
             float minPair = MinPairWidthPx(cellH, _baseAmountFont);
@@ -716,7 +718,7 @@ namespace StoreAndCraft
                     Mathf.RoundToInt(DisplayFilters.MaxCategories / mul),
                     3,
                     DisplayFilters.MaxCategories);
-                float labelW = Mathf.Clamp(_labelWidth, 0.08f, 0.16f);
+                float labelW = Mathf.Clamp(_labelWidth, 0.12f, 0.22f);
                 EnforceClassicColumnFloor(1f - labelW, 1f);
                 _slotCount = _columns * _rows;
                 _itemsPerGroup = 1;
@@ -1491,8 +1493,8 @@ namespace StoreAndCraft
             _slotCount = rows * itemCols;
             _builtBandCount = rows;
 
-            // Fixed left gutter — same board fraction at every scale so labels stay put.
-            const float labelW = 0.118f;
+            // Fixed left gutter — wide enough for full category words (WEAPONS, INGREDIENTS).
+            const float labelW = 0.15f;
             float padX = 0.003f;
             float padY = 0.010f;
             // Soft nudge toward the board edge without leaving the sign face.
@@ -1527,9 +1529,11 @@ namespace StoreAndCraft
                 label.enabled = true;
                 label.alignment = TextAlignmentOptions.MidlineLeft;
                 label.textWrappingMode = TextWrappingModes.NoWrap;
-                label.overflowMode = TextOverflowModes.Ellipsis;
+                label.overflowMode = TextOverflowModes.Overflow;
                 label.margin = Vector4.zero;
-                label.enableAutoSizing = false;
+                label.enableAutoSizing = true;
+                label.fontSizeMin = chipSize * 0.55f;
+                label.fontSizeMax = chipSize;
                 label.fontSize = chipSize;
                 label.color = new Color(1f, 0.88f, 0.35f, 1f);
                 label.faceColor = new Color32(255, 220, 80, 255);
@@ -1566,9 +1570,12 @@ namespace StoreAndCraft
             _slotCount = rows * itemCols;
             _builtBandCount = rows;
 
-            float labelW = Mathf.Clamp(_labelWidth, 0.08f, 0.16f);
+            float labelW = Mathf.Clamp(_labelWidth, 0.12f, 0.22f);
             float padX = 0.0015f;
             float padY = 0.008f;
+            // Same scale coupling as Compact — old fixed band/3 stayed microscopic after Scale changes.
+            float labelSize = bandFont * Mathf.Clamp(ContentScaleMul(), 0.7f, 1.55f);
+            _chipFont = labelSize;
 
             _bandLabels = new TextMeshProUGUI[rows];
             for (int r = 0; r < rows; r++)
@@ -1596,10 +1603,13 @@ namespace StoreAndCraft
                 label.enabled = true;
                 label.alignment = TextAlignmentOptions.MidlineLeft;
                 label.textWrappingMode = TextWrappingModes.NoWrap;
-                label.overflowMode = TextOverflowModes.Ellipsis;
+                // Overflow + autosize: never "Wea…" — full words like WEAPONS stay readable.
+                label.overflowMode = TextOverflowModes.Overflow;
                 label.margin = Vector4.zero;
-                label.enableAutoSizing = false;
-                label.fontSize = bandFont;
+                label.enableAutoSizing = true;
+                label.fontSizeMin = labelSize * 0.55f;
+                label.fontSizeMax = labelSize;
+                label.fontSize = labelSize;
                 label.color = new Color(1f, 0.92f, 0.55f, 1f);
                 label.faceColor = new Color32(255, 235, 140, 255);
                 label.outlineWidth = 0f;

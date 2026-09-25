@@ -10,7 +10,7 @@ Where behavior is gated or soft-disabled, that is stated explicitly.
 
 - Mod GUID: `Mordi.StoreAndCraft`.
 - Master switch: `ModEnabled` (and feature toggles under Craft / Store / Stations / etc. in `ModConfig`).
-- Multiplayer: host config synced to clients (`ProtocolVersion` 13). Clients should match mod version (`VersionGate`).
+- Multiplayer: host config synced to clients (`ProtocolVersion` 15). Clients should match mod version (`VersionGate`).
 - Ranges: separate config for store vs craft (and station-related distances where bound).
 
 ---
@@ -79,7 +79,7 @@ Hotkeys skipped while console/chat/text input or filter/display menus are open.
 
 ## Station systems (CONFIRMED matrix)
 
-**Important split:** player autofill is `StationAutoFill` (toggled with B). `StationFeed` is the shared pull/stamp helper. `CookingAutoDrop` is separate (N). `RemoteAutomation` output→chest is coded but **inactive** (see Remote).
+**Important split:** player autofill is `StationAutoFill` (toggled with B). `StationFeed` is the shared pull/stamp helper. `CookingAutoDrop` is separate (N).
 
 ### Supported auto-fill types (`StationAutoFill` Register + Tick)
 
@@ -100,18 +100,18 @@ Comment in `StationAutoFill` lists windmill under Smelter coverage (Valheim wind
 ### Linked storage
 
 - Station ZDO `SAC_stationLink` 0–9; chests tagged `[lN]` / legacy `[linkN]` in name (`StationLink`).
-- Link ≥ 1 → only matching chests; link 0 → only untagged chests (linked chests exclusive).
+- Link ≥ 1 → only matching chests; link 0 → only untagged chests (linked chests exclusive). Pulls pass the station link id explicitly so a leaked ActiveId=-1 cannot open every chest.
 - Active pull context: `StationLink.PushStation` / `ChestAllowedForActive` used by `StationFeed` / `NearbyIndex` counts when in station pull.
 
 ### Filters
 
 - `StationPullFilter` + `StationFilterMenu` (opened via RenameKey / Alt+E path when looking at multi-input stations).
-- Denied types are not chest-pulled for that station (manual inventory use still possible).
+- Denied types are not chest-pulled **and** cannot be manually inserted from the bag on that station.
 
 ### Config related
 
-- `AutoFillRange`, `StationFillSkipInventory` (prefer inventory before chests unless remote `ForceChestOnly`).
-- Remote path forces chest-only via `StationFeed.BeginStationPull(..., chestOnly: true)` — only when Remote enabled.
+- `AutoFillRange` (chests only — never bag; link rules + `[I]`/`[H]` apply).
+- Alt+E pull filter also blocks manual bag insert of denied types on that station.
 
 ---
 
@@ -120,8 +120,7 @@ Comment in `StationAutoFill` lists windmill under Smelter coverage (Valheim wind
 | Path | Status | Behavior |
 |------|--------|----------|
 | `CookingAutoDrop` | **Active** | Station/hive → **ground** drop → player `AutoIntake` can store into chests |
-| `RemoteAutomation.TryHandleOutput` | **Implemented, inactive** | Would deposit smelter/oven output into linked chests; gated by `RemoteUiExposed => false` so always `PassThrough` |
-| Other direct station→chest pull | **Not implemented** outside Remote | No separate active “output withdraw to chest” system found |
+| Direct station→chest | **Not implemented** | No separate active “output withdraw to chest” system |
 
 ---
 
@@ -148,6 +147,7 @@ Any cookable present on that station’s conversion table can work; items with n
 - Components inherited/added: `ZNetView` (persistent), `Piece`, `Sign`, `StorageDisplayBoard`; WearNTear from sign clone.
 - Colliders: Small unchanged; Medium/Large BoxColliders thinned on shallow axis (`SoftenColliders`); **not** triggers (placement would break).
 - Interact: `Sign.Interact` → type menu (medium/large); small: hotbar assign; Shift+hover blocks attack for scale/layout cycle.
+- Medium/Large: Display Scale (−2…+4) and Classic/Compact Layout rebuild the grid; amount + category fonts follow cell size (Large uses the same font factors as Medium so Scale/Layout stay readable). Large left category rail is wide enough for full words (WEAPONS, INGREDIENTS) with autosize — not ellipsis. Column floor uses measured board rect even when width ≈ 1 (vanilla sign text area).
 - **No Rigidbody** added by this mod.
 
 ### Carved boards (code present, not exposed)
@@ -167,7 +167,7 @@ Any cookable present on that station’s conversion table can work; items with n
 - Non-owner client: `Withdraw` / `Consume` / deposit invoke chest RPCs; owner runs `OnRemove` / `OnConsume` / … then may `SendGrant` via `ZRoutedRpc` (`KAC_Grant`).
 - RPC validated: usable container, private-area access, sender within range + 6 m slack (`ValidateRpc` / `SenderInRange`).
 - Open chest: avoid claiming ownership (kick / wipe risk); grab uses async grant if `IsInUse()`.
-- Dedicated process Update: `TransferService.Tick` + `AutoIntake.TickDedicated` + `RemoteAutomation.TickDedicated` only (remote no-ops while gated).
+- Dedicated process Update: `TransferService.Tick` + `AutoIntake.TickDedicated` only.
 - Config: `AdminUtil.IsServer()`; dedicated cannot use local settings UI (`CanEditSettings` false on dedicated).
 
 ### Still UNKNOWN (not fully traced)
@@ -177,19 +177,9 @@ Any cookable present on that station’s conversion table can work; items with n
 
 ---
 
-## Remote Automation (CONFIRMED current state)
+## Remote Automation
 
-| Aspect | Finding |
-|--------|---------|
-| Hard gate | `RemoteAutomation.RemoteUiExposed => false` |
-| `Enabled()` | Returns false immediately when gate false (ignores config true) |
-| `Tick` / `TickDedicated` | Early return |
-| UI | `UiExposed` false — no remote toggle in filter |
-| Output→chest | Code in `TryHandleOutput` + smelter Harmony prefixes; inactive |
-| Config | `RemoteAutomationEnabled` default true still synced — dormant |
-| Git | Experimental **remote dump** removed in **1.3.1**; current Remote Automation is a separate later system, still soft-hidden |
-
-Do not document as a player feature until `RemoteUiExposed` is true and tested.
+Removed in **1.3.43** (`Craft/RemoteAutomation.cs`, config keys, keep-alive / zone Harmony patches). Earlier experimental **remote dump** was removed in **1.3.1**.
 
 ---
 
@@ -204,4 +194,3 @@ Do not document as a player feature until `RemoteUiExposed` is true and tested.
 
 - **Epic Loot:** optional; enchanting mats from chests when bridge detects types.
 - No Jotunn requirement.
-- Remote Automation also refuses to enable if LazyVikings GUID is loaded (only relevant if Remote gate opened).

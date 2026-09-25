@@ -399,7 +399,13 @@ namespace StoreAndCraft
             return totals;
         }
 
-        public static int CountItem(Vector3 origin, float range, string sharedName, bool leaveOne, int quality = -1)
+        public static int CountItem(
+            Vector3 origin,
+            float range,
+            string sharedName,
+            bool leaveOne,
+            int quality = -1,
+            int linkId = int.MinValue)
         {
             if (string.IsNullOrEmpty(sharedName))
                 return 0;
@@ -410,9 +416,10 @@ namespace StoreAndCraft
                 _cacheFrame = Time.frameCount;
             }
 
+            int useLink = linkId == int.MinValue ? StationLink.ActiveId : linkId;
             float useRange = range > 0f ? range : StationFeed.ActivePullRange();
             string key = sharedName + "|" + quality + "|" + (leaveOne ? 1 : 0) + "|"
-                + useRange.ToString("0.##") + "|L" + StationLink.ActiveId;
+                + useRange.ToString("0.##") + "|L" + useLink;
             int cached;
             if (CountCache.TryGetValue(key, out cached))
                 return cached;
@@ -421,7 +428,7 @@ namespace StoreAndCraft
             float craftSq = useRange * useRange;
             foreach (Container c in Cached)
             {
-                if (c == null || !StationLink.ChestAllowedForActive(c))
+                if (c == null || !StationLink.ChestAllowed(c, useLink))
                     continue;
 
                 if (ContainerFilter.SqrDistance(origin, c.transform.position) > craftSq)

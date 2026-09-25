@@ -48,9 +48,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 
 ### Kiln / smelter / cooking auto-fill
 - Look at a kiln, smelter, blast furnace, cooking spit, iron cooking station, stone oven, fermenter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station (saved on the station).
-- When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from nearby chests within `AutoFillRange`. **By default your bag is not touched** (`StationFillSkipInventory = true`) — many players hated auto-fill emptying the inventory. Same for Shift+[E] fill-to-max.
-- **If auto-fill still steals from your bag** (old config): open `BepInEx/config/com.morda.storeandcraft.cfg`, set `StationFillSkipInventory = true`, save — **or** delete that `.cfg` once and restart the game so it regenerates with the new default. Existing values are never overwritten by an update.
-- Want bag-first again? Set `StationFillSkipInventory = false` in section `3 - Craft`.
+- When fuel or ore hits **0**, it sends a full load (smelter max, e.g. 10) from nearby chests within `AutoFillRange`. Auto-fill **never takes from your bag** — only chests (same link, or both unlinked). `[I]` / `[H]` chests are skipped. Same for Shift+[E] fill-to-max.
 - Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
 - Cooking / ovens top up **free slots** (not only when fully empty). Stone oven door hover shows the toggle; food is added even if the under-fire is out (baking still needs fire to cook).
 - No chest scans and no “it’s full” spam while the station is still running. Filter still applies (Wood OFF stays OFF).
@@ -211,7 +209,7 @@ Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when `Lo
 | `StorageRange` | Take-stack / search / displays (m) |
 | `CraftRange` | Craft / build / station `[E]` (m) |
 | `AutoFillRange` | Auto-fill: player → station and player → chests (m). Default 20 |
-| `StationFillSkipInventory` | `true` (default) = auto-fill / Shift+[E] use chests only, never your bag. `false` = bag first. Old configs keep their saved value — set `true` or delete the `.cfg` once and restart to pick up the new default |
+| `AutoFillRange` | Auto-fill range in meters (player → station and player → chests). Auto-fill never uses your bag |
 | `IntakeInterval` | Seconds between ground-item scans |
 | Hotkeys (`DumpKey`, `TakeStackKey`, `FavoriteKey`, `AutoFillKey`, `SortKey`, …) | Local only |
 

@@ -24,7 +24,7 @@ Always (when running):
 1. `ConfigWatch.Tick`
 2. `TransferService.Tick` (queued moves; runs on dedicated too)
 
-**Dedicated** (`ZNet.instance.IsDedicated()`): then only `AutoIntake.TickDedicated` + `RemoteAutomation.TickDedicated`, then **return** (no NearbyIndex / StationAutoFill / Hotkeys on the dedicated process).
+**Dedicated** (`ZNet.instance.IsDedicated()`): then only `AutoIntake.TickDedicated`, then **return** (no NearbyIndex / StationAutoFill / Hotkeys on the dedicated process).
 
 **Client / listen-server with local player:**
 
@@ -34,11 +34,10 @@ Always (when running):
 6. `AutoStack.Tick`, `SearchPing.Tick`
 7. Display / filter menu ticks
 8. `StationAutoFill.Tick` (per-station autofill pulses)
-9. `RemoteAutomation.Tick` (no-ops while `RemoteUiExposed == false`)
 
-`LateUpdate`: `Hotkeys.Tick` (and station-hover frame reset).
+`LateUpdate`: `Hotkeys.Tick` (and station-hover / StationLink frame reset).
 
-`StationFeed` has **no** `Tick` — it is a helper API used by autofill, cook patches, and remote. Feed trough runs via its own `MonoBehaviour` + Harmony patches, not this Update list.
+`StationFeed` has **no** `Tick` — it is a helper API used by autofill and cook patches. Feed trough runs via its own `MonoBehaviour` + Harmony patches, not this Update list.
 
 Harmony patches run on vanilla call sites independently of this loop.
 
@@ -98,7 +97,7 @@ Harmony patches run on vanilla call sites independently of this loop.
 ### 8. Station linking and feed — `StationLink`, `StationFeed`, `StationAutoFill`, `StationPullFilter`, `StationFilterMenu`, `CookingAutoDrop`
 
 - **`StationAutoFill`:** registers and pulses `Smelter`, `Fireplace`, `CookingStation`, `Fermenter`, `Turret`, food `ItemStand` trays. Toggle ZDO `SAC_autoFill` (default key B).
-- **`StationFeed`:** pull helpers (`EnsureInInventory`, `EnsureForUse`, cook `dropPrefab` stamping, `ForceChestOnly` for remote).
+- **`StationFeed`:** pull helpers (`EnsureInInventory`, `EnsureForUse`, cook `dropPrefab` stamping).
 - **`StationLink`:** ZDO `SAC_stationLink` + chest name `[l1]`…`[l9]`.
 - **`StationPullFilter`:** per-station allow/deny for multi-input stations (Alt+E menu).
 - **`CookingAutoDrop`:** finished cook/honey → **ground** drop (ZDO `SAC_autoDrop`), not direct chest deposit.
@@ -113,12 +112,11 @@ Harmony patches run on vanilla call sites independently of this loop.
 - Reflection-only; no hard dependency.
 - Enchanting spend from chests **without** LeaveOne (single runestone must remain usable).
 
-### 11. Remote automation — `Craft/RemoteAutomation.cs`
+### 11. Remote automation — removed (1.3.43)
 
-- Full implementation in tree (feed + **output→linked chest**, keep-alive, `TickDedicated`).
-- Hard gate: `private static bool RemoteUiExposed => false` → `Enabled()` always false → `Tick` / `TickDedicated` / `TryHandleOutput` no-op for players.
-- Config `RemoteAutomationEnabled` still exists and syncs, but cannot enable runtime while the hard gate is false.
-- Distinct from removed **remote dump** (git 1.3.1).
+- Former `Craft/RemoteAutomation.cs` (feed, output→chest, keep-alive / zone patches) deleted.
+- Config keys and ProtocolVersion fields removed (`ProtocolVersion` 14).
+- Distinct from earlier **remote dump** removal in 1.3.1.
 
 ### 12. Feed trough — `Feed/FeedTrough.cs`
 
@@ -223,7 +221,6 @@ Piece placed → `StorageDisplayBoard` binds to storage → periodic/`RebuildUiN
 
 | Gate | Effect |
 |------|--------|
-| `RemoteAutomation.RemoteUiExposed => false` | `Enabled()` false; Tick/UI/output→chest inert (config cannot override) |
 | `DisplayPrefab.CarvedDisplaysExposed => false` | Carved prefabs not registered |
 | `IncludeDisplayBundle` default `false` (csproj) | `sac_displays` not copied into packs unless explicitly enabled |
 
@@ -234,6 +231,7 @@ Treat gated code as **present but not product-default**.
 ## What is intentionally absent
 
 - **Jotunn** — not referenced.
-- **Remote dump** — removed in 1.3.1 (different from current Remote Automation).
+- **Remote dump** — removed in 1.3.1.
+- **Remote Automation** — removed in 1.3.43 (file, config, zone keep-alive patches).
 - **StationAutoFill for SpinningWheel** — not registered.
-- **Active direct station→chest output** — only inactive RemoteAutomation implements it; live path is AutoDrop→ground→intake.
+- **Direct station→chest output** — not implemented; live path is AutoDrop→ground→intake.

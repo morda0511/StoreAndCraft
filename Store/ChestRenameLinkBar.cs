@@ -155,8 +155,7 @@ namespace StoreAndCraft
             rt.anchoredPosition = pos;
             rt.sizeDelta = new Vector2(160f, 18f);
 
-            TextMeshProUGUI label = go.AddComponent<TextMeshProUGUI>();
-            UiFonts.StyleThinLabel(label, 13f);
+            TextMeshProUGUI label = UiFonts.CreateLabel(go, 13f);
             label.text = text;
             label.color = new Color(1f, 0.85f, 0.4f, 1f);
             label.alignment = fromRight ? TextAlignmentOptions.TopRight : TextAlignmentOptions.TopLeft;

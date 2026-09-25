@@ -69,6 +69,7 @@ Tests are in-game. A green Release build is not enough.
 |---------|-------------|
 | Board shows items | Place display near chests; icons/counts appear |
 | No flicker | Watch board for several seconds / on open — no flash-empty loop |
+| Scale / Layout text | Large + Medium: change Scale and Classic/Compact — category + amount text stay readable (not microscopic); Large category names fully visible (not "Wea…") |
 | Filters / type menu | Select types; board respects filter |
 | No chest wipe | With displays present, walk away/back; chests intact |
 
@@ -93,12 +94,9 @@ Tests are in-game. A green Release build is not enough.
 
 ---
 
-## Remote automation (only if re-enabled)
+## Remote automation
 
-| Feature | How to test |
-|---------|-------------|
-| Soft-disable held | With flags off, no remote UI / no unexpected remote pulls |
-| If enabled | Explicit user test plan per exposed control — do not assume |
+Removed in 1.3.43 — no tests required. Do not re-add without a new explicit feature request.
 
 ---
 

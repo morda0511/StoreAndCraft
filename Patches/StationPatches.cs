@@ -56,7 +56,11 @@ namespace StoreAndCraft
             StationLink.PushStation(__instance);
             try
             {
-                StationFeed.EnsureInInventory(player, StationFeed.SharedFrom(__instance.m_fuelItem), 1);
+                StationFeed.EnsureInInventory(
+                    player,
+                    StationFeed.SharedFrom(__instance.m_fuelItem),
+                    1,
+                    StationLink.Get(__instance));
             }
             finally
             {
@@ -273,14 +277,23 @@ namespace StoreAndCraft
                 return true;
 
             string fuel = StationFeed.SharedFrom(__instance.m_fuelItem);
-            StationFeed.EnsureInInventory(player, fuel, 1);
+            StationLink.PushStation(__instance);
+            try
+            {
+                StationFeed.EnsureInInventory(player, fuel, 1, StationLink.Get(__instance));
+            }
+            finally
+            {
+                StationLink.Pop();
+            }
 
             // Inventory first: vanilla takes from the bag when the pull landed.
             if (StationFeed.LocalCount(player, fuel) > 0)
                 return true;
 
             // Chest still has fuel (or grant is in flight): skip "$msg_outof".
-            if (StationFeed.Ready() && !string.IsNullOrEmpty(fuel) && StationFeed.ChestsHave(player, fuel))
+            if (StationFeed.Ready() && !string.IsNullOrEmpty(fuel)
+                && StationFeed.ChestsHave(player, fuel, StationLink.Get(__instance)))
             {
                 __result = true;
                 return false;
@@ -335,7 +348,19 @@ namespace StoreAndCraft
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null || !__instance.m_canRefill)
                 return;
-            StationFeed.EnsureInInventory(player, StationFeed.SharedFrom(__instance.m_fuelItem), 1);
+            StationLink.PushStation(__instance);
+            try
+            {
+                StationFeed.EnsureInInventory(
+                    player,
+                    StationFeed.SharedFrom(__instance.m_fuelItem),
+                    1,
+                    StationLink.Get(__instance));
+            }
+            finally
+            {
+                StationLink.Pop();
+            }
         }
 
         private static void Postfix(Fireplace __instance, Humanoid user)
@@ -398,7 +423,11 @@ namespace StoreAndCraft
             StationLink.PushStation(__instance);
             try
             {
-                StationFeed.EnsureInInventory(player, StationFeed.SharedFrom(__instance.m_fuelItem), 1);
+                StationFeed.EnsureInInventory(
+                    player,
+                    StationFeed.SharedFrom(__instance.m_fuelItem),
+                    1,
+                    StationLink.Get(__instance));
             }
             finally
             {

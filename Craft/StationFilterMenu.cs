@@ -393,16 +393,6 @@ namespace StoreAndCraft
 
             int rowIndex = 0;
             Component station = ActiveStation();
-            // Remote Automation toggle hidden while RemoteUiExposed is false.
-            if (RemoteAutomation.UiExposed)
-            {
-                bool remoteOn = RemoteAutomation.IsOn(station);
-                AddToggleRow(
-                    rowIndex++,
-                    Loc.T("Remote Automation", "Remote Automation"),
-                    remoteOn,
-                    ToggleRemote);
-            }
 
             for (int i = 0; i < choices.Count; i++)
             {
@@ -426,15 +416,6 @@ namespace StoreAndCraft
                 UiLinkGrid.RefreshSelection(_linkGrid, StationLink.Get(station));
             else
                 BuildLinkGrid();
-        }
-
-        private static void ToggleRemote()
-        {
-            Component station = ActiveStation();
-            if (station == null)
-                return;
-            RemoteAutomation.Toggle(station);
-            RebuildRows(preserveScroll: true);
         }
 
         private static void AddToggleRow(int index, string label, bool on, UnityAction onToggle)

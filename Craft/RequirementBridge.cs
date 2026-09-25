@@ -12,6 +12,15 @@ namespace StoreAndCraft
         /// </summary>
         public static int CountNearby(Player player, string sharedName, int quality = -1)
         {
+            return CountNearby(player, sharedName, StationLink.ActiveId, quality);
+        }
+
+        /// <summary>
+        /// Count with an explicit station link (0 = untagged only, 1–9 = [lN] only, -1 = all).
+        /// Prefer this for kiln/smelter fill so a leaked ActiveId=-1 cannot open every chest.
+        /// </summary>
+        public static int CountNearby(Player player, string sharedName, int linkId, int quality)
+        {
             if (player == null || Plugin.Settings == null || string.IsNullOrEmpty(sharedName))
                 return 0;
 
@@ -20,7 +29,8 @@ namespace StoreAndCraft
                 0f,
                 sharedName,
                 leaveOne: LeaveOneInChests(player),
-                quality: quality);
+                quality: quality,
+                linkId: linkId);
         }
 
         /// <summary>

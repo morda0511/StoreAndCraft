@@ -13,7 +13,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.3.41";
+        public const string ModVersion = "1.3.48";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -64,7 +64,6 @@ namespace StoreAndCraft
             if (ZNet.instance != null && ZNet.instance.IsDedicated())
             {
                 AutoIntake.TickDedicated();
-                RemoteAutomation.TickDedicated();
                 return;
             }
 
@@ -88,13 +87,14 @@ namespace StoreAndCraft
             DisplaySmallOptions.Tick();
             StationFilterMenu.Tick();
             StationAutoFill.Tick();
-            RemoteAutomation.Tick();
         }
 
         private void LateUpdate()
         {
             // Never leave chest-counting enabled across frames (inventory FPS collapse).
             StationHover.ResetFrame();
+            // Nested station Push/Pop must not leak ActiveId into the next frame.
+            StationLink.ResetFrame();
 
             if (Player.m_localPlayer == null)
                 return;

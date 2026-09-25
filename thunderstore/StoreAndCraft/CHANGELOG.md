@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.3.48
+
+### FIX
+- Large Storage Display category labels show the full name again (no more "Wea…" truncation) across Scale and Layout
+
+## 1.3.47
+
+### FIX
+- Large Storage Display: Scale and Classic/Compact Layout keep readable category and amount text (same approach as Medium)
+
+## 1.3.46
+
+### FIX
+- Opening rename chest no longer spams LiberationSans font missing warnings in the log
+
+## 1.3.45
+
+### NEW FEATURES
+- Station Alt+E filter now also blocks manually inserting denied wood / ore / food from your bag (not only chest pull)
+
+### FIX
+- Auto-fill and Shift+[E] fill-to-max never take from your bag — chests only (matching link, or both unlinked; `[I]` / `[H]` still skipped)
+- Removed the `StationFillSkipInventory` config option
+
+## 1.3.44
+
+### FIX
+- Station link l1–l9: kiln/smelter/oven/fire no longer pull wood or ore from chests that do not match the station link (e.g. link 9 with no [l9] chest stays empty)
+
+## 1.3.43
+
+### FIX
+- Removed Remote Automation completely (including background keep-alive / zone scans that could still run while the feature was hidden)
+
+## 1.3.42
+
+### FIX
+- Station auto-fill works again when chests cannot supply: prefers chests first (default), then falls back to your bag instead of staying empty
+
 ## 1.3.41
 
 ### FIX

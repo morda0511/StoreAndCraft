@@ -38,25 +38,18 @@ namespace StoreAndCraft
 
         public static bool ChestsHave(Player player, string shared)
         {
-            if (string.IsNullOrEmpty(shared))
-                return false;
-            if (player == null && !HasPullOriginOverride)
+            return ChestsHave(player, shared, StationLink.ActiveId);
+        }
+
+        /// <param name="linkId">-1 = all chests; 0 = untagged only; 1–9 = matching [lN] only.</param>
+        public static bool ChestsHave(Player player, string shared, int linkId)
+        {
+            if (player == null || string.IsNullOrEmpty(shared))
                 return false;
 
-            // During RoundRobin fill ActiveId is 0..9. The autofill pulse snapshot is
-            // built with ActiveId=-1 and can disagree with ConsumeFromChests.
-            if (StationLink.ActiveId >= 0)
-            {
-                if (player != null)
-                    return RequirementBridge.CountNearby(player, shared) > 0;
-                if (!HasPullOriginOverride || Plugin.Settings == null)
-                    return false;
-                return NearbyIndex.CountItem(
-                    PullOriginOverride,
-                    0f,
-                    shared,
-                    leaveOne: Plugin.Settings.LeaveOneItem.Value) > 0;
-            }
+            // Linked / station context: never trust the autofill pulse (built with ActiveId=-1).
+            if (linkId >= 0)
+                return RequirementBridge.CountNearby(player, shared, linkId, -1) > 0;
 
             if (_pulseActive && _pulseSpendable != null)
             {
@@ -64,7 +57,7 @@ namespace StoreAndCraft
                 return _pulseSpendable.TryGetValue(shared, out n) && n > 0;
             }
 
-            return RequirementBridge.CountNearby(player, shared) > 0;
+            return RequirementBridge.CountNearby(player, shared, -1, -1) > 0;
         }
 
         /// <summary>
@@ -72,48 +65,15 @@ namespace StoreAndCraft
         /// </summary>
         public static float PullRangeOverride;
 
-        /// <summary>
-        /// When set, chest distance checks use this point instead of the player
-        /// (Remote Automation: station → linked chests while the player is far).
-        /// </summary>
-        public static bool HasPullOriginOverride;
-        public static Vector3 PullOriginOverride;
-
-        /// <summary>When true, station fill ignores the bag and only uses chests.</summary>
-        public static bool ForceChestOnly;
-
         /// <summary>Auto-fill pulse: one chest snapshot, then O(1) ChestsHave.</summary>
         private static Dictionary<string, int> _pulseSpendable;
         private static bool _pulseActive;
 
         public static Vector3 ActivePullOrigin(Player player)
         {
-            if (HasPullOriginOverride)
-                return PullOriginOverride;
             if (player != null)
                 return player.transform.position;
-            return PullOriginOverride;
-        }
-
-        public static void BeginStationPull(Component station, float range, bool chestOnly)
-        {
-            PullRangeOverride = range;
-            ForceChestOnly = chestOnly;
-            if (station != null)
-            {
-                HasPullOriginOverride = true;
-                PullOriginOverride = station.transform.position;
-                StationLink.PushStation(station);
-            }
-        }
-
-        public static void EndStationPull()
-        {
-            StationLink.Pop();
-            HasPullOriginOverride = false;
-            PullOriginOverride = Vector3.zero;
-            PullRangeOverride = 0f;
-            ForceChestOnly = false;
+            return Vector3.zero;
         }
 
         public static void BeginAutoFillPulse(Player player, float range)
@@ -192,6 +152,11 @@ namespace StoreAndCraft
 
         public static bool EnsureInInventory(Player player, string shared, int amount)
         {
+            return EnsureInInventory(player, shared, amount, StationLink.ActiveId);
+        }
+
+        public static bool EnsureInInventory(Player player, string shared, int amount, int linkId)
+        {
             if (player == null || amount <= 0 || string.IsNullOrEmpty(shared))
                 return false;
 
@@ -201,7 +166,7 @@ namespace StoreAndCraft
             if (!Ready())
                 return false;
 
-            PullIntoInventory(player, shared, amount - have);
+            PullIntoInventory(player, shared, amount - have, linkId);
             return LocalCount(player, shared) >= amount;
         }
 
@@ -407,9 +372,12 @@ namespace StoreAndCraft
 
         public static int ConsumeFromChests(Player player, string shared, int amount)
         {
-            if (amount <= 0 || string.IsNullOrEmpty(shared))
-                return 0;
-            if (player == null && !HasPullOriginOverride)
+            return ConsumeFromChests(player, shared, amount, StationLink.ActiveId);
+        }
+
+        public static int ConsumeFromChests(Player player, string shared, int amount, int linkId)
+        {
+            if (player == null || amount <= 0 || string.IsNullOrEmpty(shared))
                 return 0;
             if (!Ready())
                 return 0;
@@ -425,7 +393,7 @@ namespace StoreAndCraft
             {
                 if (need <= 0)
                     break;
-                if (chest == null || !StationLink.ChestAllowedForActive(chest))
+                if (chest == null || !StationLink.ChestAllowed(chest, linkId))
                     continue;
                 if (ContainerFilter.Distance(origin, chest.transform.position) > range)
                     continue;
@@ -440,14 +408,17 @@ namespace StoreAndCraft
                 took += n;
                 need -= n;
                 NotePulseConsumed(shared, n);
-                if (ForceChestOnly)
-                    RemoteAutomation.NotePull(shared, n);
             }
 
             return took;
         }
 
         public static void PullIntoInventory(Player player, string shared, int amount)
+        {
+            PullIntoInventory(player, shared, amount, StationLink.ActiveId);
+        }
+
+        public static void PullIntoInventory(Player player, string shared, int amount, int linkId)
         {
             if (player == null || amount <= 0 || string.IsNullOrEmpty(shared))
                 return;
@@ -466,7 +437,7 @@ namespace StoreAndCraft
             {
                 if (need <= 0)
                     break;
-                if (chest == null || !StationLink.ChestAllowedForActive(chest))
+                if (chest == null || !StationLink.ChestAllowed(chest, linkId))
                     continue;
 
                 if (ContainerFilter.Distance(origin, chest.transform.position) > cfgCraft)
@@ -491,13 +462,17 @@ namespace StoreAndCraft
 
             if (!string.IsNullOrEmpty(want))
             {
-                // Filtered allow-list: do not chest-pull denied types.
-                // Manual use (item already chosen) still works from inventory only.
-                bool allowedPull = fallbackNames == null
+                // Allow-list from StationPullFilter: denied types cannot come from chests OR bag.
+                bool allowed = fallbackNames == null
                     || fallbackNames.Count == 0
                     || fallbackNames.Contains(want);
-                if (allowedPull)
-                    EnsureInInventory(player, want, 1);
+                if (!allowed)
+                {
+                    item = null;
+                    return;
+                }
+
+                EnsureInInventory(player, want, 1);
             }
             else
             {
@@ -529,9 +504,7 @@ namespace StoreAndCraft
                 return;
             }
 
-            // Manual use: player already selected this stack (often hotbar). Never wipe it —
-            // that made Humanoid show "can't use Volture Meat on Iron Cooking Station"
-            // while OnUseItem received null and returned false.
+            // Manual use: player already selected this stack (often hotbar). Only if allowed above.
             if (requested != null && requested.m_shared != null
                 && string.Equals(requested.m_shared.m_name, want, System.StringComparison.Ordinal)
                 && requested.m_stack > 0)
