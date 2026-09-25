@@ -399,6 +399,73 @@ namespace StoreAndCraft
             return totals;
         }
 
+        /// <summary>
+        /// Spendable counts from chests near any of the given origins (station-centered autofill).
+        /// </summary>
+        public static Dictionary<string, int> SnapshotSpendableAround(
+            List<Vector3> origins,
+            float range,
+            bool leaveOne)
+        {
+            var totals = new Dictionary<string, int>();
+            if (origins == null || origins.Count == 0 || range <= 0f)
+                return totals;
+
+            var seen = new HashSet<int>();
+            var near = new List<Container>(32);
+            for (int o = 0; o < origins.Count; o++)
+            {
+                near.Clear();
+                CollectNear(origins[o], range, near);
+                for (int i = 0; i < near.Count; i++)
+                {
+                    Container c = near[i];
+                    if (c == null || ChestNames.IsIgnored(c))
+                        continue;
+                    int id = c.GetInstanceID();
+                    if (!seen.Add(id))
+                        continue;
+
+                    Inventory inv = c.GetInventory();
+                    if (inv == null || inv.NrOfItems() <= 0)
+                    {
+                        EnsureInventory(c, force: true);
+                        inv = c.GetInventory();
+                    }
+                    if (inv == null || inv.NrOfItems() <= 0)
+                        continue;
+
+                    SnapshotScratch.Clear();
+                    foreach (ItemDrop.ItemData item in inv.GetAllItems())
+                    {
+                        if (item?.m_shared == null || item.m_stack <= 0)
+                            continue;
+                        string key = item.m_shared.m_name;
+                        int n;
+                        SnapshotScratch.TryGetValue(key, out n);
+                        SnapshotScratch[key] = n + item.m_stack;
+                    }
+
+                    foreach (KeyValuePair<string, int> pair in SnapshotScratch)
+                    {
+                        int n = pair.Value - PendingChestDebit.Of(c, pair.Key);
+                        if (n < 0)
+                            n = 0;
+                        if (leaveOne && n > 0 && ItemIds.ShouldLeaveOne(true, pair.Key))
+                            n -= 1;
+                        if (n <= 0)
+                            continue;
+                        int total;
+                        totals.TryGetValue(pair.Key, out total);
+                        totals[pair.Key] = total + n;
+                    }
+                }
+            }
+
+            SnapshotScratch.Clear();
+            return totals;
+        }
+
         public static int CountItem(
             Vector3 origin,
             float range,

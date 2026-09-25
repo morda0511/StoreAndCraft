@@ -68,15 +68,28 @@ namespace StoreAndCraft
         /// <summary>Auto-fill pulse: one chest snapshot, then O(1) ChestsHave.</summary>
         private static Dictionary<string, int> _pulseSpendable;
         private static bool _pulseActive;
+        /// <summary>When set, ConsumeFromChests measures distance from this point (station).</summary>
+        public static Vector3? PullOriginOverride;
 
         public static Vector3 ActivePullOrigin(Player player)
         {
+            if (PullOriginOverride.HasValue)
+                return PullOriginOverride.Value;
             if (player != null)
                 return player.transform.position;
             return Vector3.zero;
         }
 
         public static void BeginAutoFillPulse(Player player, float range)
+        {
+            BeginAutoFillPulse(player, range, null);
+        }
+
+        /// <summary>
+        /// Snapshot spendable mats near the given station positions (combo: player gates which
+        /// stations fire; chests are counted around each station).
+        /// </summary>
+        public static void BeginAutoFillPulse(Player player, float range, List<Vector3> stationOrigins)
         {
             _pulseActive = false;
             _pulseSpendable = null;
@@ -85,10 +98,13 @@ namespace StoreAndCraft
 
             NearbyIndex.Tick();
             bool leaveOne = Plugin.Settings.LeaveOneItem.Value;
-            _pulseSpendable = NearbyIndex.SnapshotSpendable(
-                player.transform.position,
-                range,
-                leaveOne);
+            if (stationOrigins != null && stationOrigins.Count > 0)
+                _pulseSpendable = NearbyIndex.SnapshotSpendableAround(stationOrigins, range, leaveOne);
+            else
+                _pulseSpendable = NearbyIndex.SnapshotSpendable(
+                    player.transform.position,
+                    range,
+                    leaveOne);
             _pulseActive = true;
         }
 
@@ -96,6 +112,7 @@ namespace StoreAndCraft
         {
             _pulseActive = false;
             _pulseSpendable = null;
+            PullOriginOverride = null;
         }
 
         public static void NotePulseConsumed(string shared, int amount)
@@ -386,31 +403,80 @@ namespace StoreAndCraft
             bool leaveOne = Plugin.Settings != null && Plugin.Settings.LeaveOneItem.Value;
             float range = ActivePullRange();
             Vector3 origin = ActivePullOrigin(player);
-            int need = amount;
-            int took = 0;
-
-            foreach (Container chest in NearbyIndex.Current)
+            int took = ConsumePass(origin, range, shared, amount, linkId, leaveOne, forceLoad: false);
+            // Stale empty view: ChestsHave said yes / pulse map had stock, but Consume got 0.
+            if (took <= 0)
             {
-                if (need <= 0)
-                    break;
-                if (chest == null || !StationLink.ChestAllowed(chest, linkId))
-                    continue;
-                if (ContainerFilter.Distance(origin, chest.transform.position) > range)
-                    continue;
-
-                Inventory inv = chest.GetInventory();
-                if (inv == null || inv.NrOfItems() <= 0)
-                    NearbyIndex.EnsureInventory(chest, force: true);
-
-                int n = TransferService.Consume(chest, shared, need, leaveOne);
-                if (n <= 0)
-                    continue;
-                took += n;
-                need -= n;
-                NotePulseConsumed(shared, n);
+                took = ConsumePass(origin, range, shared, amount, linkId, leaveOne, forceLoad: true);
+                if (took <= 0 && _pulseActive && _pulseSpendable != null
+                    && _pulseSpendable.ContainsKey(shared))
+                {
+                    ActivityLog.Add(Loc.T("Missed", "Verpasst") + ": "
+                        + DisplayFilters.ItemLabel(shared)
+                        + " (" + Loc.T("chest view stale", "Kisten-View veraltet") + ")");
+                }
             }
 
             return took;
+        }
+
+        private static int ConsumePass(
+            Vector3 origin,
+            float range,
+            string shared,
+            int amount,
+            int linkId,
+            bool leaveOne,
+            bool forceLoad)
+        {
+            int need = amount;
+            int took = 0;
+
+            if (PullOriginOverride.HasValue)
+            {
+                var near = new List<Container>(24);
+                NearbyIndex.CollectNear(origin, range, near);
+                for (int i = 0; i < near.Count; i++)
+                {
+                    if (need <= 0)
+                        break;
+                    took += TryConsumeOne(near[i], shared, ref need, linkId, leaveOne, forceLoad);
+                }
+            }
+            else
+            {
+                foreach (Container chest in NearbyIndex.Current)
+                {
+                    if (need <= 0)
+                        break;
+                    took += TryConsumeOne(chest, shared, ref need, linkId, leaveOne, forceLoad);
+                }
+            }
+
+            return took;
+        }
+
+        private static int TryConsumeOne(
+            Container chest,
+            string shared,
+            ref int need,
+            int linkId,
+            bool leaveOne,
+            bool forceLoad)
+        {
+            if (chest == null || need <= 0 || !StationLink.ChestAllowed(chest, linkId))
+                return 0;
+
+            Inventory inv = chest.GetInventory();
+            if (forceLoad || inv == null || inv.NrOfItems() <= 0)
+                NearbyIndex.EnsureInventory(chest, force: true);
+
+            int n = TransferService.Consume(chest, shared, need, leaveOne);
+            if (n <= 0)
+                return 0;
+            need -= n;
+            NotePulseConsumed(shared, n);
+            return n;
         }
 
         public static void PullIntoInventory(Player player, string shared, int amount)

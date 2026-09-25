@@ -196,6 +196,26 @@ namespace StoreAndCraft
             return chestLink == stationLinkId;
         }
 
+        /// <summary>
+        /// Auto-store output (N): matching [lN] or untagged. Never a different link.
+        /// Fill still uses <see cref="ChestAllowed"/> (linked → matching only).
+        /// </summary>
+        public static bool ChestAllowedForOutput(Container chest, int stationLinkId)
+        {
+            if (chest == null || ChestNames.IsIgnored(chest))
+                return false;
+
+            if (stationLinkId < 0)
+                return true;
+
+            int chestLink = ChestLinkId(chest);
+            stationLinkId = Clamp(stationLinkId);
+
+            if (stationLinkId == 0)
+                return chestLink == 0;
+            return chestLink == 0 || chestLink == stationLinkId;
+        }
+
         public static bool ChestAllowedForActive(Container chest)
         {
             return ChestAllowed(chest, ActiveId);

@@ -8,8 +8,8 @@ using UnityEngine.UI;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Chest pull filter — centered panel_left chrome (same assets as Select Types left panel).
-    /// Link l1–l9 grid stays bottom-left on the panel.
+    /// Station Settings — centered panel_left chrome. Item cells (sprite + name + toggle),
+    /// 2 per row; link l1–l9 in the bottom parchment margin.
     /// </summary>
     internal static class StationFilterMenu
     {
@@ -30,23 +30,30 @@ namespace StoreAndCraft
         private const float ClipB = 105f;
         private const float ContentPad = 12f;
 
-        private const float RowW = 400f;
-        private const float RowH = 54f;
-        private const float RowGap = 8f;
-        private const float RowPadL = 16f;
+        // Item cells (same idea as Display Settings right panel) — 2 per row.
+        private const int ItemColumns = 2;
+        private const float ItemCellW = 190f;
+        private const float ItemCellH = 100f;
+        private const float ItemGapX = 12f;
+        private const float ItemGapY = 10f;
+        private const float ItemPadL = 18f;
+        private const float ItemPadT = 4f;
+        private const float ItemFont = 16f;
+        private const float IconSize = 48f;
+
+        private const float ActionRowW = 400f;
+        private const float ActionRowH = 44f;
         private const float ToggleW = 36f;
         private const float ToggleH = 18f;
         private const float ApplyW = 140f;
         private const float ApplyH = 38f;
         private const float LetterSpace = 14f;
-        private const float RowFont = 22f;
         private const float ApplyFont = 20f;
         private const float HeaderFont = 22f;
 
         private static readonly Color Gold = new Color(0.925f, 0.77f, 0.29f, 1f);
-        private static readonly Color Muted = new Color(0.70f, 0.64f, 0.52f, 1f);
-        private static readonly Color OnGreen = new Color(0.45f, 0.95f, 0.45f, 1f);
-        private static readonly Color OffRed = new Color(1f, 0.45f, 0.4f, 1f);
+        private static readonly Color Muted = new Color(0.70f, 0.64f, 0.52f, 0.85f);
+        private static readonly Dictionary<string, Sprite> IconCache = new Dictionary<string, Sprite>();
 
         private static Smelter _smelter;
         private static CookingStation _cook;
@@ -297,7 +304,7 @@ namespace StoreAndCraft
             ApplySprite(_panelRt.GetComponent<Image>(), UiAssets.PanelLeft, Color.white);
 
             PlaceInsetBg(_panelRt, UiAssets.PanelLeftInset, InsetL, InsetT, InsetR, InsetB);
-            PlaceHeader(_panelRt, Loc.T("Chest pull filter", "Chest pull filter"));
+            PlaceHeader(_panelRt, Loc.T("Settings", "Einstellungen"));
 
             var scrollGo = new GameObject("ListScroll", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(ScrollRect));
             scrollGo.transform.SetParent(_panelRt, false);
@@ -369,12 +376,25 @@ namespace StoreAndCraft
                 return;
             Component station = ActiveStation();
             int current = StationLink.Get(station);
-            _linkGrid = UiLinkGrid.Build(_panelRt, "SAC_StationLinks", current, id => SetLink(id));
+            // Compact grid in the bottom parchment margin (between dark inset and outer panel).
+            _linkGrid = UiLinkGrid.Build(
+                _panelRt,
+                "SAC_StationLinks",
+                current,
+                id => SetLink(id),
+                UiLinkGrid.CompactCell,
+                UiLinkGrid.CompactGap);
             RectTransform rt = _linkGrid.transform as RectTransform;
             rt.anchorMin = new Vector2(0f, 0f);
             rt.anchorMax = new Vector2(0f, 0f);
             rt.pivot = new Vector2(0f, 0f);
-            rt.anchoredPosition = new Vector2(14f, 10f);
+            float block = UiLinkGrid.BlockSize(UiLinkGrid.CompactCell, UiLinkGrid.CompactGap);
+            // Bottom parchment margin: inset from outer corner (not glued to the edge).
+            float x = 28f;
+            float y = Mathf.Max(28f, (InsetB - block) * 0.42f);
+            if (y + block > InsetB - 6f)
+                y = Mathf.Max(22f, InsetB - 6f - block);
+            rt.anchoredPosition = new Vector2(x, y);
             rt.SetAsLastSibling();
         }
 
@@ -391,10 +411,9 @@ namespace StoreAndCraft
                 ? StationPullFilter.FoodChoices(_cook)
                 : (_smelter != null ? StationPullFilter.OreChoices(_smelter) : new List<string>());
 
-            int rowIndex = 0;
             Component station = ActiveStation();
-
-            for (int i = 0; i < choices.Count; i++)
+            int n = choices.Count;
+            for (int i = 0; i < n; i++)
             {
                 string shared = choices[i];
                 bool allowed = _cook != null
@@ -402,13 +421,21 @@ namespace StoreAndCraft
                     : StationPullFilter.IsAllowed(_smelter, shared);
                 string label = StationPullFilter.DisplayName(shared);
                 string captured = shared;
-                AddToggleRow(rowIndex++, label, allowed, () => Toggle(captured));
+                int col = i % ItemColumns;
+                int row = i / ItemColumns;
+                AddItemCell(col, row, label, allowed, ItemIcon(shared), () => Toggle(captured));
             }
 
-            if (_smelter != null || _cook != null)
-                AddActionRow(rowIndex++, Loc.T("Allow all inputs", "Allow all inputs"), AllowAll);
+            int gridRows = n > 0 ? (n + ItemColumns - 1) / ItemColumns : 0;
+            float gridH = gridRows > 0
+                ? ItemPadT + gridRows * (ItemCellH + ItemGapY)
+                : 0f;
 
-            _listContent.sizeDelta = new Vector2(0f, rowIndex * (RowH + RowGap) + 4f);
+            if (_smelter != null || _cook != null)
+                AddActionRow(gridH, Loc.T("Allow all inputs", "Allow all inputs"), AllowAll);
+
+            float actionH = (_smelter != null || _cook != null) ? ActionRowH + 8f : 0f;
+            _listContent.sizeDelta = new Vector2(0f, gridH + actionH + 4f);
             if (_listScroll != null)
                 _listScroll.verticalNormalizedPosition = preserveScroll ? scrollPos : 1f;
 
@@ -418,53 +445,77 @@ namespace StoreAndCraft
                 BuildLinkGrid();
         }
 
-        private static void AddToggleRow(int index, string label, bool on, UnityAction onToggle)
+        private static void AddItemCell(
+            int col,
+            int row,
+            string label,
+            bool on,
+            Sprite icon,
+            UnityAction onToggle)
         {
-            var row = new GameObject("Row" + index, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            row.transform.SetParent(_listContent, false);
-            RectTransform rt = row.transform as RectTransform;
+            var go = new GameObject(
+                "Item" + row + "_" + col,
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(Image));
+            go.transform.SetParent(_listContent, false);
+            RectTransform rt = go.transform as RectTransform;
             rt.anchorMin = new Vector2(0f, 1f);
             rt.anchorMax = new Vector2(0f, 1f);
             rt.pivot = new Vector2(0f, 1f);
-            rt.sizeDelta = new Vector2(RowW, RowH);
-            rt.anchoredPosition = new Vector2(RowPadL, -index * (RowH + RowGap));
+            rt.sizeDelta = new Vector2(ItemCellW, ItemCellH);
+            rt.anchoredPosition = new Vector2(
+                ItemPadL + col * (ItemCellW + ItemGapX),
+                -(ItemPadT + row * (ItemCellH + ItemGapY)));
+            ApplySprite(go.GetComponent<Image>(), UiAssets.ItemCell, new Color(0.14f, 0.1f, 0.08f, 0.95f));
+            Image cellImg = go.GetComponent<Image>();
+            if (cellImg != null && cellImg.sprite != null)
+            {
+                cellImg.type = Image.Type.Simple;
+                cellImg.preserveAspect = false;
+            }
 
-            Sprite rowSp = on ? UiAssets.RawCategoryFocus : UiAssets.RawCategory;
-            Image rowImg = row.GetComponent<Image>();
-            if (rowSp != null)
+            if (icon != null)
             {
-                rowImg.sprite = rowSp;
-                rowImg.type = Image.Type.Simple;
-                rowImg.preserveAspect = false;
-                rowImg.color = Color.white;
+                var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                iconGo.transform.SetParent(rt, false);
+                RectTransform iconRt = iconGo.transform as RectTransform;
+                iconRt.anchorMin = new Vector2(0.5f, 1f);
+                iconRt.anchorMax = new Vector2(0.5f, 1f);
+                iconRt.pivot = new Vector2(0.5f, 1f);
+                iconRt.anchoredPosition = new Vector2(0f, -8f);
+                iconRt.sizeDelta = new Vector2(IconSize, IconSize);
+                Image iconImg = iconGo.GetComponent<Image>();
+                iconImg.sprite = icon;
+                iconImg.preserveAspect = true;
+                iconImg.raycastTarget = false;
+                iconImg.color = Color.white;
             }
-            else
-            {
-                rowImg.color = new Color(0.2f, 0.15f, 0.1f, 0.9f);
-            }
-            rowImg.raycastTarget = true;
 
             var labelGo = new GameObject("Label", typeof(RectTransform));
             labelGo.transform.SetParent(rt, false);
             RectTransform labelRt = labelGo.transform as RectTransform;
             labelRt.anchorMin = Vector2.zero;
             labelRt.anchorMax = Vector2.one;
-            labelRt.offsetMin = new Vector2(36f, 2f);
-            labelRt.offsetMax = new Vector2(-(ToggleW + 36f), -2f);
-            TextMeshProUGUI tmp = UiFonts.CreateLabel(labelGo, RowFont);
-            StyleLabel(tmp, RowFont, LetterSpace);
-            tmp.alignment = TextAlignmentOptions.MidlineLeft;
-            tmp.color = on ? OnGreen : OffRed;
+            labelRt.offsetMin = new Vector2(4f, ToggleH + 6f);
+            labelRt.offsetMax = new Vector2(-4f, -(IconSize + 10f));
+            TextMeshProUGUI tmp = UiFonts.CreateLabel(labelGo, ItemFont);
+            StyleLabel(tmp, ItemFont, LetterSpace * 0.55f);
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.textWrappingMode = TextWrappingModes.Normal;
+            tmp.overflowMode = TextOverflowModes.Ellipsis;
+            tmp.maxVisibleLines = 2;
+            tmp.color = on ? Gold : Muted;
             tmp.text = label;
 
             GameObject toggle = UiToggle.Create(
                 rt, "Toggle", on, true, onToggle, UiFonts.ThinNorse(),
                 ToggleW, ToggleH);
             RectTransform togRt = toggle.transform as RectTransform;
-            togRt.anchorMin = new Vector2(1f, 0.5f);
-            togRt.anchorMax = new Vector2(1f, 0.5f);
-            togRt.pivot = new Vector2(1f, 0.5f);
-            togRt.anchoredPosition = new Vector2(-28f, 0f);
+            togRt.anchorMin = new Vector2(1f, 0f);
+            togRt.anchorMax = new Vector2(1f, 0f);
+            togRt.pivot = new Vector2(1f, 0f);
+            togRt.anchoredPosition = new Vector2(-6f, 6f);
             togRt.sizeDelta = new Vector2(ToggleW, ToggleH);
             Image togImg = toggle.GetComponent<Image>();
             if (togImg != null)
@@ -472,19 +523,41 @@ namespace StoreAndCraft
             togRt.SetAsLastSibling();
         }
 
-        private static void AddActionRow(int index, string label, UnityAction action)
+        private static Sprite ItemIcon(string shared)
         {
-            var row = new GameObject("Action" + index, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            if (string.IsNullOrEmpty(shared))
+                return null;
+            Sprite cached;
+            if (IconCache.TryGetValue(shared, out cached))
+                return cached;
+            GameObject prefab = ItemIds.PrefabFromToken(shared);
+            ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            Sprite icon = drop != null && drop.m_itemData != null
+                ? StackLimits.Icon(drop.m_itemData)
+                : null;
+            IconCache[shared] = icon;
+            return icon;
+        }
+
+        private static void AddActionRow(float yFromTop, string label, UnityAction action)
+        {
+            var row = new GameObject("Action", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
             row.transform.SetParent(_listContent, false);
             RectTransform rt = row.transform as RectTransform;
             rt.anchorMin = new Vector2(0f, 1f);
             rt.anchorMax = new Vector2(0f, 1f);
             rt.pivot = new Vector2(0f, 1f);
-            rt.sizeDelta = new Vector2(RowW, RowH);
-            rt.anchoredPosition = new Vector2(RowPadL, -index * (RowH + RowGap));
+            rt.sizeDelta = new Vector2(ActionRowW, ActionRowH);
+            rt.anchoredPosition = new Vector2(ItemPadL, -(yFromTop + 4f));
 
             Image rowImg = row.GetComponent<Image>();
-            if (UiAssets.RawCategory != null)
+            if (UiAssets.BtnApply != null)
+            {
+                rowImg.sprite = UiAssets.BtnApply;
+                rowImg.type = Image.Type.Sliced;
+                rowImg.color = Color.white;
+            }
+            else if (UiAssets.RawCategory != null)
             {
                 rowImg.sprite = UiAssets.RawCategory;
                 rowImg.type = Image.Type.Simple;
@@ -504,11 +577,11 @@ namespace StoreAndCraft
             labelGo.transform.SetParent(rt, false);
             Stretch(labelGo.transform as RectTransform);
             RectTransform labelRt = labelGo.transform as RectTransform;
-            labelRt.offsetMin = new Vector2(36f, 2f);
-            labelRt.offsetMax = new Vector2(-16f, -2f);
-            TextMeshProUGUI tmp = UiFonts.CreateLabel(labelGo, RowFont);
-            StyleLabel(tmp, RowFont, LetterSpace);
-            tmp.alignment = TextAlignmentOptions.MidlineLeft;
+            labelRt.offsetMin = new Vector2(12f, 2f);
+            labelRt.offsetMax = new Vector2(-12f, -2f);
+            TextMeshProUGUI tmp = UiFonts.CreateLabel(labelGo, ApplyFont);
+            StyleLabel(tmp, ApplyFont, LetterSpace);
+            tmp.alignment = TextAlignmentOptions.Center;
             tmp.color = Gold;
             tmp.text = label;
         }

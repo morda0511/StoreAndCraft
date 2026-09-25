@@ -100,7 +100,7 @@ Harmony patches run on vanilla call sites independently of this loop.
 - **`StationFeed`:** pull helpers (`EnsureInInventory`, `EnsureForUse`, cook `dropPrefab` stamping).
 - **`StationLink`:** ZDO `SAC_stationLink` + chest name `[l1]`…`[l9]`.
 - **`StationPullFilter`:** per-station allow/deny for multi-input stations (Alt+E menu).
-- **`CookingAutoDrop`:** finished cook/honey → **ground** drop (ZDO `SAC_autoDrop`), not direct chest deposit.
+- **`CookingAutoDrop`:** finished cook/honey/smelter bars → **nearby chest** when N on (ZDO `SAC_autoDrop`); ground/vanilla floor if off or no space. Independent from AutoFill (B).
 - Full matrix: `Docs/Behavior.md` (Station systems).
 
 ### 9. Build grab — `Craft/BuildGrab.cs`
@@ -234,4 +234,4 @@ Treat gated code as **present but not product-default**.
 - **Remote dump** — removed in 1.3.1.
 - **Remote Automation** — removed in 1.3.43 (file, config, zone keep-alive patches).
 - **StationAutoFill for SpinningWheel** — not registered.
-- **Direct station→chest output** — not implemented; live path is AutoDrop→ground→intake.
+- **Direct station→chest output** — AutoDrop (N) cook/hive/smelter `Spawn` via `StationOutput` / `TransferService.TryDepositCreated`.

@@ -60,7 +60,7 @@ namespace StoreAndCraft
             if (TextInput.instance == null)
                 return false;
 
-            TextInput.instance.RequestText(receiver, "Rename chest", ChestNames.MaxLength);
+            TextInput.instance.RequestText(receiver, Loc.T("Settings", "Einstellungen"), ChestNames.MaxLength);
             ChestRenameLinkBar.Show(container);
             return true;
         }

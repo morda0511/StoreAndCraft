@@ -39,6 +39,10 @@ namespace StoreAndCraft
             {
                 CookingAutoDrop.TryToggle();
             }
+            else if (KeyUtil.Down(Plugin.Settings.ActivityLogKey.Value))
+            {
+                ActivityLog.Toggle();
+            }
             else if (KeyUtil.Down(Plugin.Settings.DisplayRangeKey.Value))
             {
                 // Per-display range: any player with ward access (not admin-gated).

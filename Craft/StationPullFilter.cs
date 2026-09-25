@@ -178,7 +178,7 @@ namespace StoreAndCraft
         {
             string key = PromptLabel();
             text += "\n[<color=yellow><b>" + key + "</b></color>] "
-                + Loc.T("Chest pull filter", "Truhen-Zug Filter");
+                + Loc.T("Settings", "Einstellungen");
         }
 
         public static bool TryOpen(bool warnIfMissing = true)

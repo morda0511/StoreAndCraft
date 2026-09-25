@@ -35,6 +35,7 @@ namespace StoreAndCraft
         public ConfigEntry<KeyboardShortcut> FavoriteKey { get; }
         public ConfigEntry<KeyboardShortcut> AutoFillKey { get; }
         public ConfigEntry<KeyboardShortcut> AutoDropKey { get; }
+        public ConfigEntry<KeyboardShortcut> ActivityLogKey { get; }
         public ConfigEntry<KeyboardShortcut> SortKey { get; }
         public ConfigEntry<KeyboardShortcut> DisplayRangeKey { get; }
         public ConfigEntry<KeyboardShortcut> BuildGrabKey { get; }
@@ -88,7 +89,7 @@ namespace StoreAndCraft
             SearchKey = file.Bind("4 - Keys", "SearchKey", new KeyboardShortcut(KeyCode.Y),
                 "While inventory is open: hover an item and press to ping/blink the nearest chest that contains it (blinks 3 times).");
             RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.E, KeyCode.LeftAlt),
-                "Look at a chest to rename it, a small Storage Display for name/amount toggles, or at a kiln/smelter/grill with multiple inputs to open the chest-pull filter. Default Alt+E — remap in config if it clashes with cooking. Shift+E (Valheim alt-use) also renames chests. Prefix [I] = fully ignore; [H] = hide from dump/store/craft but still show on Storage Displays.");
+                "Settings (default Alt+E): look at a chest (name / ignore / display / link), a small Storage Display (name/amount), or a multi-input kiln/smelter/grill (pull filter + link). Shift+E (Valheim alt-use) also opens chest settings. Prefix [I] = fully ignore; [H] = hide from dump/store/craft but still show on Storage Displays.");
             TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
             FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),
@@ -96,7 +97,9 @@ namespace StoreAndCraft
             AutoFillKey = file.Bind("4 - Keys", "AutoFillKey", new KeyboardShortcut(KeyCode.B),
                 "Look at a kiln, smelter, blast furnace, cooking / stone oven, fermenter, or torch / fire with the inventory closed and press to toggle auto-fill. The station pull filter still applies. Local, not synced.");
             AutoDropKey = file.Bind("4 - Keys", "AutoDropKey", new KeyboardShortcut(KeyCode.N),
-                "Look at a cooking spit, stone oven, or beehive with the inventory closed and press to toggle auto-drop. Finished food / honey falls as a ground drop so auto-store can pick it up. Per piece, stored on the piece.");
+                "Look at a kiln/smelter/blast furnace, cooking spit/oven, or beehive with the inventory closed and press to toggle auto-store. Finished bars / food / honey go into a nearby chest (ground only if no space). Independent from auto-fill (B). Per piece.");
+            ActivityLogKey = file.Bind("4 - Keys", "ActivityLogKey", new KeyboardShortcut(KeyCode.F11),
+                "Toggle the on-screen activity log (max 10 lines above the hotbar: chest ↔ station transfers). Local, not synced.");
             SortKey = file.Bind("4 - Keys", "SortKey", new KeyboardShortcut(KeyCode.R),
                 "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, hotbar, and equipment/quick-slot mod overflow stay put; Wider/Deeper Pockets rows sort normally).");
             DisplayRangeKey = file.Bind("4 - Keys", "DisplayRangeKey", new KeyboardShortcut(KeyCode.R, KeyCode.LeftAlt),

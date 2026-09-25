@@ -63,7 +63,8 @@ namespace StoreAndCraft
                     __result = ReplaceHoverTitle(__instance, __result, shown, custom);
             }
 
-            __result += "\n[<color=yellow><b>" + ChestRename.PromptLabel() + "</b></color>] Rename";
+            __result += "\n[<color=yellow><b>" + ChestRename.PromptLabel() + "</b></color>] "
+                + Loc.T("Settings", "Einstellungen");
 
             int link = StationLink.ParseFromName(custom);
             if (link > 0)

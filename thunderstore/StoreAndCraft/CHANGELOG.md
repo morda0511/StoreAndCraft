@@ -1,43 +1,26 @@
 # Changelog
 
-## 1.3.48
-
-### FIX
-- Large Storage Display category labels show the full name again (no more "Wea…" truncation) across Scale and Layout
-
-## 1.3.47
-
-### FIX
-- Large Storage Display: Scale and Classic/Compact Layout keep readable category and amount text (same approach as Medium)
-
-## 1.3.46
-
-### FIX
-- Opening rename chest no longer spams LiberationSans font missing warnings in the log
-
-## 1.3.45
-
-### NEW FEATURES
-- Station Alt+E filter now also blocks manually inserting denied wood / ore / food from your bag (not only chest pull)
-
-### FIX
-- Auto-fill and Shift+[E] fill-to-max never take from your bag — chests only (matching link, or both unlinked; `[I]` / `[H]` still skipped)
-- Removed the `StationFillSkipInventory` config option
-
-## 1.3.44
-
-### FIX
-- Station link l1–l9: kiln/smelter/oven/fire no longer pull wood or ore from chests that do not match the station link (e.g. link 9 with no [l9] chest stays empty)
-
-## 1.3.43
-
-### FIX
-- Removed Remote Automation completely (including background keep-alive / zone scans that could still run while the feature was hidden)
-
 ## 1.3.42
 
+### NEW FEATURES
+- F11 toggles an activity log (up to 10 lines under the TopLeft status text, same font as "You are cold"; starts off). Lines like `Chest 10x Tin -> Smelter` / `Kiln 5x Coal -> Chest`
+- Auto-store (**N**): finished kiln / smelter / blast-furnace bars, cooking food, and beehive honey go into nearby chests (independent from Auto-fill **B**)
+- Station Alt+E filter also blocks manually inserting denied wood / ore / food from your bag (not only chest pull)
+
+### UI IMPROVEMENTS
+- Station output toggle (**N**) labeled Auto-store / Auto-Lagern
+- Alt+E labeled **Settings** everywhere (chest, station, hover)
+- Station Settings: Display-style item cells (sprite + name + toggle, 2 per row); link grid (l1-l9) in Valheim bronze style, sized and placed in the parchment margin
+- Chest rename link grid sits a few pixels higher (no panel-edge clip)
+- Large Storage Display category labels show the full name again (Scale / Layout); Medium/Large keep readable amounts
+
 ### FIX
-- Station auto-fill works again when chests cannot supply: prefers chests first (default), then falls back to your bag instead of staying empty
+- Auto-store (**N**) deposit order: matching linked chest first (item already inside); if full, unlinked chest that already holds the item; never a different link - otherwise ground drop
+- Auto-fill (**B**) never takes from your bag - chests only (matching link, or both unlinked). Removed StationFillSkipInventory config
+- Auto-fill uses chests around the station (not only around the player) while you stay in range; reacts faster and retries once on a stale chest view
+- Station link l1-l9: kiln/smelter/oven/fire no longer pull from the wrong channel
+- Removed Remote Automation completely (including background keep-alive / zone scans)
+- Opening rename chest no longer spams LiberationSans font missing warnings
 
 ## 1.3.41
 
@@ -74,12 +57,12 @@
 - Ballista (Mistlands turret) auto-fill: press [B] to load ammo from bag and nearby chests
 
 ### UI IMPROVEMENTS
-- Kiln / smelter hover: no duplicate Auto-fill / Fill to max; order is Add → Fill to max → Chest pull filter → Auto-fill
-- Favorites: star badge only — no gold tint on the item icon
+- Kiln / smelter hover: no duplicate Auto-fill / Fill to max; order is Add ? Fill to max ? Chest pull filter ? Auto-fill
+- Favorites: star badge only ? no gold tint on the item icon
 
 ### FIX
 - Station auto-fill finds items in nearby chests again when chest inventories looked empty after the wipe-guard (Frost Foundry / smelters / kilns)
-- Frost Foundry casts (and other max-stack-1 items) can be pulled from chests again — LeaveOne no longer blocks the only copy
+- Frost Foundry casts (and other max-stack-1 items) can be pulled from chests again ? LeaveOne no longer blocks the only copy
 
 ## 1.3.35
 
@@ -109,14 +92,14 @@
 ## 1.3.31
 
 ### NEW FEATURES
-- Station auto-fill: new config `StationFillSkipInventory` — when on, kilns, smelters, ovens, and fires take from chests only, never from your bag
+- Station auto-fill: new config `StationFillSkipInventory` ? when on, kilns, smelters, ovens, and fires take from chests only, never from your bag
 - Feed Trough: hungry tames walk up to the trough and eat there, like food on the ground
-- Auto-drop (**N**) also works on beehives — honey drops on the ground for auto-store
+- Auto-drop (**N**) also works on beehives ? honey drops on the ground for auto-store
 
 ### UI IMPROVEMENTS
 - Feed Trough shows a small food sparkle when it has food inside (hidden when empty)
-- Storage Display scale: Shift+LMB steps **25%** (−2…+4); icon and count stay one pair with room for 4-digit totals; category labels stay fixed
-- Storage Display layout: Shift+RMB toggles **Classic** ↔ **Compact** on Medium/Large (saved per board). Compact starts each category on its own row (label + items)
+- Storage Display scale: Shift+LMB steps **25%** (?2?+4); icon and count stay one pair with room for 4-digit totals; category labels stay fixed
+- Storage Display layout: Shift+RMB toggles **Classic** ? **Compact** on Medium/Large (saved per board). Compact starts each category on its own row (label + items)
 - Storage Display type menu: categories on top with on/off toggles, items for the selected category below (icon + one toggle each); faster scroll
 
 ### FIX
@@ -124,8 +107,8 @@
 - Dump / sort / auto-fill leave equipment and quick-slot mod overflow alone (e.g. EquipmentAndQuickSlotsPlus Z V B); Wider / Deeper Pockets bag rows work like normal inventory
 - Coming back to base after a raid no longer saves empty reinforced chests (lag spike / unload race)
 - Feed Trough hover tells you to put food inside
-- Storage Display: switching Compact → Classic no longer flickers / blanks the board (Medium header strip restored)
-- Storage Display only reads chests — no re-Load over a full bag and no empty Save if a count briefly shows 0
+- Storage Display: switching Compact ? Classic no longer flickers / blanks the board (Medium header strip restored)
+- Storage Display only reads chests ? no re-Load over a full bag and no empty Save if a count briefly shows 0
 - Large Classic scale grows icon and count together (taller rows); categories pack without overlapping numbers
 - Select Types menu uses Valheim fonts (no LiberationSans missing-font spam)
 

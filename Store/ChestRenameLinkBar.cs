@@ -98,7 +98,7 @@ namespace StoreAndCraft
             gridRt.anchorMin = new Vector2(0f, 0f);
             gridRt.anchorMax = new Vector2(0f, 0f);
             gridRt.pivot = new Vector2(0f, 0f);
-            gridRt.anchoredPosition = new Vector2(10f, 10f);
+            gridRt.anchoredPosition = new Vector2(10f, 16f);
             Owned.Add(_linkGrid);
             UiLinkGrid.SetDimmed(_linkGrid, ignore);
         }

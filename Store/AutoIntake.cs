@@ -38,6 +38,7 @@ namespace StoreAndCraft
                 return;
 
             _next = Time.time + Mathf.Max(1f, Plugin.Settings.IntakeInterval.Value);
+            StationOutput.TickPendingIntakeTags();
             if (!SnapshotDrops())
                 return;
 
@@ -123,13 +124,87 @@ namespace StoreAndCraft
             NearbyIndex.CollectNear(drop.transform.position, storeRange, ChestScratch);
             bool mustExist = Plugin.Settings.MustHaveExisting.Value;
             Vector3 pos = drop.transform.position;
+            int intakeLink = StationOutput.GetIntakeLink(drop);
 
-            Container best = PickAccepting(ChestScratch, drop.m_itemData, pos, mustExist);
+            // Station-tagged drops: matching [lN] first, then untagged (same as Auto-store deposit).
+            if (intakeLink >= 1)
+            {
+                Container linked = PickAccepting(ChestScratch, drop.m_itemData, pos, mustExist, exactChestLink: intakeLink);
+                if (linked != null)
+                    return linked;
+                Container untagged = PickAccepting(ChestScratch, drop.m_itemData, pos, mustExist, exactChestLink: 0);
+                if (untagged != null || !mustExist)
+                    return untagged;
+                return ProbePreferLink(drop, pos, mustExist, intakeLink);
+            }
+
+            if (intakeLink == 0)
+            {
+                Container untagged = PickAccepting(ChestScratch, drop.m_itemData, pos, mustExist, exactChestLink: 0);
+                if (untagged != null || !mustExist)
+                    return untagged;
+                return ProbePreferLink(drop, pos, mustExist, exactFirst: 0, exactSecond: -1);
+            }
+
+            Container best = PickAccepting(ChestScratch, drop.m_itemData, pos, mustExist, exactChestLink: -1);
             if (best != null || !mustExist)
                 return best;
 
-            // Store miss with MustHaveExisting: ZDO Load may have been empty/stale.
-            // Force-probe nearest chests (budgeted) then retry CanAccept.
+            return ProbePreferLink(drop, pos, mustExist, exactFirst: -1, exactSecond: -1);
+        }
+
+        /// <param name="exactChestLink">-1 = any allowed; 0 = untagged; 1–9 = that link only.</param>
+        private static Container PickAccepting(
+            List<Container> chests,
+            ItemDrop.ItemData item,
+            Vector3 pos,
+            bool mustExist,
+            int exactChestLink)
+        {
+            Container best = null;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < chests.Count; i++)
+            {
+                Container candidate = chests[i];
+                if (candidate == null)
+                    continue;
+                if (exactChestLink >= 0 && StationLink.ChestLinkId(candidate) != exactChestLink)
+                    continue;
+                if (!ChestPicker.CanAccept(candidate, item, pos, mustExist))
+                    continue;
+                float dist = ContainerFilter.Distance(pos, candidate.transform.position);
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    best = candidate;
+                }
+            }
+
+            return best;
+        }
+
+        private static Container ProbePreferLink(ItemDrop drop, Vector3 pos, bool mustExist, int intakeLink)
+        {
+            return ProbePreferLink(drop, pos, mustExist, exactFirst: intakeLink, exactSecond: 0);
+        }
+
+        private static Container ProbePreferLink(
+            ItemDrop drop,
+            Vector3 pos,
+            bool mustExist,
+            int exactFirst,
+            int exactSecond)
+        {
+            Container hit = ProbePass(drop, pos, mustExist, exactFirst);
+            if (hit != null)
+                return hit;
+            if (exactSecond >= 0 && exactSecond != exactFirst)
+                return ProbePass(drop, pos, mustExist, exactSecond);
+            return null;
+        }
+
+        private static Container ProbePass(ItemDrop drop, Vector3 pos, bool mustExist, int exactChestLink)
+        {
             ProbeOrder.Clear();
             ProbeOrder.AddRange(ChestScratch);
             ProbeOrder.Sort((a, b) =>
@@ -143,6 +218,8 @@ namespace StoreAndCraft
             {
                 Container candidate = ProbeOrder[i];
                 if (candidate == null)
+                    continue;
+                if (exactChestLink >= 0 && StationLink.ChestLinkId(candidate) != exactChestLink)
                     continue;
                 if (!NearbyIndex.TryForceProbeForStore(candidate))
                     continue;
@@ -158,32 +235,6 @@ namespace StoreAndCraft
             }
 
             return null;
-        }
-
-        private static Container PickAccepting(
-            List<Container> chests,
-            ItemDrop.ItemData item,
-            Vector3 pos,
-            bool mustExist)
-        {
-            Container best = null;
-            float bestDist = float.MaxValue;
-            for (int i = 0; i < chests.Count; i++)
-            {
-                Container candidate = chests[i];
-                if (candidate == null)
-                    continue;
-                if (!ChestPicker.CanAccept(candidate, item, pos, mustExist))
-                    continue;
-                float dist = ContainerFilter.Distance(pos, candidate.transform.position);
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    best = candidate;
-                }
-            }
-
-            return best;
         }
     }
 }

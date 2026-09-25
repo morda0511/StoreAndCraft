@@ -55,6 +55,56 @@ namespace StoreAndCraft
             }
         }
 
+        /// <summary>
+        /// Create <paramref name="amount"/> of <paramref name="token"/> directly in a chest
+        /// (station output → chest). Ownership-safe; no player bag involved.
+        /// </summary>
+        public static bool TryDepositCreated(Container chest, string token, int amount)
+        {
+            if (chest == null || amount <= 0 || string.IsNullOrEmpty(token))
+                return false;
+            if (ChestNames.IsIgnored(chest))
+                return false;
+            if (!ContainerFilter.IsPlayerBuiltStorage(chest))
+                return false;
+
+            NearbyIndex.EnsureInventory(chest, force: true);
+            ZNetView nv = Refs.View(chest);
+            Inventory peek = chest.GetInventory();
+            bool localReady = peek != null;
+            if (nv != null && nv.IsValid() && !nv.IsOwner() && !chest.IsInUse() && localReady)
+                nv.ClaimOwnership();
+
+            if (!IsChestOwner(chest))
+                return false;
+            if (!ContainerFilter.TryReadyForWrite(chest))
+                return false;
+
+            Inventory inv = chest.GetInventory();
+            if (inv == null)
+                return false;
+
+            GameObject prefab = ItemIds.PrefabFromToken(token);
+            if (prefab == null && ObjectDB.instance != null)
+                prefab = ObjectDB.instance.GetItemPrefab(token);
+            ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            if (drop?.m_itemData?.m_shared == null)
+                return false;
+
+            ItemDrop.ItemData probe = drop.m_itemData.Clone();
+            probe.m_stack = amount;
+            if (!inv.CanAddItem(probe, amount))
+                return false;
+
+            string addToken = prefab.name;
+            if (!TryAddItem(inv, addToken, amount, probe.m_quality, probe.m_variant, 0L, "", UsableWorldLevel(0)))
+                return false;
+
+            ContainerFilter.SaveInventory(chest);
+            Highlight(chest);
+            return true;
+        }
+
         public static bool StoreItem(Container chest, Inventory from, ItemDrop.ItemData item, int amount)
         {
             if (chest == null || from == null || item == null || amount <= 0)

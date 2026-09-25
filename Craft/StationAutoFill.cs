@@ -16,7 +16,7 @@ namespace StoreAndCraft
     internal static class StationAutoFill
     {
         public const string ZdoKey = "SAC_autoFill";
-        private const float Interval = 5f;
+        private const float Interval = 2.5f;
         private const float QuietEmptySeconds = 25f;
         private const int MaxBurstsPerPulse = 4;
         /// <summary>Cap how many needy stations we evaluate per pulse (after range/IsOn filters).</summary>
@@ -263,7 +263,7 @@ namespace StoreAndCraft
         }
 
         /// <summary>
-        /// After vanilla hover: Alt+E filter → Shift+E fill to max → B auto-fill.
+        /// After vanilla hover: Alt+E filter → Shift+E fill to max → B auto-fill → N auto-store.
         /// Link / remote are status (link stays on top).
         /// </summary>
         public static void AppendSmelterHover(ref string text, Smelter smelter)
@@ -281,6 +281,7 @@ namespace StoreAndCraft
             StationPullFilter.AppendFilterHover(ref text, smelter, prependLink: false);
             AppendFillToMaxLine(ref text);
             AppendAutoFillLine(ref text, nv);
+            CookingAutoDrop.AppendHover(ref text, smelter);
             StationLink.PrependHover(ref text, StationLink.Get(smelter), chest: false);
         }
 
@@ -385,6 +386,14 @@ namespace StoreAndCraft
             return true;
         }
 
+        /// <summary>Nudge the next auto-fill pulse sooner (vanilla Update* saw a needy station).</summary>
+        public static void RequestSoon()
+        {
+            float soon = Time.unscaledTime + 0.35f;
+            if (_nextPulse > soon)
+                _nextPulse = soon;
+        }
+
         public static void Tick()
         {
             if (!StationFeed.Ready())
@@ -415,11 +424,14 @@ namespace StoreAndCraft
             if (!AnyOnInRange(origin, rangeSq))
                 return;
 
+            var stationOrigins = new List<Vector3>(16);
+            CollectOnStationOrigins(origin, rangeSq, stationOrigins);
+
             int bursts = 0;
             int checks = 0;
 
             StationFeed.PullRangeOverride = range;
-            StationFeed.BeginAutoFillPulse(player, range);
+            StationFeed.BeginAutoFillPulse(player, range, stationOrigins);
             try
             {
                 // Fires/torches first: cheap RPC; used to starve behind smelters (MaxBursts=1).
@@ -477,6 +489,39 @@ namespace StoreAndCraft
             {
                 StationFeed.EndAutoFillPulse();
                 StationFeed.PullRangeOverride = 0f;
+                StationFeed.PullOriginOverride = null;
+            }
+        }
+
+        private static void CollectOnStationOrigins(Vector3 playerOrigin, float rangeSq, List<Vector3> dest)
+        {
+            if (dest == null)
+                return;
+            AppendOrigins(Smelters, playerOrigin, rangeSq, dest, s => IsOn(s));
+            AppendOrigins(Fires, playerOrigin, rangeSq, dest, f => f != null && f.m_canRefill && IsOn(f));
+            AppendOrigins(Ovens, playerOrigin, rangeSq, dest, o => IsOn(o.GetComponent<ZNetView>()));
+            AppendOrigins(Fermenters, playerOrigin, rangeSq, dest, f => IsOn(f.GetComponent<ZNetView>()));
+            AppendOrigins(Turrets, playerOrigin, rangeSq, dest, t => IsOn(t.GetComponent<ZNetView>()));
+            AppendOrigins(FoodTrays, playerOrigin, rangeSq, dest, s => IsOn(s.GetComponent<ZNetView>()));
+        }
+
+        private static void AppendOrigins<T>(
+            List<T> list,
+            Vector3 playerOrigin,
+            float rangeSq,
+            List<Vector3> dest,
+            System.Func<T, bool> on) where T : Component
+        {
+            if (list == null)
+                return;
+            for (int i = 0; i < list.Count; i++)
+            {
+                T t = list[i];
+                if (t == null || !on(t))
+                    continue;
+                if (ContainerFilter.SqrDistance(playerOrigin, t.transform.position) > rangeSq)
+                    continue;
+                dest.Add(t.transform.position);
             }
         }
 
@@ -586,6 +631,7 @@ namespace StoreAndCraft
                 cursor = i + 1;
                 checks++;
                 StationLink.PushStation(station);
+                StationFeed.PullOriginOverride = station.transform.position;
                 try
                 {
                     if (tryFill(station, player))
@@ -593,6 +639,7 @@ namespace StoreAndCraft
                 }
                 finally
                 {
+                    StationFeed.PullOriginOverride = null;
                     StationLink.Pop();
                 }
             }
@@ -744,6 +791,13 @@ namespace StoreAndCraft
                 }
             }
 
+            if (added > 0)
+            {
+                ActivityLog.FromChest(
+                    StationOutput.StationLabel(smelter),
+                    added,
+                    DisplayFilters.ItemLabel(fuel));
+            }
             return added > 0;
         }
 
@@ -786,12 +840,14 @@ namespace StoreAndCraft
                 return false;
 
             int added = 0;
+            var byShared = new Dictionary<string, int>(4);
             for (int i = 0; i < need; i++)
             {
                 if (Mathf.RoundToInt(ReadNumber(SmelterGetQueue, smelter)) >= smelter.m_maxOre)
                     break;
 
-                if (!TryAddOneOreFromChests(smelter, player, nv, allowed, ref added))
+                string sharedAdded;
+                if (!TryAddOneOreFromChests(smelter, player, nv, allowed, ref added, out sharedAdded))
                 {
                     if (added == 0)
                     {
@@ -800,14 +856,33 @@ namespace StoreAndCraft
                     }
                     break;
                 }
+
+                if (!string.IsNullOrEmpty(sharedAdded))
+                {
+                    int n;
+                    byShared.TryGetValue(sharedAdded, out n);
+                    byShared[sharedAdded] = n + 1;
+                }
             }
 
+            if (byShared.Count > 0)
+            {
+                string station = StationOutput.StationLabel(smelter);
+                foreach (KeyValuePair<string, int> kv in byShared)
+                    ActivityLog.FromChest(station, kv.Value, DisplayFilters.ItemLabel(kv.Key));
+            }
             return added > 0;
         }
 
         private static bool TryAddOneOreFromChests(
-            Smelter smelter, Player player, ZNetView nv, List<string> allowed, ref int added)
+            Smelter smelter,
+            Player player,
+            ZNetView nv,
+            List<string> allowed,
+            ref int added,
+            out string sharedAdded)
         {
+            sharedAdded = null;
             int linkId = StationLink.Get(smelter);
             if (!ChestsHaveAny(player, allowed, linkId))
                 return false;
@@ -830,6 +905,7 @@ namespace StoreAndCraft
                 EndSilence();
             }
             added++;
+            sharedAdded = shared;
             return true;
         }
 
@@ -910,6 +986,13 @@ namespace StoreAndCraft
                 EndSilence();
             }
 
+            if (added > 0)
+            {
+                ActivityLog.FromChest(
+                    StationOutput.StationLabel(fire),
+                    added,
+                    DisplayFilters.ItemLabel(fuel));
+            }
             return added > 0;
         }
 
@@ -963,6 +1046,13 @@ namespace StoreAndCraft
                 }
             }
 
+            if (added > 0)
+            {
+                ActivityLog.FromChest(
+                    StationOutput.StationLabel(oven),
+                    added,
+                    DisplayFilters.ItemLabel(fuel));
+            }
             return added > 0;
         }
 
@@ -1020,6 +1110,7 @@ namespace StoreAndCraft
 
             int linkId = StationLink.Get(oven);
             int added = 0;
+            var byShared = new Dictionary<string, int>(4);
             int guard = oven.m_slots != null ? oven.m_slots.Length : 5;
             while (guard-- > 0 && !IsTrue(CookIsFull, oven))
             {
@@ -1051,8 +1142,17 @@ namespace StoreAndCraft
                     EndSilence();
                 }
                 added++;
+                int n;
+                byShared.TryGetValue(shared, out n);
+                byShared[shared] = n + 1;
             }
 
+            if (byShared.Count > 0)
+            {
+                string station = StationOutput.StationLabel(oven);
+                foreach (KeyValuePair<string, int> kv in byShared)
+                    ActivityLog.FromChest(station, kv.Value, DisplayFilters.ItemLabel(kv.Key));
+            }
             return added > 0;
         }
 
@@ -1095,6 +1195,10 @@ namespace StoreAndCraft
             {
                 EndSilence();
             }
+            ActivityLog.FromChest(
+                StationOutput.StationLabel(fermenter),
+                1,
+                DisplayFilters.ItemLabel(shared));
             return true;
         }
 
@@ -1115,6 +1219,7 @@ namespace StoreAndCraft
             bool lockType = ammo > 0;
             int added = 0;
             int need = turret.m_maxAmmo - ammo;
+            var byShared = new Dictionary<string, int>(2);
 
             for (int i = 0; i < need; i++)
             {
@@ -1158,8 +1263,20 @@ namespace StoreAndCraft
                 }
                 added++;
                 lockType = true;
+                if (!string.IsNullOrEmpty(shared))
+                {
+                    int n;
+                    byShared.TryGetValue(shared, out n);
+                    byShared[shared] = n + 1;
+                }
             }
 
+            if (byShared.Count > 0)
+            {
+                string station = StationOutput.StationLabel(turret);
+                foreach (KeyValuePair<string, int> kv in byShared)
+                    ActivityLog.FromChest(station, kv.Value, DisplayFilters.ItemLabel(kv.Key));
+            }
             return added > 0;
         }
 
@@ -1747,6 +1864,37 @@ namespace StoreAndCraft
             if (__instance == null || !StationAutoFill.IsFoodServingTray(__instance))
                 return;
             StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>(), includeManualFill: false);
+        }
+    }
+
+    /// <summary>When a vanilla station update runs and autofill is on, nudge our pulse sooner.</summary>
+    [HarmonyPatch(typeof(Smelter), "UpdateSmelter")]
+    internal static class SmelterUpdateAutofillNudgePatch
+    {
+        private static void Postfix(Smelter __instance)
+        {
+            if (__instance != null && StationAutoFill.IsOn(__instance))
+                StationAutoFill.RequestSoon();
+        }
+    }
+
+    [HarmonyPatch(typeof(CookingStation), "UpdateCooking")]
+    internal static class CookingUpdateAutofillNudgePatch
+    {
+        private static void Postfix(CookingStation __instance)
+        {
+            if (__instance != null && StationAutoFill.IsOn(__instance.GetComponent<ZNetView>()))
+                StationAutoFill.RequestSoon();
+        }
+    }
+
+    [HarmonyPatch(typeof(Fireplace), "UpdateFireplace")]
+    internal static class FireplaceUpdateAutofillNudgePatch
+    {
+        private static void Postfix(Fireplace __instance)
+        {
+            if (__instance != null && __instance.m_canRefill && StationAutoFill.IsOn(__instance))
+                StationAutoFill.RequestSoon();
         }
     }
 }
