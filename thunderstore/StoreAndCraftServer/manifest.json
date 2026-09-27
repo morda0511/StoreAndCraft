@@ -1,0 +1,9 @@
+{
+    "name":  "StoreAndCraftServer",
+    "version_number":  "1.0.0",
+    "website_url":  "https://github.com/morda0511/StoreAndCraft",
+    "description":  "Dedicated-server auto-store into nearby chests. Clients stay vanilla (PS5/Xbox/PC). No dump, rename, or craft-from-chests.",
+    "dependencies":  [
+                         "denikson-BepInExPack_Valheim-5.4.2350"
+                     ]
+}
