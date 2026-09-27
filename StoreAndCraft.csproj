@@ -17,11 +17,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Server\**" />
     <Compile Remove="Unity\**" />
-    <EmbeddedResource Remove="Server\**" />
     <EmbeddedResource Remove="Unity\**" />
-    <None Remove="Server\**" />
     <None Remove="Unity\**" />
   </ItemGroup>
 

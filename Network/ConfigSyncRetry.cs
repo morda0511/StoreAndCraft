@@ -60,7 +60,7 @@ namespace StoreAndCraft
                     Plugin.Log.LogWarning(
                         "StoreAndCraft: still no server config after " + _attempts +
                         " attempts. Install the same StoreAndCraft version on the dedicated" +
-                        " server (full client plugin, not only StoreAndCraftServer), then" +
+                        " server, then" +
                         " reconnect. Handshake can succeed while config sync fails.");
                     ConfigSync.AcceptLocalFallback("no server handshake/config");
                 }
