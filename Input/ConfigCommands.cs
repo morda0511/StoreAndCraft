@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -91,6 +92,9 @@ namespace StoreAndCraft
                 || lower.StartsWith("/craftrange")
                 || lower.StartsWith("/storagerange")
                 || lower.StartsWith("/autofillrange")
+                || lower.StartsWith("/autofillchestrange")
+                || lower.StartsWith("/displayrange")
+                || lower.StartsWith("/feedtroughrange")
                 || lower.StartsWith("/sac")
                 || lower == "/store"
                 || lower.StartsWith("/store ")
@@ -283,6 +287,52 @@ namespace StoreAndCraft
             Plugin.Log.LogInfo("Admin cmd OK from " + sender + ": " + result);
         }
 
+        internal static bool CanEditRanges()
+        {
+            return CanIssue();
+        }
+
+        /// <summary>
+        /// F10 panel Save: same path as the chat commands (host saves + syncs; admin client
+        /// applies locally and the server re-checks the adminlist per command).
+        /// </summary>
+        internal static string ApplyFromPanel(IList<KeyValuePair<string, float>> changes)
+        {
+            if (changes == null || changes.Count == 0)
+                return Loc.T("Nothing changed.", "Nichts geändert.");
+            if (!CanIssue())
+                return Loc.T("Only the host / server admin can change ranges.", "Nur Host / Server-Admin darf Reichweiten ändern.");
+
+            bool server = AdminUtil.IsServer();
+            if (!server && ZRoutedRpc.instance == null)
+                return Loc.T("Not connected.", "Nicht verbunden.");
+
+            int ok = 0;
+            string error = null;
+            for (int i = 0; i < changes.Count; i++)
+            {
+                string text = changes[i].Key + " "
+                    + changes[i].Value.ToString("0.##", CultureInfo.InvariantCulture);
+                string result;
+                if (!TryApply(Split(text), out result))
+                {
+                    error = result;
+                    continue;
+                }
+                ok++;
+                if (!server)
+                    ZRoutedRpc.instance.InvokeRoutedRPC(VersionGate.ServerPeerId(), RpcAdminCmd, text);
+            }
+
+            if (server && ok > 0)
+                SaveAndSync();
+
+            string msg = server
+                ? Loc.T("Saved", "Gespeichert") + " (" + ok + ")"
+                : Loc.T("Sent to server", "An Server gesendet") + " (" + ok + ")";
+            return error != null ? msg + " | " + error : msg;
+        }
+
         private static bool CanIssue()
         {
             ZNet znet = ZNet.instance;
@@ -355,7 +405,8 @@ namespace StoreAndCraft
 
             string cmd = parts[0].TrimStart('/').ToLowerInvariant();
 
-            if (cmd == "storerange" || cmd == "dumprange" || cmd == "craftrange" || cmd == "storagerange" || cmd == "autofillrange")
+            if (cmd == "storerange" || cmd == "dumprange" || cmd == "craftrange" || cmd == "storagerange" || cmd == "autofillrange"
+                || cmd == "autofillchestrange" || cmd == "displayrange" || cmd == "feedtroughrange")
             {
                 if (parts.Length < 2)
                     return false;
@@ -379,6 +430,12 @@ namespace StoreAndCraft
                     key = "storagerange";
                 else if (sub == "autofill" || sub == "autofillrange")
                     key = "autofillrange";
+                else if (sub == "autofillchest" || sub == "autofillchestrange")
+                    key = "autofillchestrange";
+                else if (sub == "display" || sub == "displayrange")
+                    key = "displayrange";
+                else if (sub == "feedtrough" || sub == "feedtroughrange")
+                    key = "feedtroughrange";
                 else
                     return false;
                 valueToken = parts[2];
@@ -388,7 +445,7 @@ namespace StoreAndCraft
             return false;
         }
 
-        private static ConfigEntry<float> EntryFor(string key)
+        internal static ConfigEntry<float> EntryFor(string key)
         {
             switch (key.ToLowerInvariant())
             {
@@ -402,6 +459,12 @@ namespace StoreAndCraft
                     return Plugin.Settings.StorageRange;
                 case "autofillrange":
                     return Plugin.Settings.AutoFillRange;
+                case "autofillchestrange":
+                    return Plugin.Settings.AutoFillChestRange;
+                case "displayrange":
+                    return Plugin.Settings.DisplayRange;
+                case "feedtroughrange":
+                    return Plugin.Settings.FeedTroughRange;
                 default:
                     return null;
             }
@@ -444,8 +507,12 @@ namespace StoreAndCraft
                 "  /storerange <m>             — auto-store range (ground → chest)",
                 "  /storagerange <m>           — take-stack / search / displays",
                 "  /craftrange <m>             — craft / build / station [E] pull",
-                "  /autofillrange <m>          — auto-fill station + chest range",
-                "  /sac dump|store|storage|craft|autofill <m>",
+                "  /autofillrange <m>          - auto-fill: player to station",
+                "  /autofillchestrange <m>     - auto-fill: station to chest (0 = same as autofillrange)",
+                "  /displayrange <m>           - storage display default scan range",
+                "  /feedtroughrange <m>        - feed trough range",
+                "  /sac dump|store|storage|craft|autofill|autofillchest|display|feedtrough <m>",
+                "F10: panel with activity log checkbox + range sliders (Save).",
                 "Console (F5), same ideas:",
                 "  help store   |  sac help  |  sac status",
                 "  store enable |  store disable |  store status",
@@ -464,6 +531,7 @@ namespace StoreAndCraft
                 + " Storage=" + Plugin.Settings.StorageRange.Value
                 + " Craft=" + Plugin.Settings.CraftRange.Value
                 + " AutoFill=" + Plugin.Settings.AutoFillRange.Value
+                + " AutoFillChest=" + Plugin.Settings.AutoFillChestReach()
                 + " AutoIntake=" + (IsAutoIntakeActive() ? "on" : "off")
                 + " Lock=" + Plugin.Settings.LockConfig.Value;
         }

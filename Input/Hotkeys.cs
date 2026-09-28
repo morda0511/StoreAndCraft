@@ -41,7 +41,7 @@ namespace StoreAndCraft
             }
             else if (KeyUtil.Down(Plugin.Settings.ActivityLogKey.Value))
             {
-                ActivityLog.Toggle();
+                SettingsPanel.Toggle();
             }
             else if (KeyUtil.Down(Plugin.Settings.DisplayRangeKey.Value))
             {

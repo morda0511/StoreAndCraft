@@ -6,7 +6,7 @@ using UnityEngine;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Optional transfer log (F11). Up to 10 lines under MessageHud TopLeft
+    /// Optional transfer log (F10 panel checkbox). Up to 10 lines under MessageHud TopLeft
     /// ("Dir ist kalt" / item pickup text), same TMP font. Starts off. Local only.
     /// </summary>
     internal static class ActivityLog
@@ -47,6 +47,13 @@ namespace StoreAndCraft
                         : Loc.T("Activity log off", "Aktivitäts-Log aus"),
                     0, null, false);
             }
+        }
+
+        public static void SetVisible(bool visible)
+        {
+            _visible = visible;
+            EnsureHost();
+            RefreshUi();
         }
 
         /// <summary>Chest → station, e.g. "Chest 10x Tin → Smelter".</summary>

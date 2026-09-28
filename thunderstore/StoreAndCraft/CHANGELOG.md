@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.44
+
+### NEW FEATURES
+- F10 settings panel: sliders and number fields for all ranges, activity log checkbox, Save button, short info on what each range does. On a server only admins (adminlist) can save; in a solo world everyone can
+- New `AutoFillChestRange`: stations take items from chests around the station, not around the player (0 = same as AutoFillRange)
+- Putting items into a chest wakes nearby stations right away (about 1 s instead of up to 25 s)
+- Changing a station filter or link with Alt+E makes the station react at once
+
+### UI IMPROVEMENTS
+- Activity log / settings key moved from F11 to F10 (F11 is the Valheim screenshot key). Old F11 configs switch over automatically
+
+### FIX
+- Auto-fill stopped for kilns, smelters and windmills when many torches or fires were in range
+- All stations now get a fair turn, so a large base no longer starves stations at the end of the list
+- Two players near the same station no longer fill it twice at the same time
+- A cooking station with no allowed food no longer blocks auto-fill for other stations
+
 ## 1.3.43
 
 ### NEW FEATURES

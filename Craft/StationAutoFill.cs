@@ -37,6 +37,11 @@ namespace StoreAndCraft
         private static readonly List<ItemStand> FoodTrays = new List<ItemStand>();
         private static readonly HashSet<int> FoodTrayIds = new HashSet<int>();
         private static readonly Dictionary<string, float> QuietUntil = new Dictionary<string, float>();
+        // Non-owner handover time per station (instance id). The ZDO owner fills first; others only
+        // take over when the owner has not refilled in time (owner out of range / no auto-fill).
+        private static readonly Dictionary<int, float> NeedyUntil = new Dictionary<int, float>();
+        private const float HandoverSeconds = 6f;
+        private const float HandoverJitterSeconds = 4f;
 
         private static readonly MethodInfo SmelterGetFuel = AccessTools.Method(typeof(Smelter), "GetFuel");
         private static readonly MethodInfo SmelterSetFuel = AccessTools.Method(typeof(Smelter), "SetFuel");
@@ -52,12 +57,11 @@ namespace StoreAndCraft
 
         private static float _nextPulse;
         private static float _nextPrune;
-        private static int _smelterCursor;
-        private static int _fireCursor;
-        private static int _ovenCursor;
-        private static int _fermenterCursor;
-        private static int _turretCursor;
-        private static int _trayCursor;
+        private static int _stationCursor;
+        private static bool _inPulse;
+        private static readonly Dictionary<int, float> ChestWakeUntil = new Dictionary<int, float>();
+        private const float ChestWakeCooldown = 1f;
+        private static readonly List<Component> AllStations = new List<Component>(64);
 
         public static void Register(Smelter smelter)
         {
@@ -430,67 +434,85 @@ namespace StoreAndCraft
             int bursts = 0;
             int checks = 0;
 
-            StationFeed.PullRangeOverride = range;
-            StationFeed.BeginAutoFillPulse(player, range, stationOrigins);
+            float chestRange = Plugin.Settings.AutoFillChestReach();
+            StationFeed.PullRangeOverride = chestRange;
+            _inPulse = true;
             try
             {
-                // Fires/torches first: cheap RPC; used to starve behind smelters (MaxBursts=1).
-                checks = RoundRobinFill(
-                    Fires, ref _fireCursor, origin, rangeSq, player, ref bursts, checks,
-                    f => f != null && f.m_canRefill && !IsQuiet(f, "fire") && IsOn(f)
-                        && PrivateArea.CheckAccess(f.transform.position, 0f, false, true),
-                    FillFireWhenEmpty);
-
-                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
-                {
-                    checks = RoundRobinFill(
-                        Smelters, ref _smelterCursor, origin, rangeSq, player, ref bursts, checks,
-                        s => IsOn(s) && PrivateArea.CheckAccess(s.transform.position, 0f, false, true),
-                        FillSmelterWhenEmpty);
-                }
-
-                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
-                {
-                    checks = RoundRobinFill(
-                        Ovens, ref _ovenCursor, origin, rangeSq, player, ref bursts, checks,
-                        o => IsOn(o.GetComponent<ZNetView>())
-                            && PrivateArea.CheckAccess(o.transform.position, 0f, false, true),
-                        FillOvenWhenEmpty);
-                }
-
-                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
-                {
-                    checks = RoundRobinFill(
-                        Fermenters, ref _fermenterCursor, origin, rangeSq, player, ref bursts, checks,
-                        f => f != null && !IsQuiet(f, "mead") && IsOn(f.GetComponent<ZNetView>())
-                            && PrivateArea.CheckAccess(f.transform.position, 0f, false, true),
-                        FillFermenterWhenEmpty);
-                }
-
-                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
-                {
-                    checks = RoundRobinFill(
-                        Turrets, ref _turretCursor, origin, rangeSq, player, ref bursts, checks,
-                        t => t != null && !IsQuiet(t, "ammo") && IsOn(t.GetComponent<ZNetView>())
-                            && PrivateArea.CheckAccess(t.transform.position, 0f, false, true),
-                        FillTurretWhenEmpty);
-                }
-
-                if (bursts < MaxBurstsPerPulse && checks < MaxChecksPerPulse)
-                {
-                    RoundRobinFill(
-                        FoodTrays, ref _trayCursor, origin, rangeSq, player, ref bursts, checks,
-                        s => s != null && !IsQuiet(s, "tray") && IsOn(s.GetComponent<ZNetView>())
-                            && PrivateArea.CheckAccess(s.transform.position, 0f, false, true),
-                        FillFoodTrayWhenEmpty);
-                }
+                StationFeed.BeginAutoFillPulse(player, chestRange, stationOrigins);
+                // One shared ring over every station type: no type is preferred, the cursor
+                // continues where the last pulse stopped. Only stations that need something
+                // take a check slot.
+                AllStations.Clear();
+                AddStations(Fires);
+                AddStations(Smelters);
+                AddStations(Ovens);
+                AddStations(Fermenters);
+                AddStations(Turrets);
+                AddStations(FoodTrays);
+                RoundRobinFill(
+                    AllStations, ref _stationCursor, origin, rangeSq, player, ref bursts, checks,
+                    StationNeedsFill, FillStation);
+                AllStations.Clear();
             }
             finally
             {
                 StationFeed.EndAutoFillPulse();
                 StationFeed.PullRangeOverride = 0f;
                 StationFeed.PullOriginOverride = null;
+                _inPulse = false;
             }
+        }
+
+        private static void AddStations<T>(List<T> list) where T : Component
+        {
+            for (int i = 0; i < list.Count; i++)
+                AllStations.Add(list[i]);
+        }
+
+        private static bool StationNeedsFill(Component station)
+        {
+            if (station == null)
+                return false;
+
+            bool needs;
+            if (station is Fireplace f)
+                needs = f.m_canRefill && !IsQuiet(f, "fire") && IsOn(f) && ReadFireFuel(f) <= 0.01f;
+            else if (station is Smelter s)
+                needs = IsOn(s) && (SmelterNeedsFuel(s) || SmelterNeedsOre(s));
+            else if (station is CookingStation o)
+                needs = IsOn(o.GetComponent<ZNetView>()) && (OvenNeedsFuel(o) || OvenNeedsFood(o));
+            else if (station is Fermenter m)
+                needs = !IsQuiet(m, "mead") && IsOn(m.GetComponent<ZNetView>())
+                    && ReadEnumInt(FermenterGetStatus, m) == 0;
+            else if (station is Turret t)
+                needs = !IsQuiet(t, "ammo") && IsOn(t.GetComponent<ZNetView>())
+                    && t.m_maxAmmo > 0
+                    && Mathf.RoundToInt(ReadNumber(TurretGetAmmo, t)) < t.m_maxAmmo;
+            else if (station is ItemStand tray)
+                needs = !IsQuiet(tray, "tray") && IsOn(tray.GetComponent<ZNetView>())
+                    && !IsTrue(ItemStandHaveAttachment, tray);
+            else
+                return false;
+
+            return needs && PrivateArea.CheckAccess(station.transform.position, 0f, false, true);
+        }
+
+        private static bool FillStation(Component station, Player player)
+        {
+            if (station is Fireplace f)
+                return FillFireWhenEmpty(f, player);
+            if (station is Smelter s)
+                return FillSmelterWhenEmpty(s, player);
+            if (station is CookingStation o)
+                return FillOvenWhenEmpty(o, player);
+            if (station is Fermenter m)
+                return FillFermenterWhenEmpty(m, player);
+            if (station is Turret t)
+                return FillTurretWhenEmpty(t, player);
+            if (station is ItemStand tray)
+                return FillFoodTrayWhenEmpty(tray, player);
+            return false;
         }
 
         private static void CollectOnStationOrigins(Vector3 playerOrigin, float rangeSq, List<Vector3> dest)
@@ -623,9 +645,13 @@ namespace StoreAndCraft
                 T station = list[i];
                 if (station == null)
                     continue;
-                if (ContainerFilter.SqrDistance(origin, station.transform.position) > rangeSq)
+                if (ContainerFilter.SqrDistance(origin, station.transform.position) > rangeSq
+                    || !isCandidate(station))
+                {
+                    NeedyUntil.Remove(station.GetInstanceID());
                     continue;
-                if (!isCandidate(station))
+                }
+                if (!MayFillHere(station))
                     continue;
 
                 cursor = i + 1;
@@ -645,6 +671,37 @@ namespace StoreAndCraft
             }
 
             return checks;
+        }
+
+        /// <summary>
+        /// Fill paths ClaimOwnership and run the add RPC locally. Two clients doing that on the
+        /// same empty station within sync latency both spend chest items, and one ZDO write loses.
+        /// </summary>
+        private static bool MayFillHere(Component station)
+        {
+            ZNetView nv = station != null ? station.GetComponent<ZNetView>() : null;
+            if (nv == null || !nv.IsValid())
+                return false;
+
+            int id = station.GetInstanceID();
+            if (nv.IsOwner())
+            {
+                NeedyUntil.Remove(id);
+                return true;
+            }
+
+            float now = Time.unscaledTime;
+            float until;
+            if (!NeedyUntil.TryGetValue(id, out until))
+            {
+                NeedyUntil[id] = now + HandoverSeconds + UnityEngine.Random.Range(0f, HandoverJitterSeconds);
+                return false;
+            }
+            if (now < until)
+                return false;
+
+            NeedyUntil.Remove(id);
+            return true;
         }
 
         /// <summary>
@@ -675,11 +732,21 @@ namespace StoreAndCraft
         private static bool FillSmelterWhenEmpty(Smelter smelter, Player player)
         {
             bool did = false;
-            if (HasFuelSlot(smelter) && !IsQuiet(smelter, "fuel") && ReadNumber(SmelterGetFuel, smelter) <= 0.01f)
+            if (SmelterNeedsFuel(smelter))
                 did |= FillFuelToMax(smelter, player);
-            if (HasOreSlot(smelter) && !IsQuiet(smelter, "ore") && ReadNumber(SmelterGetQueue, smelter) < 1f)
+            if (SmelterNeedsOre(smelter))
                 did |= FillOreToMax(smelter, player);
             return did;
+        }
+
+        private static bool SmelterNeedsFuel(Smelter smelter)
+        {
+            return HasFuelSlot(smelter) && !IsQuiet(smelter, "fuel") && ReadNumber(SmelterGetFuel, smelter) <= 0.01f;
+        }
+
+        private static bool SmelterNeedsOre(Smelter smelter)
+        {
+            return HasOreSlot(smelter) && !IsQuiet(smelter, "ore") && ReadNumber(SmelterGetQueue, smelter) < 1f;
         }
 
         private static bool HasFuelSlot(Smelter smelter)
@@ -1006,15 +1073,25 @@ namespace StoreAndCraft
         private static bool FillOvenWhenEmpty(CookingStation oven, Player player)
         {
             bool did = false;
-            if (oven.m_useFuel && oven.m_fuelItem != null && oven.m_maxFuel > 0
-                && !IsQuiet(oven, "fuel") && ReadNumber(CookGetFuel, oven) <= 0.01f)
+            if (OvenNeedsFuel(oven))
                 did |= FillOvenFuel(oven, player);
             // Free slots, not only fully empty: stone oven / spit can top up after
             // auto-drop clears done food. OnUseItem needs a lit fire under stone ovens;
             // FillOvenFood uses RPC_AddItem so baking can queue without that block.
-            if (!IsQuiet(oven, "food") && !IsTrue(CookIsFull, oven))
+            if (OvenNeedsFood(oven))
                 did |= FillOvenFood(oven, player);
             return did;
+        }
+
+        private static bool OvenNeedsFuel(CookingStation oven)
+        {
+            return oven != null && oven.m_useFuel && oven.m_fuelItem != null && oven.m_maxFuel > 0
+                && !IsQuiet(oven, "fuel") && ReadNumber(CookGetFuel, oven) <= 0.01f;
+        }
+
+        private static bool OvenNeedsFood(CookingStation oven)
+        {
+            return oven != null && !IsQuiet(oven, "food") && !IsTrue(CookIsFull, oven);
         }
 
         private static bool FillOvenFuel(CookingStation oven, Player player)
@@ -1102,7 +1179,10 @@ namespace StoreAndCraft
         {
             List<string> foods = CookingOnInteractPatch.FoodNames(oven);
             if (foods == null || foods.Count == 0)
+            {
+                Quiet(oven, "food", QuietEmptySeconds);
                 return false;
+            }
 
             ZNetView nv = oven.GetComponent<ZNetView>();
             if (nv == null || !nv.IsValid())
@@ -1428,18 +1508,76 @@ namespace StoreAndCraft
             QuietUntil[QuietKey(obj, slot)] = Time.unscaledTime + seconds;
         }
 
-        private static void ClearQuiet(UnityEngine.Object obj)
+        private static bool ClearQuiet(UnityEngine.Object obj)
         {
             if (obj == null)
-                return;
+                return false;
             int id = obj.GetInstanceID();
-            QuietUntil.Remove(id + ":fuel");
-            QuietUntil.Remove(id + ":ore");
-            QuietUntil.Remove(id + ":fire");
-            QuietUntil.Remove(id + ":food");
-            QuietUntil.Remove(id + ":mead");
-            QuietUntil.Remove(id + ":ammo");
-            QuietUntil.Remove(id + ":tray");
+            bool any = false;
+            any |= QuietUntil.Remove(id + ":fuel");
+            any |= QuietUntil.Remove(id + ":ore");
+            any |= QuietUntil.Remove(id + ":fire");
+            any |= QuietUntil.Remove(id + ":food");
+            any |= QuietUntil.Remove(id + ":mead");
+            any |= QuietUntil.Remove(id + ":ammo");
+            any |= QuietUntil.Remove(id + ":tray");
+            return any;
+        }
+
+        /// <summary>Filter / link changed on this station: check it again on the next pulse.</summary>
+        internal static void WakeStation(Component station)
+        {
+            if (ClearQuiet(station))
+                RequestSoon();
+        }
+
+        /// <summary>
+        /// A chest's contents changed: stations within chest reach leave their empty-chest
+        /// silence so new items are picked up in about a second instead of up to 25 s.
+        /// Own auto-fill pulls are skipped (_inPulse), else every refill would re-wake itself.
+        /// </summary>
+        internal static void WakeNearChest(Container chest)
+        {
+            if (_inPulse || chest == null || Player.m_localPlayer == null || Plugin.Settings == null
+                || QuietUntil.Count == 0)
+                return;
+
+            int id = chest.GetInstanceID();
+            float now = Time.unscaledTime;
+            float until;
+            if (ChestWakeUntil.TryGetValue(id, out until) && now < until)
+                return;
+            if (ChestWakeUntil.Count > 512)
+                ChestWakeUntil.Clear();
+            ChestWakeUntil[id] = now + ChestWakeCooldown;
+
+            Vector3 pos = chest.transform.position;
+            float reach = Plugin.Settings.AutoFillChestReach();
+            float sq = reach * reach;
+            bool woke = false;
+            woke |= WakeList(Fires, pos, sq);
+            woke |= WakeList(Smelters, pos, sq);
+            woke |= WakeList(Ovens, pos, sq);
+            woke |= WakeList(Fermenters, pos, sq);
+            woke |= WakeList(Turrets, pos, sq);
+            woke |= WakeList(FoodTrays, pos, sq);
+            if (woke)
+                RequestSoon();
+        }
+
+        private static bool WakeList<T>(List<T> list, Vector3 chestPos, float reachSq) where T : Component
+        {
+            bool woke = false;
+            for (int i = 0; i < list.Count; i++)
+            {
+                T station = list[i];
+                if (station == null)
+                    continue;
+                if (ContainerFilter.SqrDistance(chestPos, station.transform.position) > reachSq)
+                    continue;
+                woke |= ClearQuiet(station);
+            }
+            return woke;
         }
 
         private static string QuietKey(UnityEngine.Object obj, string slot)
@@ -1905,6 +2043,27 @@ namespace StoreAndCraft
         {
             if (__instance != null && StationAutoFill.IsOn(__instance.GetComponent<ZNetView>()))
                 StationAutoFill.RequestSoon();
+        }
+    }
+
+    // Read-only hooks: the chest wipe guard lives on Save / Inventory.Load and is not touched.
+    [HarmonyPatch(typeof(Container), "OnContainerChanged")]
+    internal static class ContainerChangedWakeStationsPatch
+    {
+        private static void Postfix(Container __instance)
+        {
+            StationAutoFill.WakeNearChest(__instance);
+        }
+    }
+
+    // Load() is true only when the ZDO data revision changed (another player edited the chest).
+    [HarmonyPatch(typeof(Container), "Load")]
+    internal static class ContainerLoadWakeStationsPatch
+    {
+        private static void Postfix(Container __instance, bool __result)
+        {
+            if (__result)
+                StationAutoFill.WakeNearChest(__instance);
         }
     }
 

@@ -21,6 +21,7 @@ namespace StoreAndCraft
         private static int _cacheFrame = -1;
         private static int _storeForceBudget;
         private static readonly Dictionary<string, int> CountCache = new Dictionary<string, int>();
+        private static readonly List<Container> CountScratch = new List<Container>(32);
         private const float RescanMove = 2.5f;
         private const float IdleRescanSeconds = 5f;
         private const float MoveRescanSeconds = 1.75f;
@@ -486,14 +487,23 @@ namespace StoreAndCraft
             int useLink = linkId == int.MinValue ? StationLink.ActiveId : linkId;
             float useRange = range > 0f ? range : StationFeed.ActivePullRange();
             string key = sharedName + "|" + quality + "|" + (leaveOne ? 1 : 0) + "|"
-                + useRange.ToString("0.##") + "|L" + useLink;
+                + useRange.ToString("0.##") + "|L" + useLink
+                + "|" + origin.x.ToString("0.#") + "," + origin.y.ToString("0.#") + "," + origin.z.ToString("0.#");
             int cached;
             if (CountCache.TryGetValue(key, out cached))
                 return cached;
 
             int total = 0;
             float craftSq = useRange * useRange;
-            foreach (Container c in Cached)
+            // Auto-fill counts around the station; the player-centered cache can miss chests
+            // behind a station at the edge of range (Consume already uses CollectNear).
+            IEnumerable<Container> source = Cached;
+            if (StationFeed.PullOriginOverride.HasValue)
+            {
+                CollectNear(origin, useRange, CountScratch);
+                source = CountScratch;
+            }
+            foreach (Container c in source)
             {
                 if (c == null || !StationLink.ChestAllowed(c, useLink))
                     continue;

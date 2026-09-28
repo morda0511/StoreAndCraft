@@ -392,7 +392,9 @@ namespace StoreAndCraft
             if (container == null || nv == null || !nv.IsOwner() || amount <= 0)
                 return;
             if (!ValidateRpc(container, sender,
-                    Plugin.Settings != null ? Plugin.Settings.CraftRange.Value : 20f))
+                    Plugin.Settings != null
+                        ? Mathf.Max(Plugin.Settings.CraftRange.Value, Plugin.Settings.AutoFillPlayerToChestRange())
+                        : 20f))
                 return;
 
             // ConsumeLocal loads inventory once — required so client RPCs don't no-op.
@@ -1142,7 +1144,7 @@ namespace StoreAndCraft
         {
             if (Plugin.Settings == null)
                 return 12f;
-            return Plugin.Settings.MaxGameplayRange();
+            return Mathf.Max(Plugin.Settings.MaxGameplayRange(), Plugin.Settings.AutoFillPlayerToChestRange());
         }
 
         private static bool ValidateRpc(Container container, long sender, float range)

@@ -27,7 +27,7 @@ namespace StoreAndCraft
         {
             if (Plugin.Settings == null)
                 return 10f;
-            return Mathf.Max(5f, Plugin.Settings.AutoFillRange.Value);
+            return Mathf.Max(5f, Plugin.Settings.AutoFillChestReach());
         }
 
         /// <summary>

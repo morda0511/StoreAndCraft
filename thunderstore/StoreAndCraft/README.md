@@ -1,7 +1,7 @@
 # StoreAndCraft
 
 **Your base runs with you.**  
-Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]**, or toggle **auto-fill with B**. Finished bars / food / honey can **auto-store with N** into matching chests. Tell each station which wood or ore it is allowed to take. **F11** activity log. **Small / Medium / Large Storage Displays** with **Shift + left click** scale and **Shift + right click** Classic/Compact layout. Build a **Feed Trough** so tames eat when hungry. Mark favorites with **F**, fill a stack with **Ctrl + Middle mouse**, find a stack with **Y**, sort with **R**. **Alt+E** opens Settings for chests and stations. Carts and ships count too.
+Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]**, or toggle **auto-fill with B**. Finished bars / food / honey can **auto-store with N** into matching chests. Tell each station which wood or ore it is allowed to take. **F10** opens a small panel for the activity log and ranges. **Small / Medium / Large Storage Displays** with **Shift + left click** scale and **Shift + right click** Classic/Compact layout. Build a **Feed Trough** so tames eat when hungry. Mark favorites with **F**, fill a stack with **Ctrl + Middle mouse**, find a stack with **Y**, sort with **R**. **Alt+E** opens Settings for chests and stations. Carts and ships count too.
 
 **Required on the dedicated / hosted server and every PC client** (same version). Valheim 1.0 · BepInExPack 5.4.2350+. Console players via crossplay cannot load the mod.
 
@@ -93,7 +93,8 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - Empty renamed chests keep their custom name.
 
 ### Activity log
-- **F11** toggles a short log under the TopLeft status text. Shows recent chest ↔ station moves while you play.
+- **F10** opens the StoreAndCraft panel. Tick **Show activity log** for a short log under the TopLeft status text with recent chest ↔ station moves.
+- The same panel has sliders and number fields for every range. **Save** applies them. On a server only admins from the adminlist can save; in your own world everyone can.
 
 ### Search
 - Inventory open → hover an item → press **Y**.
@@ -122,7 +123,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 | **F** | Favorite / unfavorite hovered inventory item |
 | **B** | Toggle auto-fill on the looked-at station (inventory closed) |
 | **N** | Toggle auto-store on kiln / smelter / cooking / fermenter / beehive (inventory closed) |
-| **F11** | Toggle activity log |
+| **F10** | Panel: activity log + ranges |
 | **Y** | Find nearest chest with the hovered item (blink + map ping) |
 | **R** | Sort bag or open chest |
 | **C + place (hammer)** | Grab build materials from chests (do not place) |
@@ -156,12 +157,14 @@ Changing ranges: **host / server admin only**. Anyone can view status / help.
 | `/storerange <n>` | Host / admin | Set auto-store ground→chest range |
 | `/storagerange <n>` | Host / admin | Set take-stack / search / display range |
 | `/craftrange <n>` | Host / admin | Set craft / build / station-pull range |
-| `/autofillrange <n>` | Host / admin | Set auto-fill station + chest range |
+| `/autofillrange <n>` | Host / admin | Set auto-fill player to station range |
+| `/autofillchestrange <n>` | Host / admin | Set auto-fill station to chest range (0 = same as autofillrange) |
 | `/sac dump <n>` | Host / admin | Alias for `/dumprange` |
 | `/sac store <n>` | Host / admin | Alias for `/storerange` |
 | `/sac storage <n>` | Host / admin | Alias for `/storagerange` |
 | `/sac craft <n>` | Host / admin | Alias for `/craftrange` |
 | `/sac autofill <n>` | Host / admin | Alias for `/autofillrange` |
+| `/sac autofillchest <n>` | Host / admin | Alias for `/autofillchestrange` |
 
 **Examples**
 
@@ -207,7 +210,8 @@ Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when Loc
 | `StoreRange` | Auto-store ground items (m) |
 | `StorageRange` | Take-stack / search / displays (m) |
 | `CraftRange` | Craft / build / station `[E]` (m) |
-| `AutoFillRange` | Auto-fill range (m) |
+| `AutoFillRange` | Auto-fill: player to station (m) |
+| `AutoFillChestRange` | Auto-fill / auto-store: station to chest (m), 0 = same as AutoFillRange |
 | `IntakeInterval` | Seconds between ground-item scans |
 | Hotkeys | Local only |
 

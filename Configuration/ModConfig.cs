@@ -5,8 +5,8 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        // Bump when package layout or shared station behavior changes. v16 = fermenter auto-store, fire links ignored, ranges 0-1000.
-        public const int ProtocolVersion = 16;
+        // Bump when package layout or shared station behavior changes. v17 = AutoFillChestRange (station to chest) synced.
+        public const int ProtocolVersion = 17;
         public const float MaxRange = 1000f;
 
         public ConfigEntry<bool> LockConfig { get; }
@@ -26,6 +26,7 @@ namespace StoreAndCraft
         public ConfigEntry<bool> AutoStackEnabled { get; }
         public ConfigEntry<float> CraftRange { get; }
         public ConfigEntry<float> AutoFillRange { get; }
+        public ConfigEntry<float> AutoFillChestRange { get; }
         public ConfigEntry<float> IntakeInterval { get; }
         public ConfigEntry<int> MaxTransfersPerTick { get; }
         public ConfigEntry<KeyboardShortcut> DumpKey { get; }
@@ -79,7 +80,9 @@ namespace StoreAndCraft
             CraftRange = file.Bind("3 - Craft", "CraftRange", 20f, new ConfigDescription(
                 "Craft / build / station-[E] pull range in meters (player → chest). Synced from server when LockConfig is on.", range));
             AutoFillRange = file.Bind("3 - Craft", "AutoFillRange", 20f, new ConfigDescription(
-                "Auto-fill range in meters: player → station (kiln/smelter/blast furnace/oven/fermenter/torch), and player → chests for auto-fill materials. Auto-fill never takes from your bag — only matching linked / untagged chests. Independent from CraftRange. Synced from server when LockConfig is on.", range));
+                "Auto-fill range in meters: player → station (kiln/smelter/blast furnace/oven/fermenter/torch). Stations farther away pause until you come closer. Chests are searched around each station (see AutoFillChestRange). Auto-fill never takes from your bag, only from matching linked / untagged chests. Independent from CraftRange. Synced from server when LockConfig is on.", range));
+            AutoFillChestRange = file.Bind("3 - Craft", "AutoFillChestRange", 0f, new ConfigDescription(
+                "Station → chest range in meters for auto-fill materials and auto-store output. 0 = same as AutoFillRange. Tip: large AutoFillRange (e.g. 80) with a small AutoFillChestRange (e.g. 10) keeps a whole base running while each station only uses chests right next to it. Synced from server when LockConfig is on.", range));
             IntakeInterval = file.Bind("2 - Store", "IntakeInterval", 5f,
                 "Seconds between automatic scans for ground items. Lower = snappier, higher = less CPU.");
             MaxTransfersPerTick = file.Bind("1 - General", "MaxTransfersPerTick", 8,
@@ -100,8 +103,11 @@ namespace StoreAndCraft
                 "Look at a kiln, smelter, blast furnace, cooking / stone oven, fermenter, or torch / fire with the inventory closed and press to toggle auto-fill. The station pull filter still applies. Local, not synced.");
             AutoDropKey = file.Bind("4 - Keys", "AutoDropKey", new KeyboardShortcut(KeyCode.N),
                 "Look at a kiln/smelter/blast furnace, cooking spit/oven, fermenter, or beehive with the inventory closed and press to toggle auto-store. Finished bars / food / mead / honey go into a nearby chest (ground only if no space). Independent from auto-fill (B). Per piece.");
-            ActivityLogKey = file.Bind("4 - Keys", "ActivityLogKey", new KeyboardShortcut(KeyCode.F11),
-                "Toggle the on-screen activity log (max 10 lines above the hotbar: chest ↔ station transfers). Local, not synced.");
+            ActivityLogKey = file.Bind("4 - Keys", "ActivityLogKey", new KeyboardShortcut(KeyCode.F10),
+                "Opens the StoreAndCraft panel: activity log checkbox (anyone, local) and range sliders with Save (host / server admin from the adminlist; everyone in an offline / own world). Do not use F11, Valheim saves a screenshot on F11.");
+            // Old default F11 is also Valheim's screenshot key.
+            if (ActivityLogKey.Value.MainKey == KeyCode.F11 && !ActivityLogKey.Value.Modifiers.GetEnumerator().MoveNext())
+                ActivityLogKey.Value = new KeyboardShortcut(KeyCode.F10);
             SortKey = file.Bind("4 - Keys", "SortKey", new KeyboardShortcut(KeyCode.R),
                 "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, hotbar, and equipment/quick-slot mod overflow stay put; Wider/Deeper Pockets rows sort normally).");
             DisplayRangeKey = file.Bind("4 - Keys", "DisplayRangeKey", new KeyboardShortcut(KeyCode.R, KeyCode.LeftAlt),
@@ -117,6 +123,19 @@ namespace StoreAndCraft
         public float StationPullRange()
         {
             return Mathf.Max(CraftRange.Value, AutoFillRange.Value);
+        }
+
+        /// <summary>Station → chest reach for auto-fill / auto-store (0 falls back to AutoFillRange).</summary>
+        public float AutoFillChestReach()
+        {
+            float chest = AutoFillChestRange.Value;
+            return chest > 0f ? chest : AutoFillRange.Value;
+        }
+
+        /// <summary>Farthest player → chest distance auto-fill can need (player → station → chest).</summary>
+        public float AutoFillPlayerToChestRange()
+        {
+            return AutoFillRange.Value + AutoFillChestReach();
         }
 
         public float MaxGameplayRange()
@@ -151,6 +170,7 @@ namespace StoreAndCraft
             pkg.Write(MaxTransfersPerTick.Value);
             pkg.Write(FeedTroughEnabled.Value);
             pkg.Write(FeedTroughRange.Value);
+            pkg.Write(AutoFillChestRange.Value);
         }
 
         public void ReadFromPackage(ZPackage pkg)
@@ -173,6 +193,7 @@ namespace StoreAndCraft
             MaxTransfersPerTick.Value = pkg.ReadInt();
             FeedTroughEnabled.Value = pkg.ReadBool();
             FeedTroughRange.Value = pkg.ReadSingle();
+            AutoFillChestRange.Value = pkg.ReadSingle();
         }
     }
 }

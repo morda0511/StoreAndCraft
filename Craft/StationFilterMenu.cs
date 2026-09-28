@@ -218,6 +218,7 @@ namespace StoreAndCraft
             ActivityLog.Note(StationOutput.StationLabel(ActiveStation()),
                 Loc.T("Filter", "Filter") + " " + DisplayFilters.ItemLabel(shared) + " "
                 + (denied ? Loc.T("blocked", "gesperrt") : Loc.T("allowed", "erlaubt")));
+            StationAutoFill.WakeStation(ActiveStation());
             RebuildRows(preserveScroll: true);
         }
 
@@ -230,6 +231,7 @@ namespace StoreAndCraft
             if (_linkGrid != null)
                 UiLinkGrid.RefreshSelection(_linkGrid, StationLink.Get(station));
             ActivityLog.Note(StationOutput.StationLabel(station), Loc.T("Link", "Link") + " " + StationLink.ShortToken(StationLink.Get(station)));
+            StationAutoFill.WakeStation(station);
         }
 
         private static Component ActiveStation()
@@ -246,6 +248,7 @@ namespace StoreAndCraft
             else
                 return;
             ActivityLog.Note(StationOutput.StationLabel(ActiveStation()), Loc.T("Filter: allow all", "Filter: alles erlaubt"));
+            StationAutoFill.WakeStation(ActiveStation());
             RebuildRows(preserveScroll: true);
         }
 
