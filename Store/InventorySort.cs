@@ -7,34 +7,94 @@ using UnityEngine;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Sort player inventory or the open chest with one hotkey.
-    /// Chest open → sort chest only. Inventory only → sort bag (favorites stay put).
+    /// Sort / Stack buttons on the bag and chest panels (favorites, equipped, hotbar stay put in the bag).
     /// </summary>
     internal static class InventorySort
     {
         private static readonly FieldInfo CurrentContainer =
             AccessTools.Field(typeof(InventoryGui), "m_currentContainer");
 
-        public static void TrySort()
+        /// <summary>Inventory buttons: act on one panel, even when the other one is open too.</summary>
+        public static void SortBag()
         {
-            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
-                return;
+            Player player = ButtonPlayer();
+            if (player != null)
+                SortPlayerInventory(player);
+        }
 
-            Player player = Player.m_localPlayer;
-            if (player == null)
-                return;
-
-            if (!InventoryGui.IsVisible())
-                return;
-
-            Container open = GetOpenContainer();
+        public static void SortChest()
+        {
+            Player player = ButtonPlayer();
+            Container open = player != null ? GetOpenContainer() : null;
             if (open != null)
-            {
                 SortOpenChest(player, open);
+        }
+
+        public static void StackBag()
+        {
+            Player player = ButtonPlayer();
+            Inventory inv = player != null ? player.GetInventory() : null;
+            if (inv == null)
                 return;
+            int merged = StackInventory(inv, lockFavorites: true, lockEquipped: true, lockHotbar: true);
+            ActivityLog.Note(Loc.T("Stack", "Stapeln"), ActivityLog.Bag() + " (" + merged + ")");
+        }
+
+        public static void StackChest()
+        {
+            Player player = ButtonPlayer();
+            Container chest = player != null ? GetOpenContainer() : null;
+            if (!ChestWritable(chest))
+                return;
+            int merged = StackInventory(chest.GetInventory(), lockFavorites: false, lockEquipped: false, lockHotbar: false);
+            ContainerFilter.SaveInventory(chest);
+            ActivityLog.Note(Loc.T("Stack", "Stapeln"), ActivityLog.Chest(chest) + " (" + merged + ")");
+        }
+
+        private static Player ButtonPlayer()
+        {
+            if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value || !InventoryGui.IsVisible())
+                return null;
+            return Player.m_localPlayer;
+        }
+
+        private static bool ChestWritable(Container chest)
+        {
+            if (chest == null || ChestNames.IsFullyIgnored(chest))
+                return false;
+            ZNetView nv = Refs.View(chest);
+            if (nv == null || !nv.IsValid() || !nv.IsOwner())
+                return false;
+            return ContainerFilter.TryReadyForWrite(chest) && chest.GetInventory() != null;
+        }
+
+        /// <summary>Merge partial stacks of the same item (same rules as sort), no reordering. Returns stacks freed.</summary>
+        private static int StackInventory(Inventory inv, bool lockFavorites, bool lockEquipped, bool lockHotbar)
+        {
+            if (inv == null)
+                return 0;
+            var movable = new List<ItemDrop.ItemData>();
+            foreach (ItemDrop.ItemData item in inv.GetAllItems())
+            {
+                if (item == null || item.m_shared == null || item.m_stack <= 0)
+                    continue;
+                if (!PlayerBag.IsSortLocked(item, lockFavorites, lockEquipped, lockHotbar, inv))
+                    movable.Add(item);
             }
 
-            SortPlayerInventory(player);
+            CompactStacks(movable);
+
+            int freed = 0;
+            for (int i = movable.Count - 1; i >= 0; i--)
+            {
+                if (movable[i] != null && movable[i].m_stack <= 0)
+                {
+                    inv.RemoveItem(movable[i]);
+                    freed++;
+                }
+            }
+            Refs.NotifyChanged(inv);
+            return freed;
         }
 
         private static void SortPlayerInventory(Player player)
@@ -133,7 +193,7 @@ namespace StoreAndCraft
             var freeSlots = new List<Vector2i>();
             for (int y = 0; y < height; y++)
             {
-                // Player hotbar is row 0 — never pack sorted bag items into it.
+                // Player hotbar is row 0 - never pack sorted bag items into empty hotbar slots.
                 if (lockHotbar && y == 0)
                     continue;
                 // Wider/Deeper Pockets rows (y >= 4) are normal bag — include them.

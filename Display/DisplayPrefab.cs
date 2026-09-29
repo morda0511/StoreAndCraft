@@ -144,8 +144,29 @@ namespace StoreAndCraft
             }
         }
 
-        /// <summary>Flip to true when carved Unity boards ship to players.</summary>
-        private static bool CarvedDisplaysExposed => false;
+        /// <summary>Carved Unity boards in the hammer (Storage tab). Needs sac_displays next to the DLL.</summary>
+        private static bool CarvedDisplaysExposed => true;
+
+        /// <summary>
+        /// Carved piece name → visual base (same mapping as the BuildVariant calls above).
+        /// Instantiate does not copy StorageDisplayBoard.VisualBase (internal field, not
+        /// serialized), so ghosts, placed and loaded boards re-derive it from their name.
+        /// </summary>
+        internal static string VisualBaseForPrefab(string objectName)
+        {
+            if (string.IsNullOrEmpty(objectName))
+                return null;
+            string n = objectName.Replace("(Clone)", "").Trim();
+            if (n == SmallCarvedName)
+                return "small_vertical";
+            if (n == SmallWideName)
+                return "small_horizontal";
+            if (n == MediumCarvedName)
+                return "medium";
+            if (n == LargeCarvedName)
+                return "large";
+            return null;
+        }
 
         private static void BuildVariant(
             ZNetScene scene,
@@ -196,16 +217,23 @@ namespace StoreAndCraft
                     piece.m_resources = source.m_resources;
             }
 
-            // Soften colliders after clone is fully set up (must stay solid enough to place).
-            SoftenColliders(clone, kind);
-
             StorageDisplayBoard board = clone.GetComponent<StorageDisplayBoard>();
             if (board == null)
                 board = clone.AddComponent<StorageDisplayBoard>();
             board.Configure(kind);
             board.VisualBase = visualBase;
             if (custom)
-                DisplayVisual.Ensure(board);
+            {
+                // Full layout on the hammer template too: Valheim placement uses this
+                // prefab's colliders/snaps for the ghost. Mesh-only left the vanilla
+                // sign box at the feet (build only at bottom center).
+                DisplayVisual.Ensure(board, templateMeshOnly: false);
+            }
+            else
+            {
+                // Vanilla wood signs: thin Medium/Large depth without authored YAML collider.
+                SoftenColliders(clone, kind);
+            }
 
             int hash = prefabName.GetStableHashCode();
             ByHash[hash] = clone;

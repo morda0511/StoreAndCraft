@@ -63,7 +63,7 @@ namespace StoreAndCraft
         {
             if (chest == null || amount <= 0 || string.IsNullOrEmpty(token))
                 return false;
-            if (ChestNames.IsIgnored(chest))
+            if (ChestNames.BlocksDeposit(chest))
                 return false;
             if (!ContainerFilter.IsPlayerBuiltStorage(chest))
                 return false;
@@ -109,7 +109,7 @@ namespace StoreAndCraft
         {
             if (chest == null || from == null || item == null || amount <= 0)
                 return false;
-            if (ChestNames.IsIgnored(chest))
+            if (ChestNames.BlocksDeposit(chest))
                 return false;
             if (!ContainerFilter.IsPlayerBuiltStorage(chest))
                 return false;
@@ -141,7 +141,7 @@ namespace StoreAndCraft
         {
             if (chest == null || drop == null || drop.m_itemData == null)
                 return false;
-            if (ChestNames.IsIgnored(chest))
+            if (ChestNames.BlocksDeposit(chest))
                 return false;
             if (!ContainerFilter.IsPlayerBuiltStorage(chest))
                 return false;
@@ -644,6 +644,12 @@ namespace StoreAndCraft
         private static bool DepositRemote(Container chest, Inventory from, ItemDrop.ItemData item, int amount)
         {
             if (chest == null || from == null || item == null || item.m_shared == null)
+                return false;
+
+            // The deposit RPC only carries prefab / stack / quality / variant / crafter.
+            // Custom data (Epic Loot enchantments, other mods' tags) would be rebuilt as a
+            // plain item on the owner, so such items only move when we own the chest.
+            if (item.m_customData != null && item.m_customData.Count > 0)
                 return false;
 
             int take = Mathf.Min(amount, item.m_stack);

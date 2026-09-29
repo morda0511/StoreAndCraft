@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "prefabId": "small_horizontal",
+  "model": {
+    "localScale": { "x": 1, "y": 1, "z": 1 }
+  },
+  "itemGrid": {
+    "enabled": true,
+    "columns": 4,
+    "rows": 2,
+    "spacingX": 0.325,
+    "spacingY": 0.415,
+    "offsetX": 0,
+    "offsetY": 0.37,
+    "offsetZ": -0.04,
+    "cellSize": 0.3,
+    "euler": { "x": 0, "y": 0, "z": 0 }
+  },
+  "colliders": [
+    {
+      "id": "BoxCollider_0",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0, "y": 0.35, "z": -0.05 },
+      "size": { "x": 1.7, "y": 1.15, "z": 0.35 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    }
+  ],
+  "snapPoints": [
+    {
+      "id": "SnapPoint_0",
+      "enabled": true,
+      "localPosition": { "x": -0.55, "y": 1.42, "z": -0.04 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "id": "SnapPoint_1",
+      "enabled": true,
+      "localPosition": { "x": 0.5, "y": 1.37, "z": -0.14 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    }
+  ]
+}

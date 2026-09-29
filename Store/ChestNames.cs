@@ -11,11 +11,13 @@ namespace StoreAndCraft
         /// <summary>Hidden from dump/store/craft pull; still counted on Storage Displays.</summary>
         public const string HiddenPrefix = "[H]";
         /// <summary>
-        /// Optional station channel in the chest name: [l1]…[l9] (see StationLink).
-        /// Legacy [link1]…[link9] still works. Example: [l2] Wood.
+        /// Manual fill: dump / ground intake / auto-store skip depositing into this chest.
+        /// Station pull, craft pull, and [lN] links still work. Combines with links: [M] [l3] Wood.
+        /// Type the prefix in the chest name (no extra toggle). Not compatible with [I]/[H].
         /// </summary>
+        public const string ManualPrefix = "[M]";
 
-        /// <summary>Dump / auto-store / craft / auto-fill / build-grab skip these ([I] or [H]).</summary>
+        /// <summary>Dump / craft / auto-fill / build-grab skip these entirely ([I] or [H]). Not [M].</summary>
         public static bool IsIgnored(Container container)
         {
             return IsIgnoredName(Get(container));
@@ -24,6 +26,31 @@ namespace StoreAndCraft
         public static bool IsIgnoredName(string stored)
         {
             return IsFullyIgnoredName(stored) || IsHiddenName(stored);
+        }
+
+        /// <summary>Manual-fill chests: no automated deposit in; station/craft pull still allowed.</summary>
+        public static bool IsManualFill(Container container)
+        {
+            return IsManualFillName(Get(container));
+        }
+
+        public static bool IsManualFillName(string stored)
+        {
+            if (string.IsNullOrEmpty(stored) || IsFullyIgnoredName(stored) || IsHiddenName(stored))
+                return false;
+            string t = stored.TrimStart();
+            return t.StartsWith(ManualPrefix, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>True when dump / intake / auto-store / station output must not put items in.</summary>
+        public static bool BlocksDeposit(Container container)
+        {
+            return BlocksDepositName(Get(container));
+        }
+
+        public static bool BlocksDepositName(string stored)
+        {
+            return IsIgnoredName(stored) || IsManualFillName(stored);
         }
 
         /// <summary>Only [I] — excluded from displays and search.</summary>
@@ -63,7 +90,9 @@ namespace StoreAndCraft
                 t = t.Substring(IgnorePrefix.Length).TrimStart();
             else if (t.StartsWith(HiddenPrefix, System.StringComparison.OrdinalIgnoreCase))
                 t = t.Substring(HiddenPrefix.Length).TrimStart();
-            // Hide [l1]…[l9] / legacy [linkN] like [I]/[H] — hover shows "Chest link lN" separately.
+            else if (t.StartsWith(ManualPrefix, System.StringComparison.OrdinalIgnoreCase))
+                t = t.Substring(ManualPrefix.Length).TrimStart();
+            // Hide [l1]…[l9] / legacy [linkN] like [I]/[H]/[M] — hover shows link/status separately.
             t = StationLink.StripTags(t).Trim();
             return t;
         }
@@ -94,9 +123,12 @@ namespace StoreAndCraft
         /// </summary>
         public static string ApplyIgnoreFlags(string stored, bool ignore, bool showOnDisplay, string fallbackName = null)
         {
+            // Clear [I]/[H] only. Keep [M] when ignore is turned off (link + manual fill stay together).
             string work = StripIgnorePrefix(stored);
             if (ignore)
             {
+                // [I]/[H] replace manual fill — incompatible modes.
+                work = StripManualPrefix(work);
                 string body = StationLink.StripTags(work).Trim();
                 if (string.IsNullOrEmpty(body) && !string.IsNullOrEmpty(fallbackName))
                 {
@@ -127,7 +159,7 @@ namespace StoreAndCraft
             if (!string.IsNullOrEmpty(body))
                 return Sanitize(text);
 
-            if (!IsIgnoredName(text) && StationLink.ParseFromName(text) <= 0)
+            if (!IsIgnoredName(text) && !IsManualFillName(text) && StationLink.ParseFromName(text) <= 0)
                 return Sanitize(text);
 
             string vanilla = LocalizedVanillaName(container);
@@ -136,10 +168,13 @@ namespace StoreAndCraft
 
             bool ignore = IsIgnoredName(text);
             bool show = IsHiddenName(text);
+            bool manual = IsManualFillName(text);
             int link = StationLink.ParseFromName(text);
             string work = link > 0 ? StationLink.Tag(link) + " " + vanilla : vanilla;
             if (ignore)
                 work = ApplyIgnoreFlags(work, true, show);
+            else if (manual)
+                work = (ManualPrefix + " " + work).Trim();
             return Sanitize(work);
         }
 
@@ -155,7 +190,17 @@ namespace StoreAndCraft
             return t;
         }
 
-        /// <summary>Colored status lines above hover text (Ignore / Show on display).</summary>
+        public static string StripManualPrefix(string stored)
+        {
+            if (string.IsNullOrEmpty(stored))
+                return string.Empty;
+            string t = stored.TrimStart();
+            if (t.StartsWith(ManualPrefix, System.StringComparison.OrdinalIgnoreCase))
+                return t.Substring(ManualPrefix.Length).TrimStart();
+            return t;
+        }
+
+        /// <summary>Colored status lines above hover text (Ignore / Manual fill / Show on display).</summary>
         public static void PrependStatusHover(ref string text, string stored)
         {
             if (string.IsNullOrEmpty(text))
@@ -173,6 +218,12 @@ namespace StoreAndCraft
                 string lines = "<color=#e74c3c>" + Loc.T("Status: Ignore", "Status: Ignorieren") + "</color>\n"
                     + "<color=#e67e22>" + Loc.T("Display ✓", "Display ✓") + "</color>";
                 text = lines + "\n" + text;
+                return;
+            }
+
+            if (IsManualFillName(stored))
+            {
+                text = "<color=#3498db>" + Loc.T("Status: Manual fill", "Status: Manuell befüllen") + "</color>\n" + text;
             }
         }
 

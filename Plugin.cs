@@ -13,7 +13,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.3.44";
+        public const string ModVersion = "1.3.45";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -39,6 +39,7 @@ namespace StoreAndCraft
             Config.SettingChanged += OnSettingChanged;
             ConfigWatch.Start();
             Favorites.Load();
+            ActivityLog.LoadFromConfig();
 
             _harmony = new Harmony(ModGuid);
             _harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -60,6 +61,7 @@ namespace StoreAndCraft
         {
             ConfigWatch.Tick();
             TransferService.Tick();
+            SmelterCatchUp.ServerTick(); // SAC-CATCHUP
 
             if (ZNet.instance != null && ZNet.instance.IsDedicated())
             {

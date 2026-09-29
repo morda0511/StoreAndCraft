@@ -7,7 +7,7 @@ namespace StoreAndCraft
 {
     /// <summary>
     /// Optional transfer log (F10 panel checkbox). Up to 10 lines under MessageHud TopLeft
-    /// ("Dir ist kalt" / item pickup text), same TMP font. Starts off. Local only.
+    /// ("Dir ist kalt" / item pickup text), same TMP font. Preference is saved locally.
     /// </summary>
     internal static class ActivityLog
     {
@@ -32,11 +32,16 @@ namespace StoreAndCraft
             get { return _visible; }
         }
 
+        public static void LoadFromConfig()
+        {
+            if (Plugin.Settings?.ActivityLogVisible == null)
+                return;
+            _visible = Plugin.Settings.ActivityLogVisible.Value;
+        }
+
         public static void Toggle()
         {
-            _visible = !_visible;
-            EnsureHost();
-            RefreshUi();
+            SetVisible(!_visible);
             Player player = Player.m_localPlayer;
             if (player != null)
             {
@@ -51,9 +56,23 @@ namespace StoreAndCraft
 
         public static void SetVisible(bool visible)
         {
-            _visible = visible;
+            if (_visible != visible)
+            {
+                _visible = visible;
+                Persist();
+            }
             EnsureHost();
             RefreshUi();
+        }
+
+        private static void Persist()
+        {
+            if (Plugin.Settings?.ActivityLogVisible == null)
+                return;
+            if (Plugin.Settings.ActivityLogVisible.Value == _visible)
+                return;
+            ConfigWatch.SuppressReload(2f);
+            Plugin.Settings.ActivityLogVisible.Value = _visible;
         }
 
         /// <summary>Chest → station, e.g. "Chest 10x Tin → Smelter".</summary>

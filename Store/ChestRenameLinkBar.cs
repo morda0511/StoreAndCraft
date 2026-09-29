@@ -200,6 +200,7 @@ namespace StoreAndCraft
             string current = ReadFieldText();
             string next = StationLink.ApplyToName(current, linkId);
             // Link and Ignore are mutually exclusive — picking a link clears Ignore / Show.
+            // [M] Manual fill stays: ApplyIgnoreFlags(false) only strips [I]/[H], and ApplyToName keeps [M].
             if (StationLink.ParseFromName(next) > 0)
                 next = ChestNames.ApplyIgnoreFlags(next, false, false);
             WriteFieldText(next);

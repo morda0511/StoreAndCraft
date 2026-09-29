@@ -97,14 +97,9 @@ namespace StoreAndCraft
                 return;
 
             NearbyIndex.Tick();
-            bool leaveOne = Plugin.Settings.LeaveOneItem.Value;
-            if (stationOrigins != null && stationOrigins.Count > 0)
-                _pulseSpendable = NearbyIndex.SnapshotSpendableAround(stationOrigins, range, leaveOne);
-            else
-                _pulseSpendable = NearbyIndex.SnapshotSpendable(
-                    player.transform.position,
-                    range,
-                    leaveOne);
+            // No chest snapshot: every auto-fill path passes the station link (0-9) to
+            // ChestsHave, which then counts via RequirementBridge and never reads the map.
+            // Building it scanned every chest around every station on each pulse for nothing.
             _pulseActive = true;
         }
 

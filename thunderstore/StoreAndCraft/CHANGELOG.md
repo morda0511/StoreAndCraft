@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.3.45 (Beta)
+
+### NEW FEATURES
+- Carved storage displays in the hammer (Storage tab): new wooden board models for small, medium and large displays
+- Large carved display shows each selected category in its own area with the category name above its items. **Shift+RMB** switches between layouts (Categories / Big / All), then Classic / Compact as before
+- Optional catch-up while away (`CatchUpWhileAway`, off by default): smelters, kilns etc. with auto-fill (B) and auto-store (N) finish the time their area was unloaded once you come back (max `CatchUpMaxHours`)
+- Torches can start with auto-fill on (`TorchAutoFillDefault`, off by default, checkbox in F10 or `/torchautofill on|off`). **B** on a torch still turns it off
+- Manual-fill chests: type `[M]` at the start of a chest name. Dump, ground pickup and auto-store no longer put items into it, stations and crafting can still take from it. Works with links, e.g. `[M] [l3] Wood`
+- **Sort** and **Stack** buttons on the inventory and chest panels (Stack merges partial stacks of the same item)
+
+### UI IMPROVEMENTS
+- F10 settings panel rebuilt in the Valheim look (wood panel, vanilla buttons and checkboxes). Checked boxes show a clear yellow tick, and scrolling moves much further per wheel step
+- Sorting moved from the **R** key to the new **Sort** button (R is free again)
+- Activity log on/off is remembered
+
+### FIX
+- Much less multiplayer lag around many stations: auto-fill only wakes up when a station in range actually needs something, and fills fuel / ore in one go instead of one item at a time
+- Storage displays without chests in range no longer rescan several times per second
+- Epic Loot items are no longer sent into another player's chest (their magic data could be lost)
+- Carved display items sat at the wooden foot, were mirrored and counts were invisible — they now sit on the board, readable, with counts
+- Removed an error in the log (NullReferenceException in WearNTear.UpdateBiome) caused by storage displays
+
+**Beta:** needs the same version on server and all clients (network protocol changed).
+
 ## 1.3.44
 
 ### NEW FEATURES

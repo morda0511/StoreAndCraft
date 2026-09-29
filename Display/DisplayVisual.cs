@@ -2,13 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Loads the Unity display bundle (built with the same Unity version as Valheim)
-    /// and uses the authored ItemGrid transform as the item area.
+    /// Loads the Unity display bundle (built with the same Unity version as Valheim).
+    /// Mesh from sac_displays; ItemGrid / collider / snaps from DisplayLayouts (baked Prefab Editor).
     /// </summary>
     internal static class DisplayVisual
     {
@@ -30,7 +32,23 @@ namespace StoreAndCraft
             return HasPrefab(visualBase);
         }
 
-        public static void Ensure(StorageDisplayBoard board)
+        /// <summary>ItemGrid marker under SacModel (Prefab Editor offsets). Null if missing.</summary>
+        public static Transform FindItemGrid(StorageDisplayBoard board)
+        {
+            if (board == null)
+                return null;
+            Transform model = board.transform.Find(ModelName);
+            if (model == null)
+                return null;
+            return FindNamed(model, "ItemGrid");
+        }
+
+        /// <param name="templateMeshOnly">
+        /// True when preparing the hidden hammer prefab: load SacModel only.
+        /// World instances must apply YAML layout (never skip based on parent — Unity
+        /// Instantiate keeps the hide-root parent through Start/TryBuild).
+        /// </param>
+        public static void Ensure(StorageDisplayBoard board, bool templateMeshOnly = false)
         {
             if (board == null || string.IsNullOrEmpty(board.VisualBase))
                 return;
@@ -39,25 +57,82 @@ namespace StoreAndCraft
             if (string.IsNullOrEmpty(id))
                 return;
 
+            GameObject model = EnsureMesh(board, id);
+            if (model == null)
+                return;
+
+            if (templateMeshOnly)
+                return;
+
+            EnsureLayout(board, model, id);
+            // Clones copy AppliedLayoutGen and skip TryApply — always re-snap the sign canvas
+            // to ItemGrid so hammer ghost / placed boards do not keep the vanilla foot text face.
+            AlignCanvas(board, model);
+            HideSignWriteFace(board);
+            RefreshWearRenderers(board.gameObject);
+        }
+
+        /// <summary>
+        /// WearNTear caches child renderers in Awake. Swapping SacModel / ItemGrid afterwards left
+        /// destroyed renderers in that list → NullReferenceException in WearNTear.UpdateBiome.
+        /// Rebuild it like vanilla GetHighlightRenderers, skipping "_old" objects pending Destroy.
+        /// </summary>
+        private static void RefreshWearRenderers(GameObject root)
+        {
+            WearNTear wnt = root != null ? root.GetComponent<WearNTear>() : null;
+            List<Renderer> list = Refs.WearRenderers(wnt);
+            if (list == null)
+                return; // Awake not run yet — vanilla collects the current children itself.
+
+            list.Clear();
+            Renderer[] all = root.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || !(r is MeshRenderer || r is SkinnedMeshRenderer))
+                    continue;
+                if (IsPendingDestroy(r.transform, root.transform))
+                    continue;
+                list.Add(r);
+            }
+        }
+
+        private static bool IsPendingDestroy(Transform t, Transform root)
+        {
+            for (; t != null && t != root; t = t.parent)
+            {
+                // "_old" = our swapped SacModel / ItemGrid; MordaPrefabGizmo_ = PrefabStudio F8 preview.
+                if (t.name.EndsWith("_old", StringComparison.Ordinal)
+                    || t.name.StartsWith("MordaPrefabGizmo_", StringComparison.Ordinal))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>Load or keep SacModel for this visual id. Does not apply layout.</summary>
+        private static GameObject EnsureMesh(StorageDisplayBoard board, string id)
+        {
             Transform existing = board.transform.Find(ModelName);
             if (board.AppliedVisual == id && existing != null)
-            {
-                // Already applied — do not re-lift snaps / re-align canvas every Ensure
-                // (that fought the UI rebuild and flashed the board on scale/layout).
-                return;
-            }
+                return existing.gameObject;
 
             GameObject prefab = LoadPrefab(id);
             if (prefab == null)
             {
                 LogOnce("missing " + id, "Storage display bundle has no prefab '" + id + "'. Keeping the wood sign.");
-                return;
+                return null;
             }
 
             try
             {
                 if (existing != null)
+                {
+                    // Destroy runs at frame end: rename + hide first so Find("SacModel")
+                    // (canvas / ItemGrid lookups this frame) hits the new model, not this one.
+                    existing.name = ModelName + "_old";
+                    existing.gameObject.SetActive(false);
                     UnityEngine.Object.Destroy(existing.gameObject);
+                }
 
                 var model = UnityEngine.Object.Instantiate(prefab, board.transform, false);
                 model.name = ModelName;
@@ -67,17 +142,84 @@ namespace StoreAndCraft
 
                 ClearLegacyScale(board);
                 ApplyValheimShaders(model);
-                HideMarker(model);
                 HideVanillaRenderers(board.gameObject, model.transform);
+
+                // Template gets a mesh-fit collider so clones place; world EnsureLayout may override.
                 FitCollider(board.gameObject, model);
                 LiftSnapPoints(board, model);
-                AlignCanvas(board, model);
+
                 board.AppliedVisual = id;
+                board.AppliedLayoutGen = 0;
                 LogOnce("loaded " + id, "Storage display prefab loaded: " + id + ".");
+                return model;
             }
             catch (Exception ex)
             {
                 Plugin.Log.LogWarning("Storage display prefab " + id + " failed: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Apply baked/disk layout (or mesh fallbacks) on a world instance.</summary>
+        private static void EnsureLayout(StorageDisplayBoard board, GameObject model, string id)
+        {
+            // Reload if PrefabStudio rewrote the file since last apply (bumps Generation).
+            DisplayLayouts.EnsureFresh();
+
+            Transform existingGrid = FindNamed(model.transform, "ItemGrid");
+            bool genMatch = board.AppliedLayoutGen == DisplayLayouts.Generation && board.AppliedLayoutGen > 0;
+            if (genMatch && existingGrid != null)
+                return;
+
+            bool layoutApplied = DisplayLayouts.TryApply(board, model, id);
+            bool colliderOverride = layoutApplied && DisplayLayouts.HasColliderOverride(id);
+            bool snapOverride = layoutApplied && DisplayLayouts.HasSnapOverride(id);
+
+            if (!colliderOverride)
+            {
+                FitCollider(board.gameObject, model);
+                if (board.Kind != DisplayKind.Small)
+                    SoftenColliderDepth(board.gameObject, board.Kind);
+            }
+
+            if (!snapOverride)
+                LiftSnapPoints(board, model);
+
+            board.AppliedLayoutGen = DisplayLayouts.Generation;
+            // Always Info so a failed place is obvious in LogOutput.
+            Plugin.Log.LogInfo("layout applied id=" + id
+                + " source=" + DisplayLayouts.SourceLabel
+                + " hit=" + layoutApplied
+                + " collider=" + (colliderOverride ? "def" : "fit")
+                + " grid=" + (layoutApplied && DisplayLayouts.HasItemGridOverride(id) ? "def" : "none")
+                + " snaps=" + DisplayLayouts.SnapCount(id)
+                + " gen=" + DisplayLayouts.Generation);
+        }
+
+        /// <summary>
+        /// Medium/Large without authored collider: keep solid placeable boxes but thinner face depth.
+        /// </summary>
+        internal static void SoftenColliderDepth(GameObject root, DisplayKind kind)
+        {
+            if (root == null || kind == DisplayKind.Small)
+                return;
+
+            float depth = kind == DisplayKind.Large ? 0.04f : 0.06f;
+            Collider[] cols = root.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < cols.Length; i++)
+            {
+                BoxCollider box = cols[i] as BoxCollider;
+                if (box == null)
+                    continue;
+                Vector3 size = box.size;
+                if (size.z <= size.x && size.z <= size.y)
+                    size.z = Mathf.Min(size.z, depth);
+                else if (size.x <= size.y)
+                    size.x = Mathf.Min(size.x, depth);
+                else
+                    size.y = Mathf.Min(size.y, depth);
+                box.size = size;
+                box.isTrigger = false;
             }
         }
 
@@ -192,17 +334,12 @@ namespace StoreAndCraft
             }
         }
 
-        private static void HideMarker(GameObject model)
+        private static void RemoveItemGrid(GameObject model)
         {
             Transform grid = FindNamed(model.transform, "ItemGrid");
             if (grid == null)
                 return;
-            Renderer renderer = grid.GetComponent<Renderer>();
-            if (renderer != null)
-                renderer.enabled = false;
-            Collider collider = grid.GetComponent<Collider>();
-            if (collider != null)
-                collider.enabled = false;
+            UnityEngine.Object.Destroy(grid.gameObject);
         }
 
         private static void HideVanillaRenderers(GameObject root, Transform model)
@@ -281,20 +418,37 @@ namespace StoreAndCraft
             Sign sign = board.GetComponent<Sign>();
             if (sign == null || sign.m_textWidget == null || sign.m_textWidget.canvas == null)
                 return;
+            // v2 sections build their own canvases; the sign canvas stays off.
+            if (DisplayLayouts.HasSections(board.CurrentVisualId()))
+                return;
 
+            // Recreate marker if a previous build destroyed it (old RemoveItemGrid path).
             Transform grid = FindNamed(model.transform, "ItemGrid");
-            if (grid == null)
+            if (grid == null || grid.name == "ItemGrid_old")
+            {
+                DisplayLayouts.TryApply(board, model, board.CurrentVisualId());
+                grid = FindNamed(model.transform, "ItemGrid");
+            }
+            if (grid == null || grid.name == "ItemGrid_old")
                 return;
 
             Canvas canvas = sign.m_textWidget.canvas;
+            canvas.gameObject.SetActive(true);
+
             float worldW = Mathf.Abs(grid.lossyScale.x);
             float worldH = Mathf.Abs(grid.lossyScale.y);
             if (worldW < 0.05f || worldH < 0.05f)
                 return;
 
-            canvas.transform.SetPositionAndRotation(grid.position + grid.forward * 0.02f, grid.rotation);
+            // Local snap under the piece — survives Instantiate for hammer ghost / place.
+            Transform canvasTf = canvas.transform;
+            if (canvasTf.parent != board.transform)
+                canvasTf.SetParent(board.transform, true);
 
-            Vector3 canvasScale = canvas.transform.lossyScale;
+            canvasTf.position = grid.position + grid.forward * 0.02f;
+            canvasTf.rotation = grid.rotation;
+
+            Vector3 canvasScale = canvasTf.lossyScale;
             float sx = Mathf.Abs(canvasScale.x);
             float sy = Mathf.Abs(canvasScale.y);
             if (sx < 0.0001f || sy < 0.0001f)
@@ -310,10 +464,48 @@ namespace StoreAndCraft
             text.sizeDelta = new Vector2(worldW / sx, worldH / sy);
         }
 
-        /// <summary>
-        /// Valheim only cycles snap points that are direct children of the piece.
-        /// Empties authored on the Unity model are nested, so move them up.
-        /// </summary>
+        /// <summary>Vanilla sign write face stays as TMP template only — never visible on storage boards.</summary>
+        private static void HideSignWriteFace(StorageDisplayBoard board)
+        {
+            Sign sign = board != null ? board.GetComponent<Sign>() : null;
+            if (sign == null || sign.m_textWidget == null)
+                return;
+
+            TextMeshProUGUI tmp = sign.m_textWidget;
+            tmp.enabled = false;
+            tmp.text = "";
+            tmp.raycastTarget = false;
+
+            // Hide any Image/raw graphic on the canvas that still looks like a writable plaque.
+            Canvas canvas = tmp.canvas;
+            if (canvas == null)
+                return;
+            Transform sacGrid = FindSacGrid(canvas.transform);
+            var graphics = canvas.GetComponentsInChildren<Graphic>(true);
+            for (int i = 0; i < graphics.Length; i++)
+            {
+                if (graphics[i] == null || graphics[i] == tmp)
+                    continue;
+                // SacDisplayGrid icons/amounts must stay visible.
+                if (sacGrid != null && graphics[i].transform.IsChildOf(sacGrid))
+                    continue;
+                graphics[i].enabled = false;
+            }
+        }
+
+        private static Transform FindSacGrid(Transform canvasRoot)
+        {
+            if (canvasRoot == null)
+                return null;
+            Transform t = canvasRoot.Find("SacDisplayGrid");
+            if (t != null)
+                return t;
+            // Parent may be the piece after we reparented the canvas.
+            if (canvasRoot.parent != null)
+                return canvasRoot.parent.Find("SacDisplayGrid");
+            return null;
+        }
+
         private static void LiftSnapPoints(StorageDisplayBoard board, GameObject model)
         {
             var found = new List<Transform>();
@@ -351,7 +543,6 @@ namespace StoreAndCraft
                 }
                 catch (Exception)
                 {
-                    // Valheim defines this tag. If it is missing, the name still marks the point.
                 }
             }
         }
@@ -368,6 +559,18 @@ namespace StoreAndCraft
             {
                 return false;
             }
+        }
+
+        /// <summary>Sign canvas even while it is inactive (Graphic.canvas is null then).</summary>
+        internal static Canvas FindCanvas(Transform from)
+        {
+            for (Transform t = from; t != null; t = t.parent)
+            {
+                Canvas canvas = t.GetComponent<Canvas>();
+                if (canvas != null)
+                    return canvas;
+            }
+            return null;
         }
 
         private static Transform FindNamed(Transform root, string name)

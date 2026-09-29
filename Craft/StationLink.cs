@@ -205,7 +205,7 @@ namespace StoreAndCraft
         /// </summary>
         public static bool ChestAllowedForOutput(Container chest, int stationLinkId)
         {
-            if (chest == null || ChestNames.IsIgnored(chest))
+            if (chest == null || ChestNames.BlocksDeposit(chest))
                 return false;
 
             if (stationLinkId < 0)
@@ -295,7 +295,7 @@ namespace StoreAndCraft
         }
 
         /// <summary>
-        /// Set or clear link tag in a chest name. Same id again clears. Keeps [I]/[H] and the rest.
+        /// Set or clear link tag in a chest name. Same id again clears. Keeps [I]/[H]/[M] and the rest.
         /// </summary>
         public static string ApplyToName(string stored, int linkId)
         {
@@ -315,6 +315,11 @@ namespace StoreAndCraft
             else if (trimmed.StartsWith("[H]", System.StringComparison.OrdinalIgnoreCase))
             {
                 prefix = "[H] ";
+                work = StripTags(trimmed.Substring(3)).TrimStart();
+            }
+            else if (trimmed.StartsWith("[M]", System.StringComparison.OrdinalIgnoreCase))
+            {
+                prefix = "[M] ";
                 work = StripTags(trimmed.Substring(3)).TrimStart();
             }
             else

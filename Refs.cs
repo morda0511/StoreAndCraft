@@ -15,6 +15,7 @@ namespace StoreAndCraft
         private static readonly FieldInfo GuiMulti = AccessTools.Field(typeof(InventoryGui), "m_multiCrafting");
         private static readonly FieldInfo GuiMultiAmount = AccessTools.Field(typeof(InventoryGui), "m_multiCraftAmount");
         private static readonly FieldInfo GuiUpgrade = AccessTools.Field(typeof(InventoryGui), "m_craftUpgradeItem");
+        private static readonly FieldInfo WearRenderersField = AccessTools.Field(typeof(WearNTear), "m_renderers");
         private static readonly MethodInfo InventoryChanged = AccessTools.Method(typeof(Inventory), "Changed", System.Type.EmptyTypes)
             ?? AccessTools.Method(typeof(Inventory), "Changed");
 
@@ -56,6 +57,12 @@ namespace StoreAndCraft
             if (ItemDropInstances == null)
                 return null;
             return ItemDropInstances.GetValue(null) as List<ItemDrop>;
+        }
+
+        /// <summary>WearNTear's renderer cache (filled in Awake). Null before Awake / if missing.</summary>
+        public static List<Renderer> WearRenderers(WearNTear wnt)
+        {
+            return wnt != null && WearRenderersField != null ? WearRenderersField.GetValue(wnt) as List<Renderer> : null;
         }
 
         public static Recipe CraftRecipe(InventoryGui gui)

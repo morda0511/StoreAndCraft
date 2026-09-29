@@ -232,7 +232,34 @@ namespace StoreAndCraft
         {
             if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
                 return false;
-            return nv.GetZDO().GetInt(ZdoKey, 0) != 0;
+            // -1 = never toggled. With TorchAutoFillDefault on, torches start ON; B stores 0 / 1.
+            int value = nv.GetZDO().GetInt(ZdoKey, -1);
+            if (value >= 0)
+                return value != 0;
+            return Plugin.Settings != null && Plugin.Settings.TorchAutoFillDefault.Value && IsTorch(nv);
+        }
+
+        private static readonly Dictionary<int, bool> TorchCache = new Dictionary<int, bool>();
+
+        /// <summary>
+        /// Refillable torch of any kind (standing, wall, green/blue/mist, modded "*torch*").
+        /// Campfires, hearths, braziers etc. keep the manual B toggle.
+        /// </summary>
+        private static bool IsTorch(ZNetView nv)
+        {
+            int id = nv.GetInstanceID();
+            bool torch;
+            if (TorchCache.TryGetValue(id, out torch))
+                return torch;
+
+            Fireplace fire = nv.GetComponent<Fireplace>();
+            torch = fire != null && fire.m_canRefill && !fire.m_infiniteFuel
+                && ItemIds.StripClone(fire.gameObject.name)
+                    .IndexOf("torch", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (TorchCache.Count > 2048)
+                TorchCache.Clear();
+            TorchCache[id] = torch;
+            return torch;
         }
 
         public static bool IsOn(Smelter smelter)
@@ -286,6 +313,7 @@ namespace StoreAndCraft
             AppendFillToMaxLine(ref text);
             AppendAutoFillLine(ref text, nv);
             CookingAutoDrop.AppendHover(ref text, smelter);
+            SmelterCatchUp.AppendHover(ref text, smelter); // SAC-CATCHUP
             StationLink.PrependHover(ref text, StationLink.Get(smelter), chest: false);
         }
 
@@ -398,6 +426,27 @@ namespace StoreAndCraft
                 _nextPulse = soon;
         }
 
+        /// <summary>
+        /// Called from the vanilla 1 s station updates (every loaded station, every client).
+        /// Only pull the pulse forward when this client could fill that station right now:
+        /// in auto-fill range of the local player and actually missing fuel/ore/food/ammo.
+        /// An unconditional nudge made every client run a full pulse about once per second.
+        /// </summary>
+        internal static void NudgeIfNeedy(Component station)
+        {
+            if (station == null || Plugin.Settings == null)
+                return;
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return;
+            float range = Plugin.Settings.AutoFillRange.Value;
+            if (ContainerFilter.SqrDistance(player.transform.position, station.transform.position) > range * range)
+                return;
+            if (!StationNeedsFill(station))
+                return;
+            RequestSoon();
+        }
+
         public static void Tick()
         {
             if (!StationFeed.Ready())
@@ -428,6 +477,15 @@ namespace StoreAndCraft
             if (!AnyOnInRange(origin, rangeSq))
                 return;
 
+            // Stations are on but none needs anything and there is no catch-up credit:
+            // skip the chest work. RoundRobinFill would drop every handover timer here anyway.
+            if (!AnyNeedyInRange(origin, rangeSq)
+                && !SmelterCatchUp.HasWorkInRange(Smelters, origin, rangeSq))
+            {
+                NeedyUntil.Clear();
+                return;
+            }
+
             var stationOrigins = new List<Vector3>(16);
             CollectOnStationOrigins(origin, rangeSq, stationOrigins);
 
@@ -454,6 +512,7 @@ namespace StoreAndCraft
                     AllStations, ref _stationCursor, origin, rangeSq, player, ref bursts, checks,
                     StationNeedsFill, FillStation);
                 AllStations.Clear();
+                SmelterCatchUp.RunPulse(Smelters, origin, rangeSq, player); // SAC-CATCHUP
             }
             finally
             {
@@ -462,6 +521,31 @@ namespace StoreAndCraft
                 StationFeed.PullOriginOverride = null;
                 _inPulse = false;
             }
+        }
+
+        private static bool AnyNeedyInRange(Vector3 origin, float rangeSq)
+        {
+            return AnyNeedy(Fires, origin, rangeSq)
+                || AnyNeedy(Smelters, origin, rangeSq)
+                || AnyNeedy(Ovens, origin, rangeSq)
+                || AnyNeedy(Fermenters, origin, rangeSq)
+                || AnyNeedy(Turrets, origin, rangeSq)
+                || AnyNeedy(FoodTrays, origin, rangeSq);
+        }
+
+        private static bool AnyNeedy<T>(List<T> list, Vector3 origin, float rangeSq) where T : Component
+        {
+            for (int i = 0; i < list.Count; i++)
+            {
+                T station = list[i];
+                if (station == null)
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, station.transform.position) > rangeSq)
+                    continue;
+                if (StationNeedsFill(station))
+                    return true;
+            }
+            return false;
         }
 
         private static void AddStations<T>(List<T> list) where T : Component
@@ -836,27 +920,43 @@ namespace StoreAndCraft
                 return false;
 
             ZNetView nv = smelter.GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid())
+                return false;
             int need = SmelterFuelFree(smelter);
             if (need <= 0)
                 return false;
 
-            int added = 0;
-            for (int i = 0; i < need; i++)
+            // One chest pass for the whole load (one consume RPC / Save per chest) instead of
+            // one pass per unit. Per-unit pulls were 20+ RPCs and chest Saves per refill when
+            // another player owned the chests.
+            int linkId = StationLink.Get(smelter);
+            int got = TakeFromChests(player, fuel, need, linkId);
+            if (got <= 0)
             {
-                // Match vanilla: full when fuel > max−1 (do not consume if RPC would no-op).
-                if (ReadSmelterFuel(smelter) > smelter.m_maxFuel - 1f)
-                    break;
+                Quiet(smelter, "fuel", QuietEmptySeconds);
+                return false;
+            }
 
-                if (!TryAddOneFuelFromChests(smelter, player, nv, fuel, ref added))
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+            int added = 0;
+            BeginSilence();
+            try
+            {
+                while (added < got)
                 {
-                    if (added == 0)
-                    {
-                        Quiet(smelter, "fuel", QuietEmptySeconds);
-                        return false;
-                    }
-                    break;
+                    // Match vanilla: full when fuel > max−1 (RPC would no-op).
+                    if (ReadSmelterFuel(smelter) > smelter.m_maxFuel - 1f)
+                        break;
+                    nv.InvokeRPC("RPC_AddFuel");
+                    added++;
                 }
             }
+            finally
+            {
+                EndSilence();
+            }
+            ReturnUnused(smelter, fuel, got - added);
 
             if (added > 0)
             {
@@ -866,30 +966,6 @@ namespace StoreAndCraft
                     DisplayFilters.ItemLabel(fuel));
             }
             return added > 0;
-        }
-
-        private static bool TryAddOneFuelFromChests(
-            Smelter smelter, Player player, ZNetView nv, string fuel, ref int added)
-        {
-            int linkId = StationLink.Get(smelter);
-            if (!StationFeed.ChestsHave(player, fuel, linkId))
-                return false;
-            if (nv == null || !nv.IsValid() || StationFeed.ConsumeFromChests(player, fuel, 1, linkId) < 1)
-                return false;
-
-            if (!nv.IsOwner())
-                nv.ClaimOwnership();
-            BeginSilence();
-            try
-            {
-                nv.InvokeRPC("RPC_AddFuel");
-            }
-            finally
-            {
-                EndSilence();
-            }
-            added++;
-            return true;
         }
 
         private static bool FillOreToMax(Smelter smelter, Player player)
@@ -902,78 +978,119 @@ namespace StoreAndCraft
             }
 
             ZNetView nv = smelter.GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid())
+                return false;
             int need = SmelterOreFree(smelter);
             if (need <= 0)
                 return false;
 
+            int linkId = StationLink.Get(smelter);
             int added = 0;
             var byShared = new Dictionary<string, int>(4);
-            for (int i = 0; i < need; i++)
+            // Same order as before (first allowed type the chests have), but each type is
+            // taken in one chest pass instead of one pass per ore.
+            for (int guard = 0; guard < allowed.Count && added < need; guard++)
             {
-                if (Mathf.RoundToInt(ReadNumber(SmelterGetQueue, smelter)) >= smelter.m_maxOre)
+                string shared = FirstChestItem(player, allowed, linkId);
+                string prefab = PrefabName(shared);
+                if (string.IsNullOrEmpty(prefab))
                     break;
 
-                string sharedAdded;
-                if (!TryAddOneOreFromChests(smelter, player, nv, allowed, ref added, out sharedAdded))
+                int got = TakeFromChests(player, shared, need - added, linkId);
+                if (got <= 0)
+                    break;
+
+                if (!nv.IsOwner())
+                    nv.ClaimOwnership();
+                int put = 0;
+                BeginSilence();
+                try
                 {
-                    if (added == 0)
+                    while (put < got)
                     {
-                        Quiet(smelter, "ore", QuietEmptySeconds);
-                        return false;
+                        if (Mathf.RoundToInt(ReadNumber(SmelterGetQueue, smelter)) >= smelter.m_maxOre)
+                            break;
+                        nv.InvokeRPC("RPC_AddOre", prefab, false);
+                        put++;
                     }
-                    break;
                 }
-
-                if (!string.IsNullOrEmpty(sharedAdded))
+                finally
                 {
-                    int n;
-                    byShared.TryGetValue(sharedAdded, out n);
-                    byShared[sharedAdded] = n + 1;
+                    EndSilence();
                 }
+                ReturnUnused(smelter, shared, got - put);
+
+                if (put > 0)
+                {
+                    added += put;
+                    int n;
+                    byShared.TryGetValue(shared, out n);
+                    byShared[shared] = n + put;
+                }
+                if (put < got)
+                    break;
             }
 
-            if (byShared.Count > 0)
+            if (added == 0)
             {
-                string station = StationOutput.StationLabel(smelter);
-                foreach (KeyValuePair<string, int> kv in byShared)
-                    ActivityLog.FromChest(station, kv.Value, DisplayFilters.ItemLabel(kv.Key));
+                Quiet(smelter, "ore", QuietEmptySeconds);
+                return false;
             }
-            return added > 0;
+
+            string station = StationOutput.StationLabel(smelter);
+            foreach (KeyValuePair<string, int> kv in byShared)
+                ActivityLog.FromChest(station, kv.Value, DisplayFilters.ItemLabel(kv.Key));
+            return true;
         }
 
-        private static bool TryAddOneOreFromChests(
-            Smelter smelter,
-            Player player,
-            ZNetView nv,
-            List<string> allowed,
-            ref int added,
-            out string sharedAdded)
+        /// <summary>
+        /// Take up to <paramref name="want"/> of one item from the allowed chests in a single pass.
+        /// Returns how many were taken (0 = chests have none).
+        /// </summary>
+        private static int TakeFromChests(Player player, string shared, int want, int linkId)
         {
-            sharedAdded = null;
-            int linkId = StationLink.Get(smelter);
-            if (!ChestsHaveAny(player, allowed, linkId))
-                return false;
+            if (player == null || want <= 0 || string.IsNullOrEmpty(shared))
+                return 0;
+            int have = RequirementBridge.CountNearby(player, shared, linkId, -1);
+            if (have <= 0)
+                return 0;
+            int got = StationFeed.ConsumeFromChests(player, shared, Mathf.Min(want, have), linkId);
+            // Same-frame counts are cached; the next type / station must see the new stock.
+            NearbyIndex.InvalidateCounts();
+            return got;
+        }
 
-            string shared = FirstChestItem(player, allowed, linkId);
-            string prefab = PrefabName(shared);
-            if (nv == null || !nv.IsValid() || string.IsNullOrEmpty(prefab)
-                || StationFeed.ConsumeFromChests(player, shared, 1, linkId) < 1)
-                return false;
+        /// <summary>
+        /// Safety net for a batch pull the station could not take (it filled up in between):
+        /// put the rest back into a nearby chest, else drop it at the station. Normally 0.
+        /// </summary>
+        private static void ReturnUnused(Component station, string shared, int amount)
+        {
+            if (station == null || amount <= 0 || string.IsNullOrEmpty(shared))
+                return;
+            string prefabName = PrefabName(shared);
+            if (string.IsNullOrEmpty(prefabName))
+                return;
+            string ignored;
+            if (StationOutput.TryDepositNear(station, prefabName, amount, out ignored))
+                return;
 
-            if (!nv.IsOwner())
-                nv.ClaimOwnership();
-            BeginSilence();
-            try
+            GameObject prefab = ItemIds.PrefabFromToken(shared);
+            ItemDrop proto = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            if (proto == null || proto.m_itemData == null || proto.m_itemData.m_shared == null)
+                return;
+            int maxStack = Mathf.Max(1, proto.m_itemData.m_shared.m_maxStackSize);
+            Vector3 pos = station.transform.position + Vector3.up * 1f;
+            while (amount > 0)
             {
-                nv.InvokeRPC("RPC_AddOre", prefab, false);
+                int stack = Mathf.Min(amount, maxStack);
+                amount -= stack;
+                ItemDrop drop = UnityEngine.Object.Instantiate(prefab, pos, Quaternion.identity).GetComponent<ItemDrop>();
+                if (drop == null)
+                    continue;
+                drop.m_itemData.m_stack = stack;
+                ItemDrop.OnCreateNew(drop);
             }
-            finally
-            {
-                EndSilence();
-            }
-            added++;
-            sharedAdded = shared;
-            return true;
         }
 
         private static bool FillFireWhenEmpty(Fireplace fire, Player player)
@@ -1023,27 +1140,23 @@ namespace StoreAndCraft
             QuietUntil.Remove(QuietKey(fire, "fire"));
 
             int linkId = StationLink.Get(fire);
+            int got = TakeFromChests(player, fuel, need, linkId);
+            if (got <= 0)
+            {
+                Quiet(fire, "fire", QuietEmptySeconds);
+                return false;
+            }
+
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
             int added = 0;
             BeginSilence();
             try
             {
-                for (int i = 0; i < need; i++)
+                while (added < got)
                 {
                     if (Mathf.CeilToInt(ReadFireFuel(fire)) >= max)
                         break;
-
-                    if (!TryTakeOneFireFuelFromChests(player, fuel, linkId))
-                    {
-                        if (added == 0)
-                        {
-                            Quiet(fire, "fire", QuietEmptySeconds);
-                            return false;
-                        }
-                        break;
-                    }
-
-                    if (!nv.IsOwner())
-                        nv.ClaimOwnership();
                     nv.InvokeRPC("RPC_AddFuel");
                     added++;
                 }
@@ -1052,6 +1165,7 @@ namespace StoreAndCraft
             {
                 EndSilence();
             }
+            ReturnUnused(fire, fuel, got - added);
 
             if (added > 0)
             {
@@ -1061,13 +1175,6 @@ namespace StoreAndCraft
                     DisplayFilters.ItemLabel(fuel));
             }
             return added > 0;
-        }
-
-        private static bool TryTakeOneFireFuelFromChests(Player player, string fuel, int linkId)
-        {
-            if (!StationFeed.ChestsHave(player, fuel, linkId))
-                return false;
-            return StationFeed.ConsumeFromChests(player, fuel, 1, linkId) >= 1;
         }
 
         private static bool FillOvenWhenEmpty(CookingStation oven, Player player)
@@ -1101,27 +1208,40 @@ namespace StoreAndCraft
                 return false;
 
             ZNetView nv = oven.GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid())
+                return false;
             int have = Mathf.Max(0, Mathf.FloorToInt(ReadNumber(CookGetFuel, oven)));
             int need = Mathf.Max(0, oven.m_maxFuel - have);
             if (need <= 0)
                 return false;
 
-            int added = 0;
-            for (int i = 0; i < need; i++)
+            int linkId = StationLink.Get(oven);
+            int got = TakeFromChests(player, fuel, need, linkId);
+            if (got <= 0)
             {
-                if (ReadNumber(CookGetFuel, oven) > oven.m_maxFuel - 1f)
-                    break;
+                Quiet(oven, "fuel", QuietEmptySeconds);
+                return false;
+            }
 
-                if (!TryAddOneOvenFuelFromChests(oven, player, nv, fuel, ref added))
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+            int added = 0;
+            BeginSilence();
+            try
+            {
+                while (added < got)
                 {
-                    if (added == 0)
-                    {
-                        Quiet(oven, "fuel", QuietEmptySeconds);
-                        return false;
-                    }
-                    break;
+                    if (ReadNumber(CookGetFuel, oven) > oven.m_maxFuel - 1f)
+                        break;
+                    nv.InvokeRPC("RPC_AddFuel");
+                    added++;
                 }
             }
+            finally
+            {
+                EndSilence();
+            }
+            ReturnUnused(oven, fuel, got - added);
 
             if (added > 0)
             {
@@ -1131,30 +1251,6 @@ namespace StoreAndCraft
                     DisplayFilters.ItemLabel(fuel));
             }
             return added > 0;
-        }
-
-        private static bool TryAddOneOvenFuelFromChests(
-            CookingStation oven, Player player, ZNetView nv, string fuel, ref int added)
-        {
-            int linkId = StationLink.Get(oven);
-            if (!StationFeed.ChestsHave(player, fuel, linkId))
-                return false;
-            if (nv == null || !nv.IsValid() || StationFeed.ConsumeFromChests(player, fuel, 1, linkId) < 1)
-                return false;
-
-            if (!nv.IsOwner())
-                nv.ClaimOwnership();
-            BeginSilence();
-            try
-            {
-                nv.InvokeRPC("RPC_AddFuel");
-            }
-            finally
-            {
-                EndSilence();
-            }
-            added++;
-            return true;
         }
 
         /// <summary>Shift+[E] on cooking fuel: top up wood/fuel to max.</summary>
@@ -2032,7 +2128,7 @@ namespace StoreAndCraft
         private static void Postfix(Smelter __instance)
         {
             if (__instance != null && StationAutoFill.IsOn(__instance))
-                StationAutoFill.RequestSoon();
+                StationAutoFill.NudgeIfNeedy(__instance);
         }
     }
 
@@ -2042,7 +2138,7 @@ namespace StoreAndCraft
         private static void Postfix(CookingStation __instance)
         {
             if (__instance != null && StationAutoFill.IsOn(__instance.GetComponent<ZNetView>()))
-                StationAutoFill.RequestSoon();
+                StationAutoFill.NudgeIfNeedy(__instance);
         }
     }
 
@@ -2073,7 +2169,7 @@ namespace StoreAndCraft
         private static void Postfix(Fireplace __instance)
         {
             if (__instance != null && __instance.m_canRefill && StationAutoFill.IsOn(__instance))
-                StationAutoFill.RequestSoon();
+                StationAutoFill.NudgeIfNeedy(__instance);
         }
     }
 }

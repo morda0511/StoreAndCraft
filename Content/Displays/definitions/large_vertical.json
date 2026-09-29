@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "prefabId": "large_vertical",
+  "model": {
+    "localScale": { "x": 1, "y": 1, "z": 1 }
+  },
+  "layouts": [
+    {
+      "name": "Kategorien",
+      "sections": [
+        {
+          "id": "Kategorie 1",
+          "category": 1,
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "0",
+          "grid": { "columns": 7, "rows": 2, "spacingX": 0.41, "spacingY": 0.4, "offsetX": 0, "offsetY": 3.97, "offsetZ": 0 },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 4.51, "offsetZ": 0, "width": 2.87, "height": 0.28, "fontSize": 0.17, "align": "left", "color": "#FFD966", "uppercase": true }
+        },
+        {
+          "id": "Kategorie 2",
+          "category": 2,
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "0",
+          "grid": { "columns": 7, "rows": 2, "spacingX": 0.41, "spacingY": 0.4, "offsetX": 0, "offsetY": 2.89, "offsetZ": 0 },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 3.43, "offsetZ": 0, "width": 2.87, "height": 0.28, "fontSize": 0.17, "align": "left", "color": "#FFD966", "uppercase": true }
+        },
+        {
+          "id": "Kategorie 3",
+          "category": 3,
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "0",
+          "grid": { "columns": 7, "rows": 2, "spacingX": 0.41, "spacingY": 0.4, "offsetX": 0, "offsetY": 1.81, "offsetZ": 0 },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 2.35, "offsetZ": 0, "width": 2.87, "height": 0.28, "fontSize": 0.17, "align": "left", "color": "#FFD966", "uppercase": true }
+        },
+        {
+          "id": "Rest",
+          "category": "rest",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "grid": { "columns": 7, "rows": 2, "spacingX": 0.41, "spacingY": 0.4, "offsetX": 0, "offsetY": 0.73, "offsetZ": 0 },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 1.27, "offsetZ": 0, "width": 2.87, "height": 0.28, "fontSize": 0.17, "align": "left", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Gross",
+      "sections": [
+        {
+          "id": "Kategorie 1",
+          "category": 1,
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "0",
+          "grid": { "columns": 5, "rows": 3, "spacingX": 0.55, "spacingY": 0.55, "offsetX": 0, "offsetY": 3.53, "offsetZ": 0 },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 4.5, "offsetZ": 0, "width": 2.75, "height": 0.3, "fontSize": 0.2, "align": "center", "color": "#FFD966", "uppercase": true }
+        },
+        {
+          "id": "Rest",
+          "category": "rest",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "grid": { "columns": 5, "rows": 3, "spacingX": 0.55, "spacingY": 0.55, "offsetX": 0, "offsetY": 1.58, "offsetZ": 0 },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 2.55, "offsetZ": 0, "width": 2.75, "height": 0.3, "fontSize": 0.2, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Alles",
+      "sections": [
+        {
+          "id": "Alles",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "grid": { "columns": 7, "rows": 9, "spacingX": 0.41, "spacingY": 0.43, "offsetX": 0, "offsetY": 2.3, "offsetZ": 0 },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 4.45, "offsetZ": 0, "width": 2.87, "height": 0.28, "fontSize": 0.17, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    }
+  ],
+  "colliders": [
+    {
+      "id": "BoxCollider_0",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0, "y": 2.63, "z": -0.04 },
+      "size": { "x": 3.74, "y": 5.2, "z": 0.23 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    }
+  ],
+  "snapPoints": [
+    {
+      "id": "SnapPoint_2",
+      "enabled": true,
+      "localPosition": { "x": 1.86, "y": 0.09, "z": 0 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "id": "SnapPoint_1",
+      "enabled": true,
+      "localPosition": { "x": -1.85, "y": 0.07, "z": 0 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    }
+  ]
+}

@@ -117,10 +117,16 @@ namespace StoreAndCraft
                 Major);
         }
 
+        private float _nextCheck;
+
         private void Update()
         {
             if (!AdminUtil.IsServer() || ZNet.instance == null)
                 return;
+            // Peer bookkeeping only needs ~1 s resolution; do not allocate every frame.
+            if (FirstSeen.Count == 0 || Time.unscaledTime < _nextCheck)
+                return;
+            _nextCheck = Time.unscaledTime + 1f;
 
             var gone = new List<long>();
             foreach (long id in FirstSeen.Keys)

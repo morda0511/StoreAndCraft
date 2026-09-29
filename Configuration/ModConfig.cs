@@ -5,8 +5,9 @@ namespace StoreAndCraft
 {
     public class ModConfig
     {
-        // Bump when package layout or shared station behavior changes. v17 = AutoFillChestRange (station to chest) synced.
-        public const int ProtocolVersion = 17;
+        // Bump when package layout or shared station behavior changes. v18 = SAC-CATCHUP settings synced.
+        // v19 = TorchAutoFillDefault synced.
+        public const int ProtocolVersion = 19;
         public const float MaxRange = 1000f;
 
         public ConfigEntry<bool> LockConfig { get; }
@@ -38,11 +39,16 @@ namespace StoreAndCraft
         public ConfigEntry<KeyboardShortcut> AutoFillKey { get; }
         public ConfigEntry<KeyboardShortcut> AutoDropKey { get; }
         public ConfigEntry<KeyboardShortcut> ActivityLogKey { get; }
-        public ConfigEntry<KeyboardShortcut> SortKey { get; }
+        public ConfigEntry<bool> ActivityLogVisible { get; }
         public ConfigEntry<KeyboardShortcut> DisplayRangeKey { get; }
         public ConfigEntry<KeyboardShortcut> BuildGrabKey { get; }
         public ConfigEntry<bool> FeedTroughEnabled { get; }
         public ConfigEntry<float> FeedTroughRange { get; }
+        // SAC-CATCHUP
+        public ConfigEntry<bool> CatchUpEnabled { get; }
+        public ConfigEntry<float> CatchUpMaxHours { get; }
+        public ConfigEntry<double> CatchUpSince { get; }
+        public ConfigEntry<bool> TorchAutoFillDefault { get; }
 
         public ModConfig(ConfigFile file)
         {
@@ -94,7 +100,7 @@ namespace StoreAndCraft
             SearchKey = file.Bind("4 - Keys", "SearchKey", new KeyboardShortcut(KeyCode.Y),
                 "While inventory is open: hover an item and press to ping/blink the nearest chest that contains it (blinks 3 times).");
             RenameKey = file.Bind("4 - Keys", "RenameKey", new KeyboardShortcut(KeyCode.E, KeyCode.LeftAlt),
-                "Settings (default Alt+E): look at a chest (name / ignore / display / link), a small Storage Display (name/amount), or a multi-input kiln/smelter/grill (pull filter + link). Shift+E (Valheim alt-use) also opens chest settings. Prefix [I] = fully ignore; [H] = hide from dump/store/craft but still show on Storage Displays.");
+                "Settings (default Alt+E): look at a chest (name / ignore / display / link), a small Storage Display (name/amount), or a multi-input kiln/smelter/grill (pull filter + link). Shift+E (Valheim alt-use) also opens chest settings. Prefix [I] = fully ignore; [H] = hide from dump/store/craft but still show on Storage Displays; [M] = manual fill (no dump/intake into chest, station pull + [lN] links still work).");
             TakeStackKey = file.Bind("4 - Keys", "TakeStackKey", new KeyboardShortcut(KeyCode.Mouse2, KeyCode.LeftControl),
                 "Hotkey: fill the hovered inventory stack from nearby chests, only up to max stack / carry weight.");
             FavoriteKey = file.Bind("4 - Keys", "FavoriteKey", new KeyboardShortcut(KeyCode.F),
@@ -108,8 +114,8 @@ namespace StoreAndCraft
             // Old default F11 is also Valheim's screenshot key.
             if (ActivityLogKey.Value.MainKey == KeyCode.F11 && !ActivityLogKey.Value.Modifiers.GetEnumerator().MoveNext())
                 ActivityLogKey.Value = new KeyboardShortcut(KeyCode.F10);
-            SortKey = file.Bind("4 - Keys", "SortKey", new KeyboardShortcut(KeyCode.R),
-                "Hotkey: while inventory is open, sort. If a chest is open, only that chest is sorted. If only your bag is open, sort inventory (favorites, equipped, hotbar, and equipment/quick-slot mod overflow stay put; Wider/Deeper Pockets rows sort normally).");
+            ActivityLogVisible = file.Bind("4 - Keys", "ActivityLogVisible", false,
+                "Remember whether the activity log is shown. Local only, not synced. Changed by the F10 panel checkbox.");
             DisplayRangeKey = file.Bind("4 - Keys", "DisplayRangeKey", new KeyboardShortcut(KeyCode.R, KeyCode.LeftAlt),
                 "Look at a Storage Display and press to set that board's chest-scan range (5–50 m). Per display.");
             BuildGrabKey = file.Bind("4 - Keys", "BuildGrabKey", new KeyboardShortcut(KeyCode.C),
@@ -118,6 +124,16 @@ namespace StoreAndCraft
                 "If enabled, the Feed Trough hammer piece is available. Hungry tames walk to it and eat matching food, like drops on the ground. Synced from server when LockConfig is on.");
             FeedTroughRange = file.Bind("5 - Feed Trough", "FeedTroughRange", 8f, new ConfigDescription(
                 "How far (meters) hungry animals notice a Feed Trough and walk to it. Also limited by each animal's own food-search range. Synced from server when LockConfig is on.", range));
+            // SAC-CATCHUP
+            CatchUpEnabled = file.Bind("3 - Craft", "CatchUpWhileAway", false,
+                "Kilns / smelters / blast furnaces / windmills / spinning wheels / eitr refineries with auto-fill (B) AND auto-store (N) catch up the time their zone was unloaded (nobody nearby). When someone comes back, ore + fuel are taken from the chests and the finished items are put into a chest, in packages of one stack. Only time after switching this on counts. Synced from server when LockConfig is on.");
+            CatchUpMaxHours = file.Bind("3 - Craft", "CatchUpMaxHours", 8f, new ConfigDescription(
+                "Most game time (hours) one station catches up after being unloaded. Synced from server when LockConfig is on.",
+                new AcceptableValueRange<float>(0.5f, 48f)));
+            CatchUpSince = file.Bind("3 - Craft", "CatchUpSince", 0d,
+                "Set automatically: world time (seconds) when CatchUpWhileAway was switched on. Time before this is never caught up. Do not edit.");
+            TorchAutoFillDefault = file.Bind("3 - Craft", "TorchAutoFillDefault", false,
+                "If on, torches of every kind (standing, wall, green / blue / mist, modded *torch*) have auto-fill ON until someone presses B on them. Torches switched off with B stay off. Off = old behavior (B needed). Synced from server when LockConfig is on.");
         }
 
         public float StationPullRange()
@@ -171,6 +187,10 @@ namespace StoreAndCraft
             pkg.Write(FeedTroughEnabled.Value);
             pkg.Write(FeedTroughRange.Value);
             pkg.Write(AutoFillChestRange.Value);
+            pkg.Write(CatchUpEnabled.Value);
+            pkg.Write(CatchUpMaxHours.Value);
+            pkg.Write(CatchUpSince.Value);
+            pkg.Write(TorchAutoFillDefault.Value);
         }
 
         public void ReadFromPackage(ZPackage pkg)
@@ -194,6 +214,10 @@ namespace StoreAndCraft
             FeedTroughEnabled.Value = pkg.ReadBool();
             FeedTroughRange.Value = pkg.ReadSingle();
             AutoFillChestRange.Value = pkg.ReadSingle();
+            CatchUpEnabled.Value = pkg.ReadBool();
+            CatchUpMaxHours.Value = pkg.ReadSingle();
+            CatchUpSince.Value = pkg.ReadDouble();
+            TorchAutoFillDefault.Value = pkg.ReadBool();
         }
     }
 }

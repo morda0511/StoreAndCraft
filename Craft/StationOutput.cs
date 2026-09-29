@@ -95,7 +95,7 @@ namespace StoreAndCraft
             for (int i = 0; i < chests.Count; i++)
             {
                 Container chest = chests[i];
-                if (chest == null || ChestNames.IsIgnored(chest))
+                if (chest == null || ChestNames.BlocksDeposit(chest))
                     continue;
                 if (StationLink.ChestLinkId(chest) != exactChestLink)
                     continue;

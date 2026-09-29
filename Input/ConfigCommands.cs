@@ -95,6 +95,8 @@ namespace StoreAndCraft
                 || lower.StartsWith("/autofillchestrange")
                 || lower.StartsWith("/displayrange")
                 || lower.StartsWith("/feedtroughrange")
+                || lower.StartsWith("/catchup") // SAC-CATCHUP (also /catchuphours)
+                || lower.StartsWith("/torchautofill")
                 || lower.StartsWith("/sac")
                 || lower == "/store"
                 || lower.StartsWith("/store ")
@@ -369,11 +371,49 @@ namespace StoreAndCraft
                 return false;
             }
 
+            // SAC-CATCHUP: on/off switch rides the same admin path as the ranges.
+            if (key == "catchup" || key == "torchautofill")
+            {
+                string t = valueToken.ToLowerInvariant();
+                if (t == "on" || t == "true" || t == "enable")
+                    valueToken = "1";
+                else if (t == "off" || t == "false" || t == "disable")
+                    valueToken = "0";
+            }
+
             float value;
             if (!float.TryParse(valueToken, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
                 && !float.TryParse(valueToken, NumberStyles.Float, CultureInfo.CurrentCulture, out value))
             {
                 message = "Invalid number: " + valueToken;
+                return false;
+            }
+
+            if (key == "catchup")
+            {
+                bool on = value >= 0.5f;
+                if (Plugin.Settings.CatchUpEnabled.Value != on)
+                {
+                    Plugin.Settings.CatchUpEnabled.Value = on;
+                    SmelterCatchUp.OnSwitched(on);
+                }
+                message = "CatchUpWhileAway = " + (on ? "on" : "off") + " (saved + synced)";
+                ActivityLog.Note(Loc.T("Config", "Config"), message);
+                return true;
+            }
+
+            if (key == "torchautofill")
+            {
+                bool on = value >= 0.5f;
+                Plugin.Settings.TorchAutoFillDefault.Value = on;
+                message = "TorchAutoFillDefault = " + (on ? "on" : "off") + " (saved + synced)";
+                ActivityLog.Note(Loc.T("Config", "Config"), message);
+                return true;
+            }
+
+            if (key == "catchuphours" && (value < 0.5f || value > 48f))
+            {
+                message = "Catch-up hours must be between 0.5 and 48.";
                 return false;
             }
 
@@ -406,7 +446,8 @@ namespace StoreAndCraft
             string cmd = parts[0].TrimStart('/').ToLowerInvariant();
 
             if (cmd == "storerange" || cmd == "dumprange" || cmd == "craftrange" || cmd == "storagerange" || cmd == "autofillrange"
-                || cmd == "autofillchestrange" || cmd == "displayrange" || cmd == "feedtroughrange")
+                || cmd == "autofillchestrange" || cmd == "displayrange" || cmd == "feedtroughrange"
+                || cmd == "catchup" || cmd == "catchuphours" || cmd == "torchautofill")
             {
                 if (parts.Length < 2)
                     return false;
@@ -436,6 +477,8 @@ namespace StoreAndCraft
                     key = "displayrange";
                 else if (sub == "feedtrough" || sub == "feedtroughrange")
                     key = "feedtroughrange";
+                else if (sub == "catchup" || sub == "catchuphours" || sub == "torchautofill")
+                    key = sub;
                 else
                     return false;
                 valueToken = parts[2];
@@ -465,8 +508,25 @@ namespace StoreAndCraft
                     return Plugin.Settings.DisplayRange;
                 case "feedtroughrange":
                     return Plugin.Settings.FeedTroughRange;
+                case "catchuphours":
+                    return Plugin.Settings.CatchUpMaxHours;
                 default:
                     return null;
+            }
+        }
+
+        // SAC-CATCHUP: server tick keeps CatchUpSince in step and saves (sync runs via SettingChanged).
+        internal static void SaveConfigFile()
+        {
+            ConfigWatch.SuppressReload(2f);
+            try
+            {
+                if (Plugin.Instance != null)
+                    Plugin.Instance.Config.Save();
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.LogWarning("Config save (catch-up): " + ex.Message);
             }
         }
 
@@ -512,6 +572,9 @@ namespace StoreAndCraft
                 "  /displayrange <m>           - storage display default scan range",
                 "  /feedtroughrange <m>        - feed trough range",
                 "  /sac dump|store|storage|craft|autofill|autofillchest|display|feedtrough <m>",
+                "  /catchup on|off             - smelters catch up time while nobody was near (B + N)",
+                "  /catchuphours <h>           - most hours one station catches up (0.5-48)",
+                "  /torchautofill on|off       - torches start with auto-fill on (B still turns one off)",
                 "F10: panel with activity log checkbox + range sliders (Save).",
                 "Console (F5), same ideas:",
                 "  help store   |  sac help  |  sac status",
@@ -533,6 +596,7 @@ namespace StoreAndCraft
                 + " AutoFill=" + Plugin.Settings.AutoFillRange.Value
                 + " AutoFillChest=" + Plugin.Settings.AutoFillChestReach()
                 + " AutoIntake=" + (IsAutoIntakeActive() ? "on" : "off")
+                + " CatchUp=" + (Plugin.Settings.CatchUpEnabled.Value ? "on " + Plugin.Settings.CatchUpMaxHours.Value + "h" : "off")
                 + " Lock=" + Plugin.Settings.LockConfig.Value;
         }
 

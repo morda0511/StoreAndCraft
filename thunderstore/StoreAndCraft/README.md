@@ -84,11 +84,12 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 - Star badge on the item.
 - Skipped by dump and hover-store.
 
-### Rename / ignore / hide / link chests
+### Rename / ignore / hide / link / manual-fill chests
 - Look at a chest → **Alt+E** opens **Settings**.
 - **Ignore** and **Show on Display** use on/off toggles:
   - **Ignore** on → skipped by dump / auto-store / craft / auto-fill.
   - **Ignore** + **Show on Display** → still skipped by dump/store/craft, but **counted on Storage Displays**.
+- **Manual fill** `[M]`: type `[M]` at the start of the chest name (no toggle). Dump, ground pickup, and auto-store will not put items **into** that chest. Stations and craft can still **pull from** it. Works with links, e.g. `[M] [l3] Wood`.
 - **l1-l9** link grid on the same panel → tag the chest for a station link.
 - Empty renamed chests keep their custom name.
 
@@ -125,7 +126,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 | **N** | Toggle auto-store on kiln / smelter / cooking / fermenter / beehive (inventory closed) |
 | **F10** | Panel: activity log + ranges |
 | **Y** | Find nearest chest with the hovered item (blink + map ping) |
-| **R** | Sort bag or open chest |
+| **Sort / Stack** buttons | Inventory and chest panel: sort, or merge partial stacks of the same item |
 | **C + place (hammer)** | Grab build materials from chests (do not place) |
 | **Alt + R** | Storage Display range |
 | **Shift + Left click** | Storage Display: scale (Medium/Large) or Small view mode |

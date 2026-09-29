@@ -23,6 +23,8 @@ namespace StoreAndCraft
         private DisplayKind _kind = DisplayKind.Medium;
         internal string VisualBase;
         internal string AppliedVisual;
+        /// <summary>Matches DisplayLayouts.Generation after layout apply (0 = not applied yet).</summary>
+        internal int AppliedLayoutGen;
         private int _slotCount = 12;
         private int _columns = 4;
         private int _rows = 3;
@@ -83,7 +85,24 @@ namespace StoreAndCraft
             public TextMeshProUGUI Amount;
             public TextMeshProUGUI Name;
             public bool IsChip;
+            // v2 sections only (0 / false elsewhere → unchanged behaviour).
+            public float Font;
+            public bool HideAmount;
+            public Color AmountColor;
         }
+
+        /// <summary>v2 definition section at runtime: slot range + label.</summary>
+        private sealed class SectionUi
+        {
+            public DisplayLayouts.SectionDef Def;
+            public int Start;
+            public int Count;
+            public TextMeshProUGUI Label;
+        }
+
+        public const string ZdoLayoutVariantKey = "sac_ui_layout_var";
+        private SectionUi[] _sections;
+        private int _builtVariant = int.MinValue;
 
         public DisplayKind Kind
         {
@@ -240,6 +259,16 @@ namespace StoreAndCraft
             return VisualBase;
         }
 
+        /// <summary>
+        /// Carved / Prefab-Editor boards with itemGrid JSON: own flat icon+count grid.
+        /// Not the vanilla Large flow (category bands) or Medium header table.
+        /// </summary>
+        private bool UsesDefinitionGrid()
+        {
+            return !string.IsNullOrEmpty(VisualBase)
+                && DisplayLayouts.HasItemGridOverride(CurrentVisualId());
+        }
+
         public void SetLayoutMode(int mode)
         {
             if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
@@ -258,12 +287,50 @@ namespace StoreAndCraft
             RebuildUiNow();
         }
 
-        /// <summary>Shift+RMB: Classic ↔ Compact on this board only.</summary>
+        /// <summary>
+        /// Shift+RMB: Classic ↔ Compact on this board only. With v2 definition layouts it first
+        /// steps through the layouts of the current mesh, then switches Classic/Compact.
+        /// </summary>
         public void CycleLayoutMode()
         {
             if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
                 return;
+            int count = DisplayLayouts.LayoutCount(CurrentVisualId());
+            int variant = LayoutVariant();
+            if (count > 1 && variant + 1 < count)
+            {
+                SetLayoutVariant(variant + 1);
+                RebuildUiNow();
+                return;
+            }
+            SetLayoutVariant(0);
             SetLayoutMode(ContentLayoutMode() == LayoutCompact ? LayoutClassic : LayoutCompact);
+        }
+
+        /// <summary>Index into the current visual's v2 layouts (0 when none).</summary>
+        public int LayoutVariant()
+        {
+            ZNetView nv = GetComponent<ZNetView>();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            return zdo != null ? Mathf.Max(0, zdo.GetInt(ZdoLayoutVariantKey, 0)) : 0;
+        }
+
+        private void SetLayoutVariant(int variant)
+        {
+            ZNetView nv = GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid() || !nv.IsOwner())
+                nv?.ClaimOwnership();
+            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
+            if (zdo != null && zdo.GetInt(ZdoLayoutVariantKey, 0) != variant)
+                zdo.Set(ZdoLayoutVariantKey, variant);
+        }
+
+        /// <summary>v2 definition (layouts/sections) drives this board's face.</summary>
+        private bool UsesSections()
+        {
+            return _kind != DisplayKind.Small
+                && !string.IsNullOrEmpty(VisualBase)
+                && DisplayLayouts.HasSections(CurrentVisualId());
         }
 
         public string FormatHoverLayoutLine()
@@ -271,6 +338,12 @@ namespace StoreAndCraft
             string mode = ContentLayoutMode() == LayoutCompact
                 ? Loc.T("Compact", "Compact")
                 : Loc.T("Classic", "Classic");
+            if (UsesSections() && DisplayLayouts.LayoutCount(CurrentVisualId()) > 1)
+            {
+                DisplayLayouts.LayoutDef layout = DisplayLayouts.GetLayout(CurrentVisualId(), LayoutVariant());
+                if (layout != null && !string.IsNullOrEmpty(layout.name))
+                    mode += " · " + layout.name;
+            }
             return Loc.T("Layout", "Layout") + " : "
                 + "<color=yellow><b>" + mode + "</b></color>";
         }
@@ -498,6 +571,21 @@ namespace StoreAndCraft
             RebuildUiNow();
         }
 
+        /// <summary>PrefabStudio preview: rebuild every loaded board showing this visual id.</summary>
+        internal static void RebuildVisual(string visualId)
+        {
+            for (int i = All.Count - 1; i >= 0; i--)
+            {
+                StorageDisplayBoard board = All[i];
+                if (board == null)
+                    continue;
+                if (!string.Equals(board.CurrentVisualId(), visualId, System.StringComparison.OrdinalIgnoreCase))
+                    continue;
+                board.AppliedLayoutGen = 0; // force DisplayVisual.EnsureLayout → TryApply
+                board.RebuildUiNow();
+            }
+        }
+
         /// <summary>
         /// Tear down cached slot state, rebuild the grid, and Paint immediately.
         /// Avoids the empty-board flash from Destroy-then-wait-for-_nextPaint.
@@ -528,6 +616,8 @@ namespace StoreAndCraft
             _builtShowName = int.MinValue;
             _builtShowAmount = int.MinValue;
             _builtBandCount = -1;
+            _builtVariant = int.MinValue;
+            _sections = null;
         }
 
         private void CaptureBoardMetrics(TextMeshProUGUI template)
@@ -691,6 +781,23 @@ namespace StoreAndCraft
             if (_kind == DisplayKind.Small)
                 return;
 
+            // v2 definition: sections size themselves in BuildSectionsUi.
+            if (UsesSections())
+            {
+                _headerColumns = 0;
+                _columnHeaders = false;
+                _flowSections = false;
+                _columnMajor = false;
+                _tightSlots = true;
+                _itemsPerGroup = 1;
+                _labelWidth = 0f;
+                return;
+            }
+
+            // Custom mesh + JSON itemGrid: dedicated flat grid (not Large/Medium classic UI).
+            if (TryApplyDefinitionGridLayout())
+                return;
+
             float mul = ContentScaleMul();
             if (IsCompactLayout())
             {
@@ -726,6 +833,31 @@ namespace StoreAndCraft
             }
         }
 
+        /// <summary>Prefab-Editor itemGrid: cols×rows of icon+count cells. Scale still densifies.</summary>
+        private bool TryApplyDefinitionGridLayout()
+        {
+            int cols;
+            int rows;
+            if (!DisplayLayouts.TryGetItemGrid(CurrentVisualId(), out cols, out rows))
+                return false;
+
+            _baseColumns = cols;
+            _baseRows = rows;
+            _headerColumns = 0;
+            _columnHeaders = false;
+            _flowSections = false;
+            _columnMajor = false;
+            _tightSlots = true;
+            _itemsPerGroup = 1;
+            _labelWidth = 0f;
+
+            float mul = ContentScaleMul();
+            _columns = Mathf.Clamp(Mathf.RoundToInt(cols / mul), 1, cols);
+            _rows = Mathf.Clamp(Mathf.RoundToInt(rows / mul), 1, rows);
+            _slotCount = _columns * _rows;
+            return true;
+        }
+
         public static string FormatScaleStep(int step)
         {
             step = Mathf.Clamp(step, ScaleMin, ScaleMax);
@@ -738,6 +870,19 @@ namespace StoreAndCraft
         {
             if (!_configured)
                 DetectKindFromName();
+            EnsureVisualBaseFromName();
+        }
+
+        /// <summary>
+        /// Clones lose VisualBase (not serialized). Without it the carved board skipped
+        /// DisplayVisual (no canvas align, no ItemGrid definition UI) and drew the items on
+        /// the vanilla sign canvas at the foot of the piece.
+        /// </summary>
+        private void EnsureVisualBaseFromName()
+        {
+            if (!string.IsNullOrEmpty(VisualBase))
+                return;
+            VisualBase = DisplayPrefab.VisualBaseForPrefab(gameObject.name);
         }
 
         private void DetectKindFromName()
@@ -779,6 +924,7 @@ namespace StoreAndCraft
         {
             if (!_configured)
                 DetectKindFromName();
+            EnsureVisualBaseFromName();
             if (!All.Contains(this))
                 All.Add(this);
             TryBuild();
@@ -1059,6 +1205,7 @@ namespace StoreAndCraft
             zdo.Set(DisplayFilters.ZdoKey, legacy);
             _dirty = true;
             _watchDirty = true;
+            _nextScan = 0f;
             _cluster = null;
             InvalidateClusters();
         }
@@ -1221,7 +1368,13 @@ namespace StoreAndCraft
                 needsRebuild = true;
             // Content scale or Classic/Compact layout changed (Medium / Large).
             if (_slots != null && (_kind == DisplayKind.Medium || _kind == DisplayKind.Large)
-                && (ContentScaleStep() != _builtScaleStep || ContentLayoutMode() != _builtLayoutMode))
+                && (ContentScaleStep() != _builtScaleStep || ContentLayoutMode() != _builtLayoutMode
+                    || LayoutVariant() != _builtVariant))
+                needsRebuild = true;
+            // v2 sections have their own chassis (no band labels / single grid).
+            bool sections = _slots != null && UsesSections();
+            // Definition switched between v2 and older chassis (editor preview / file change).
+            if (_slots != null && sections != (_sections != null))
                 needsRebuild = true;
             // Small name/amount layout changed — rebuild so icon can recenter.
             if (_slots != null && _kind == DisplayKind.Small
@@ -1235,16 +1388,27 @@ namespace StoreAndCraft
             if (_slots != null && _kind == DisplayKind.Large && !IsCompactLayout() && _flowSections
                 && (_headers != null || _columnMajor))
                 needsRebuild = true;
-            // Compact: fixed left category rail + item grid must match current rows/cols.
-            if (_slots != null && IsCompactLayout()
-                && (_bandLabels == null || _bandLabels.Length != _rows
-                    || _slots.Length != _columns * _rows))
+            // Compact / Large band UIs — skip for Prefab-Editor definition grids (own chassis).
+            if (sections)
+            {
+                // Own chassis; rebuilt via layout/variant/definition changes above.
+            }
+            else if (_slots != null && !UsesDefinitionGrid())
+            {
+                if (IsCompactLayout()
+                    && (_bandLabels == null || _bandLabels.Length != _rows
+                        || _slots.Length != _columns * _rows))
+                    needsRebuild = true;
+                if (_kind == DisplayKind.Large && !IsCompactLayout() && _flowSections
+                    && (_bandLabels == null || _bandLabels.Length != _rows
+                        || _slots.Length != _columns * _rows))
+                    needsRebuild = true;
+            }
+            else if (_slots != null && UsesDefinitionGrid()
+                && _slots.Length != _columns * _rows)
+            {
                 needsRebuild = true;
-            // Large Classic: chassis matches current scale row count (taller cells at higher scale).
-            if (_slots != null && _kind == DisplayKind.Large && !IsCompactLayout() && _flowSections
-                && (_bandLabels == null || _bandLabels.Length != _rows
-                    || _slots.Length != _columns * _rows))
-                needsRebuild = true;
+            }
             if (_slots != null && _kind == DisplayKind.Small && _slots.Length == 1
                 && (_slots[0].Name == null
                     || (_slots[0].Amount != null && _slots[0].Amount.fontSize < 1f)))
@@ -1275,7 +1439,9 @@ namespace StoreAndCraft
             {
                 if (Time.time >= _nextScan)
                 {
-                    _nextScan = Time.time + 0.35f;
+                    // Fast after a selection / range change; a board with no chests in range
+                    // only needs a slow retry (it rescanned every 0.35 s forever before).
+                    _nextScan = Time.time + (_watchDirty ? 0.35f : 3f);
                     Resubscribe();
                     _watchDirty = false;
                 }
@@ -1311,10 +1477,13 @@ namespace StoreAndCraft
             CaptureBoardMetrics(template);
             ApplyScaleToLayout();
             BuildUi();
+            // Canvas may have been aligned before SacDisplayGrid existed — snap again.
+            DisplayVisual.Ensure(this);
             if (_slots != null)
             {
                 _builtScaleStep = ContentScaleStep();
                 _builtLayoutMode = ContentLayoutMode();
+                _builtVariant = LayoutVariant();
                 _builtShowName = ShowName() ? 1 : 0;
                 _builtShowAmount = ShowAmount() ? 1 : 0;
                 _dirty = true;
@@ -1367,19 +1536,45 @@ namespace StoreAndCraft
                 return;
 
             RectTransform board = template.rectTransform;
-            if (board == null || template.canvas == null)
+            // v2 sections behave like the definition grid here: own canvases, sign canvas off.
+            bool sectionsUi = UsesSections();
+            bool definitionGrid = sectionsUi || UsesDefinitionGrid();
+            if (!definitionGrid && template.canvas == null)
+            {
+                // A definition-grid build switched the sign canvas off (e.g. Classic ↔ Compact
+                // onto a visual without an ItemGrid definition). Bring it back for this layout.
+                Canvas signCanvas = DisplayVisual.FindCanvas(template.transform);
+                if (signCanvas != null)
+                    signCanvas.gameObject.SetActive(true);
+            }
+            if (board == null || (!definitionGrid && template.canvas == null))
                 return;
 
             _signText = template;
-            // Board title stays put — only item cells grow via fewer/wider columns.
+            // Board title stays put - only item cells grow via fewer/wider columns.
             _titleFont = template.fontSize * _titleFactor;
             SilenceSignText();
+
+            float font = template.fontSize * _fontFactor;
+            float bandFont = template.fontSize * _bandFontFactor;
+            _chipFont = bandFont;
+
+            if (sectionsUi)
+            {
+                BuildSectionsUi(template);
+                return;
+            }
+
+            // Carved + baked ItemGrid: flat cells on the AlignCanvas-snapped sign face.
+            if (definitionGrid)
+            {
+                BuildDefinitionGridUi(template, font);
+                return;
+            }
 
             Transform existing = board.parent.Find("SacDisplayGrid");
             if (existing != null)
             {
-                // Hide immediately — deferred Destroy alone leaves the old grid visible for a frame
-                // (and a second SacDisplayGrid while the new one is empty → Scale/Layout flicker).
                 existing.name = "SacDisplayGrid_old";
                 existing.gameObject.SetActive(false);
                 if (_gridRoot != null && _gridRoot.transform == existing)
@@ -1399,12 +1594,6 @@ namespace StoreAndCraft
             rt.offsetMax = board.offsetMax;
             rt.localScale = board.localScale;
             rt.localRotation = board.localRotation;
-
-            // Amount font grows with cell height via LayoutSlotPair; category labels stay fixed.
-            float font = template.fontSize * _fontFactor;
-            // Category labels always match scale 0 — never follow content scale.
-            float bandFont = template.fontSize * _bandFontFactor;
-            _chipFont = bandFont;
 
             if (IsCompactLayout())
             {
@@ -1558,6 +1747,344 @@ namespace StoreAndCraft
                     slot++;
                 }
             }
+        }
+
+        /// <summary>
+        /// Prefab-Editor boards: own World Space canvas on SacModel at baked ItemGrid pos/size.
+        /// Does not use the vanilla sign canvas (that stays at the wood-sign foot).
+        /// </summary>
+        private void BuildDefinitionGridUi(TextMeshProUGUI template, float font)
+        {
+            _headers = null;
+            _bandLabels = null;
+            _builtBandCount = -1;
+
+            DisplayVisual.Ensure(this);
+
+            int cols;
+            int rows;
+            Vector3 gridPos;
+            Vector3 gridEuler;
+            Vector2 faceMeters;
+            if (!DisplayLayouts.TryGetItemGridFace(
+                    CurrentVisualId(), out cols, out rows, out gridPos, out gridEuler, out faceMeters))
+            {
+                Plugin.Log.LogWarning("Definition grid UI: no ItemGrid face for " + CurrentVisualId());
+                return;
+            }
+
+            Transform model = transform.Find("SacModel");
+            if (model == null)
+            {
+                Plugin.Log.LogWarning("Definition grid UI: SacModel missing on " + name);
+                return;
+            }
+
+            // Strip any UI left on the vanilla foot canvas so it cannot show as a tiny strip.
+            if (template.canvas != null)
+            {
+                Transform footGrid = template.canvas.transform.Find("SacDisplayGrid");
+                if (footGrid != null)
+                    Destroy(footGrid.gameObject);
+                template.canvas.gameObject.SetActive(false);
+            }
+            template.enabled = false;
+            template.text = "";
+
+            Transform oldPieceCanvas = transform.Find("SacDisplayCanvas");
+            if (oldPieceCanvas != null)
+                Destroy(oldPieceCanvas.gameObject);
+            Transform oldModelCanvas = model.Find("SacDisplayCanvas");
+            if (oldModelCanvas != null)
+                Destroy(oldModelCanvas.gameObject);
+
+            // Match vanilla sign UI scale (meters via tiny canvas scale + large sizeDelta).
+            float uiScale = 0.01f;
+            if (template.canvas != null)
+            {
+                float s = Mathf.Abs(template.canvas.transform.localScale.x);
+                if (s > 0.0001f && s < 0.2f)
+                    uiScale = s;
+            }
+
+            // Canvas units (like CaptureBoardMetrics), not meters — else LayoutSlotPair caps
+            // the count font at ~0.3 units and amounts become invisible.
+            _boardW = faceMeters.x / uiScale;
+            _boardH = faceMeters.y / uiScale;
+            _baseAmountFont = Mathf.Max(0.05f, font);
+            _columns = Mathf.Max(1, _columns);
+            _rows = Mathf.Max(1, _rows);
+            cols = _columns;
+            rows = _rows;
+            // Sign-template font (×0.20) is tiny against the ItemGrid cells; size counts from
+            // the cell height instead (LayoutSlotPair still shrinks it to fit next to the icon).
+            font = Mathf.Max(font, _boardH / rows * 0.45f);
+
+            var canvasGo = new GameObject("SacDisplayCanvas", typeof(RectTransform), typeof(Canvas));
+            canvasGo.transform.SetParent(model, false);
+
+            Canvas canvas = canvasGo.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = null;
+
+            RectTransform canvasRt = canvasGo.GetComponent<RectTransform>();
+            canvasRt.anchorMin = canvasRt.anchorMax = new Vector2(0.5f, 0.5f);
+            canvasRt.pivot = new Vector2(0.5f, 0.5f);
+            canvasRt.sizeDelta = new Vector2(faceMeters.x / uiScale, faceMeters.y / uiScale);
+            // Position after the rect setup: anchoredPosition = zero reset localPosition x/y,
+            // which dropped the grid offsetY (grid centred on the foot, lower half underground).
+            canvasGo.transform.localPosition = gridPos - Vector3.forward * 0.02f;
+            canvasGo.transform.localRotation = Quaternion.Euler(gridEuler);
+            // Negative X: the readable face is the ItemGrid +Z side (AlignCanvas keeps the vanilla
+            // sign canvas' mirrored scale there). Positive X showed counts mirrored in-game.
+            canvasGo.transform.localScale = new Vector3(-uiScale, uiScale, uiScale);
+
+            var root = new GameObject("SacDisplayGrid", typeof(RectTransform));
+            root.transform.SetParent(canvasGo.transform, false);
+            RectTransform rt = root.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.localScale = Vector3.one;
+            _gridRoot = rt;
+
+            _slotCount = rows * cols;
+            _slots = new SlotUi[_slotCount];
+
+            Plugin.Log.LogInfo("Definition grid UI face id=" + CurrentVisualId()
+                + " pos=" + gridPos
+                + " size=" + faceMeters
+                + " cells=" + cols + "x" + rows
+                + " source=" + DisplayLayouts.SourceLabel);
+
+            float padX = 0.01f;
+            float padY = 0.01f;
+            int slot = 0;
+            for (int r = 0; r < rows; r++)
+            {
+                float y0 = 1f - (r + 1) / (float)rows;
+                float y1 = 1f - r / (float)rows;
+                for (int c = 0; c < cols; c++)
+                {
+                    float x0 = c / (float)cols;
+                    float x1 = (c + 1) / (float)cols;
+                    CreateSlotCell(root.transform, template, font, padX, padY, x0, x1, y0, y1, slot);
+                    slot++;
+                }
+            }
+        }
+
+        /// <summary>
+        /// v2 definition: one World Space canvas per section grid and per label under SacModel,
+        /// all positioned in model space (meters) exactly as authored in PrefabStudio.
+        /// </summary>
+        private void BuildSectionsUi(TextMeshProUGUI template)
+        {
+            _headers = null;
+            _bandLabels = null;
+            _builtBandCount = -1;
+
+            DisplayVisual.Ensure(this);
+
+            DisplayLayouts.LayoutDef layout = DisplayLayouts.GetLayout(CurrentVisualId(), LayoutVariant());
+            Transform model = transform.Find("SacModel");
+            if (layout == null || model == null)
+            {
+                Plugin.Log.LogWarning("Display sections: " + (layout == null ? "no layout" : "SacModel missing")
+                    + " for " + CurrentVisualId());
+                return;
+            }
+
+            // Sign canvas off (found even while inactive); its scale is the UI unit.
+            Canvas signCanvas = DisplayVisual.FindCanvas(template.transform);
+            float uiScale = 0.01f;
+            if (signCanvas != null)
+            {
+                float s = Mathf.Abs(signCanvas.transform.localScale.x);
+                if (s > 0.0001f && s < 0.2f)
+                    uiScale = s;
+                Transform footGrid = signCanvas.transform.Find("SacDisplayGrid");
+                if (footGrid != null)
+                    Destroy(footGrid.gameObject);
+                signCanvas.gameObject.SetActive(false);
+            }
+            template.enabled = false;
+            template.text = "";
+
+            DestroyOldCanvas(transform);
+            DestroyOldCanvas(model);
+
+            var container = new GameObject("SacDisplayCanvas");
+            container.transform.SetParent(model, false);
+
+            DisplayLayouts.SectionDef[] defs = layout.sections ?? new DisplayLayouts.SectionDef[0];
+            int total = 0;
+            for (int k = 0; k < defs.Length; k++)
+            {
+                if (defs[k] != null)
+                    total += Mathf.Max(1, defs[k].grid.columns) * Mathf.Max(1, defs[k].grid.rows);
+            }
+
+            _slotCount = total;
+            _slots = new SlotUi[total];
+            _sections = new SectionUi[defs.Length];
+            _columns = Mathf.Max(1, total);
+            _rows = 1;
+            _gridRoot = null;
+
+            int idx = 0;
+            for (int k = 0; k < defs.Length; k++)
+            {
+                DisplayLayouts.SectionDef def = defs[k];
+                if (def == null)
+                {
+                    _sections[k] = new SectionUi { Def = null, Start = idx, Count = 0 };
+                    continue;
+                }
+
+                DisplayLayouts.SectionGridDef g = def.grid;
+                int cols = Mathf.Max(1, g.columns);
+                int rows = Mathf.Max(1, g.rows);
+                float wM = cols * g.spacingX;
+                float hM = rows * g.spacingY;
+                RectTransform gridRt = NewSectionCanvas(container.transform, "Grid_" + k, g.offset, g.euler, wM, hM, uiScale);
+
+                // CreateSlotCell / LayoutSlotPair measure against the current board size.
+                _boardW = wM / uiScale;
+                _boardH = hM / uiScale;
+                float font = _boardH / rows * 0.45f * def.amountScale;
+                Color amountColor = ParseHtmlColor(def.amountColor, new Color(1f, 0.95f, 0.75f, 1f));
+
+                int start = idx;
+                for (int r = 0; r < rows; r++)
+                {
+                    float y0 = 1f - (r + 1) / (float)rows;
+                    float y1 = 1f - r / (float)rows;
+                    for (int c = 0; c < cols; c++)
+                    {
+                        CreateSlotCell(gridRt, template, font, 0.01f, 0.01f,
+                            c / (float)cols, (c + 1) / (float)cols, y0, y1, idx);
+                        StyleSectionCell(idx, def, amountColor);
+                        idx++;
+                    }
+                }
+
+                TextMeshProUGUI label = def.label != null && def.label.enabled
+                    ? CreateSectionLabel(container.transform, template, k, def.label, uiScale)
+                    : null;
+                _sections[k] = new SectionUi { Def = def, Start = start, Count = idx - start, Label = label };
+            }
+
+            Plugin.Log.LogInfo("Display sections UI id=" + CurrentVisualId()
+                + " layout=" + layout.name + " sections=" + defs.Length + " cells=" + total
+                + " source=" + DisplayLayouts.SourceLabel);
+        }
+
+        private static void DestroyOldCanvas(Transform parent)
+        {
+            Transform old = parent != null ? parent.Find("SacDisplayCanvas") : null;
+            if (old == null)
+                return;
+            old.name = "SacDisplayCanvas_old";
+            old.gameObject.SetActive(false);
+            Destroy(old.gameObject);
+        }
+
+        private static RectTransform NewSectionCanvas(
+            Transform parent, string name, Vector3 offset, Vector3 euler, float wM, float hM, float uiScale)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Canvas));
+            go.transform.SetParent(parent, false);
+            Canvas canvas = go.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = null;
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(wM / uiScale, hM / uiScale);
+            // Same placement rules as BuildDefinitionGridUi: after the rect setup, readable
+            // from the +Z face (negative X scale).
+            go.transform.localPosition = offset - Vector3.forward * 0.02f;
+            go.transform.localRotation = Quaternion.Euler(euler);
+            go.transform.localScale = new Vector3(-uiScale, uiScale, uiScale);
+            return rt;
+        }
+
+        private void StyleSectionCell(int i, DisplayLayouts.SectionDef def, Color amountColor)
+        {
+            SlotUi slot = _slots[i];
+            slot.AmountColor = amountColor;
+            slot.HideAmount = !def.showAmount;
+            if (slot.Amount != null)
+            {
+                slot.Font = slot.Amount.fontSize;
+                slot.Amount.color = amountColor;
+            }
+            if (slot.Icon != null)
+            {
+                RectTransform iconRt = slot.Icon.rectTransform;
+                if (!def.showAmount)
+                {
+                    // Icon only: use the whole cell.
+                    iconRt.anchorMin = new Vector2(0.06f, 0.06f);
+                    iconRt.anchorMax = new Vector2(0.94f, 0.94f);
+                    iconRt.offsetMin = Vector2.zero;
+                    iconRt.offsetMax = Vector2.zero;
+                }
+                iconRt.localScale = Vector3.one * Mathf.Clamp(def.iconScale, 0.2f, 2f);
+            }
+            _slots[i] = slot;
+        }
+
+        private static TextMeshProUGUI CreateSectionLabel(
+            Transform parent, TextMeshProUGUI template, int k, DisplayLayouts.SectionLabelDef def, float uiScale)
+        {
+            RectTransform canvasRt = NewSectionCanvas(parent, "Label_" + k, def.offset, def.euler,
+                def.width, def.height, uiScale);
+            GameObject textGo = Object.Instantiate(template.gameObject, canvasRt);
+            textGo.name = "Text";
+            textGo.SetActive(true);
+            var localize = textGo.GetComponent("Localize") as MonoBehaviour;
+            if (localize != null)
+                Object.Destroy(localize);
+            RectTransform rt = textGo.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.localScale = Vector3.one;
+            rt.localRotation = Quaternion.identity;
+
+            TextMeshProUGUI text = textGo.GetComponent<TextMeshProUGUI>();
+            text.enabled = true;
+            if (template.font != null)
+                text.font = template.font;
+            text.enableAutoSizing = false;
+            text.fontSize = def.fontSize / uiScale;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.overflowMode = TextOverflowModes.Ellipsis;
+            text.margin = Vector4.zero;
+            text.outlineWidth = 0f;
+            text.raycastTarget = false;
+            string align = (def.align ?? "").ToLowerInvariant();
+            text.alignment = align == "center" ? TextAlignmentOptions.Midline
+                : align == "right" ? TextAlignmentOptions.MidlineRight
+                : TextAlignmentOptions.MidlineLeft;
+            Color color = ParseHtmlColor(def.color, new Color(1f, 0.85f, 0.4f, 1f));
+            text.color = color;
+            text.faceColor = color;
+            text.text = "";
+            return text;
+        }
+
+        private static Color ParseHtmlColor(string html, Color fallback)
+        {
+            if (string.IsNullOrEmpty(html))
+                return fallback;
+            Color c;
+            return ColorUtility.TryParseHtmlString(html.Trim(), out c) ? c : fallback;
         }
 
         private void BuildLargeUi(GameObject root, TextMeshProUGUI template, float font, float bandFont)
@@ -2078,12 +2605,27 @@ namespace StoreAndCraft
             {
                 for (int i = 0; i < _slotCount; i++)
                     ClearSlot(i);
+                // v2: sign canvas is off, so the hint goes into the first label.
+                ClearSectionLabels(Loc.T("Select type", "Typ wählen"));
                 return;
             }
 
             List<StorageDisplayBoard> cluster = Cluster();
             _pages = Mathf.Max(1, cluster.Count);
             _page = Mathf.Max(0, cluster.IndexOf(this));
+
+            if (_sections != null)
+            {
+                PaintSections(cluster, filters, itemTokens);
+                return;
+            }
+
+            // Custom displays: one filtered item + count per ItemGrid cell (no category bands).
+            if (UsesDefinitionGrid())
+            {
+                PaintRanked(cluster, filters, itemTokens);
+                return;
+            }
 
             if (IsCompactLayout())
             {
@@ -2404,6 +2946,189 @@ namespace StoreAndCraft
             }
         }
 
+        /// <summary>
+        /// v2 sections: "1".."n" = n-th selected category (display order), "rest" = selected
+        /// categories no numbered section took, "all" = every matching item. Each section gets
+        /// its own label (category name unless the definition sets text).
+        /// </summary>
+        private void PaintSections(
+            List<StorageDisplayBoard> cluster,
+            List<int> filters,
+            List<string> itemTokens)
+        {
+            List<int> order = BuildSectionOrder(filters, itemTokens);
+            // One chest scan for the whole board.
+            List<RankedItem> rankedAll = RankItems(cluster, filters, itemTokens, groupByCategory: true);
+            var byCat = new Dictionary<int, List<RankedItem>>();
+            for (int i = 0; i < rankedAll.Count; i++)
+            {
+                List<RankedItem> list;
+                if (!byCat.TryGetValue(rankedAll[i].CategoryId, out list))
+                {
+                    list = new List<RankedItem>();
+                    byCat[rankedAll[i].CategoryId] = list;
+                }
+                list.Add(rankedAll[i]);
+            }
+
+            // Categories claimed by numbered sections (for "rest").
+            var claimed = new HashSet<int>();
+            for (int s = 0; s < _sections.Length; s++)
+            {
+                int n;
+                if (_sections[s] != null && _sections[s].Def != null
+                    && TrySectionIndex(_sections[s].Def.category, out n) && n <= order.Count)
+                    claimed.Add(order[n - 1]);
+            }
+
+            for (int s = 0; s < _sections.Length; s++)
+            {
+                SectionUi sec = _sections[s];
+                if (sec == null || sec.Def == null)
+                    continue;
+
+                string cat = (sec.Def.category ?? "").Trim().ToLowerInvariant();
+                List<RankedItem> items;
+                string title;
+                bool active = true;
+                int n;
+                if (TrySectionIndex(cat, out n))
+                {
+                    if (n <= order.Count)
+                    {
+                        int catId = order[n - 1];
+                        if (!byCat.TryGetValue(catId, out items))
+                            items = new List<RankedItem>();
+                        title = DisplayFilters.Label(catId);
+                    }
+                    else
+                    {
+                        // Fewer categories selected than sections — leave this one blank.
+                        items = new List<RankedItem>();
+                        title = "";
+                        active = false;
+                    }
+                }
+                else if (cat == "rest")
+                {
+                    items = new List<RankedItem>();
+                    var names = new List<string>();
+                    for (int o = 0; o < order.Count; o++)
+                    {
+                        if (claimed.Contains(order[o]))
+                            continue;
+                        names.Add(ShortCategoryLabel(order[o]));
+                        List<RankedItem> part;
+                        if (byCat.TryGetValue(order[o], out part))
+                            items.AddRange(part);
+                    }
+                    title = string.Join(", ", names.ToArray());
+                    active = names.Count > 0;
+                }
+                else
+                {
+                    items = rankedAll;
+                    title = DisplayFilters.Label(filters, itemTokens);
+                }
+
+                SortSectionItems(items, sec.Def.sort);
+                SetSectionLabel(sec, active ? title : "");
+                PaintSectionCells(sec, items, active);
+            }
+        }
+
+        private static bool TrySectionIndex(string category, out int n)
+        {
+            n = 0;
+            return !string.IsNullOrEmpty(category)
+                && int.TryParse(category.Trim(), System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out n)
+                && n >= 1;
+        }
+
+        private static void SortSectionItems(List<RankedItem> items, string sort)
+        {
+            if (items == null || items.Count < 2)
+                return;
+            if (string.Equals(sort, "name", System.StringComparison.OrdinalIgnoreCase))
+            {
+                items.Sort((a, b) => string.Compare(LocalizedName(a), LocalizedName(b),
+                    System.StringComparison.CurrentCultureIgnoreCase));
+                return;
+            }
+            items.Sort((a, b) =>
+            {
+                int byCount = b.Count.CompareTo(a.Count);
+                return byCount != 0 ? byCount : string.CompareOrdinal(LocalizedName(a), LocalizedName(b));
+            });
+        }
+
+        private static string LocalizedName(RankedItem entry)
+        {
+            string raw = entry.Sample?.m_shared != null ? entry.Sample.m_shared.m_name : "";
+            return Localization.instance != null ? Localization.instance.Localize(raw) : raw;
+        }
+
+        private void SetSectionLabel(SectionUi sec, string title)
+        {
+            if (sec.Label == null)
+                return;
+            DisplayLayouts.SectionLabelDef def = sec.Def.label;
+            string text = string.IsNullOrEmpty(title) ? ""
+                : !string.IsNullOrEmpty(def.text) ? def.text
+                : title;
+            if (def.uppercase)
+                text = text.ToUpperInvariant();
+            if (sec.Label.text != text)
+                sec.Label.text = text;
+        }
+
+        private void PaintSectionCells(SectionUi sec, List<RankedItem> items, bool active)
+        {
+            int capacity = sec.Count;
+            for (int i = 0; i < capacity; i++)
+                ClearSlot(sec.Start + i);
+            if (!active || capacity <= 0)
+                return;
+
+            if (items.Count == 0)
+            {
+                if (!string.IsNullOrEmpty(sec.Def.emptyText))
+                    SetAmount(sec.Start, sec.Def.emptyText, new Color(0.75f, 0.7f, 0.55f, 1f));
+                return;
+            }
+
+            // Last cell turns into "+N" when the section overflows.
+            bool overflow = items.Count > capacity;
+            int show = overflow ? capacity - 1 : items.Count;
+            for (int i = 0; i < show; i++)
+            {
+                int slot = sec.Start + i;
+                PaintSlot(slot, items[i]);
+                if (_slots[slot].HideAmount)
+                    SetAmount(slot, "");
+            }
+            if (overflow)
+                SetAmount(sec.Start + capacity - 1, "+" + (items.Count - show), new Color(1f, 0.85f, 0.45f, 1f));
+        }
+
+        private void ClearSectionLabels(string hint)
+        {
+            if (_sections == null)
+                return;
+            bool hinted = false;
+            for (int s = 0; s < _sections.Length; s++)
+            {
+                SectionUi sec = _sections[s];
+                if (sec == null || sec.Label == null)
+                    continue;
+                string text = !hinted ? hint ?? "" : "";
+                hinted = true;
+                if (sec.Label.text != text)
+                    sec.Label.text = text;
+            }
+        }
+
         private static string ShortCategoryLabel(int catId)
         {
             string label = DisplayFilters.Label(catId);
@@ -2701,6 +3426,14 @@ namespace StoreAndCraft
             if (amount == null)
                 return;
             amount.alignment = TextAlignmentOptions.MidlineLeft;
+            if (_slots[i].Font > 0.01f)
+            {
+                // v2 section cell: its own size / colour.
+                amount.fontSize = _slots[i].Font;
+                amount.color = _slots[i].AmountColor;
+                amount.faceColor = _slots[i].AmountColor;
+                return;
+            }
             if (_slotFont > 0.01f)
                 amount.fontSize = _slotFont;
             amount.color = new Color(1f, 0.95f, 0.75f, 1f);
@@ -2768,6 +3501,11 @@ namespace StoreAndCraft
 
         private void SetAmount(int i, string text)
         {
+            if (_slots != null && i >= 0 && i < _slots.Length && _slots[i].Font > 0.01f)
+            {
+                SetAmount(i, text, _slots[i].AmountColor);
+                return;
+            }
             SetAmount(i, text, new Color(1f, 0.95f, 0.75f, 1f));
         }
 
