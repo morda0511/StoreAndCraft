@@ -87,6 +87,105 @@ namespace StoreAndCraft
         private static RectTransform _itemContent;
         private static ScrollRect _catScroll;
         private static ScrollRect _itemScroll;
+        // Search box (right panel header): non-empty = items of every category matching the text.
+        private static TMP_InputField _searchField;
+        private static string _search = "";
+
+        // ---- Look: Classic (SAC artwork, UiAssets) or Vanilla (Valheim sprites) via DisplayMenuStyle.
+        // Names verified against Jotunn GUIManager: woodpanel_settings, button, button_highlight,
+        // button_small, checkbox, checkbox_marker, text_field. Missing sprite → Classic fallback.
+        private static bool _vanillaStyle;
+
+        private static Sprite V(string name)
+        {
+            return _vanillaStyle ? SettingsPanel.Vanilla(name) : null;
+        }
+
+        private static Sprite PanelSprite(bool left)
+        {
+            return V("woodpanel_settings") ?? (left ? UiAssets.PanelLeft : UiAssets.PanelRight);
+        }
+
+        private static Sprite InsetSprite(bool left)
+        {
+            // Vanilla: no SAC inset art, a dark wash like the crafting list instead.
+            if (_vanillaStyle)
+                return null;
+            return left ? UiAssets.PanelLeftInset : UiAssets.PanelRightInset;
+        }
+
+        private static void PlaceVanillaInset(RectTransform panel, float padL, float padT, float padR, float padB)
+        {
+            if (!_vanillaStyle)
+                return;
+            var go = new GameObject("InsetDark", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(panel, false);
+            RectTransform rt = go.transform as RectTransform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = new Vector2(padL, padB);
+            rt.offsetMax = new Vector2(-padR, -padT);
+            Image img = go.GetComponent<Image>();
+            img.color = new Color(0f, 0f, 0f, 0.38f);
+            img.raycastTarget = false;
+        }
+
+        /// <summary>Image with sprite; sliced when the sprite has a border.</summary>
+        private static void SetStyled(Image img, Sprite sprite, Color fallback)
+        {
+            if (img == null)
+                return;
+            if (sprite == null)
+            {
+                img.sprite = null;
+                img.color = fallback;
+                return;
+            }
+            img.sprite = sprite;
+            img.type = sprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
+            img.preserveAspect = false;
+            img.color = Color.white;
+        }
+
+        /// <summary>Classic: SAC pill toggle. Vanilla: Valheim checkbox with yellow tick.</summary>
+        private static GameObject CreateToggle(RectTransform parent, bool on, UnityAction click)
+        {
+            Sprite box = V("checkbox");
+            if (box == null)
+                return UiToggle.Create(parent, "Toggle", on, true, click, UiFonts.ThinNorse(), ToggleW, ToggleH);
+
+            var go = new GameObject("Toggle", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            Image bg = go.GetComponent<Image>();
+            SetStyled(bg, box, Color.black);
+            bg.raycastTarget = true;
+            Button btn = go.GetComponent<Button>();
+            btn.targetGraphic = bg;
+            if (click != null)
+                btn.onClick.AddListener(click);
+
+            var mark = new GameObject("Marker", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            mark.transform.SetParent(go.transform, false);
+            RectTransform markRt = mark.transform as RectTransform;
+            Stretch(markRt);
+            markRt.offsetMin = new Vector2(3f, 3f);
+            markRt.offsetMax = new Vector2(-3f, -3f);
+            Image markImg = mark.GetComponent<Image>();
+            markImg.sprite = V("checkbox_marker");
+            markImg.color = new Color(1f, 0.86f, 0.1f, 1f);
+            markImg.raycastTarget = false;
+            mark.SetActive(on);
+            return go;
+        }
+
+        /// <summary>Checkbox is square; the Classic pill is wide.</summary>
+        private static Vector2 ToggleSize()
+        {
+            return V("checkbox") != null ? new Vector2(26f, 26f) : new Vector2(ToggleW, ToggleH);
+        }
+
+        /// <summary>Search box has keyboard focus (first Escape only leaves the box).</summary>
+        public static bool IsTyping => IsOpen && _searchField != null && _searchField.isFocused;
 
         private static readonly Dictionary<string, Sprite> _iconCache =
             new Dictionary<string, Sprite>(System.StringComparer.Ordinal);
@@ -114,9 +213,14 @@ namespace StoreAndCraft
             _board = board;
             _openedAt = Time.unscaledTime;
             _focusId = 0;
+            _search = "";
 
             UiFonts.ThinNorse();
             ItemIds.PrefabFromToken("$item_wood");
+
+            // Read on every open (root is rebuilt), so a config change shows on the next E.
+            _vanillaStyle = Plugin.Settings != null
+                && string.Equals(Plugin.Settings.DisplayMenuStyle.Value, "Vanilla", System.StringComparison.OrdinalIgnoreCase);
 
             EnsureRoot();
             if (_root == null)
@@ -177,13 +281,42 @@ namespace StoreAndCraft
             if (Time.unscaledTime < _openedAt + 0.15f)
                 return;
             if (ZInput.GetKeyDown(KeyCode.Escape, true) || ZInput.GetButtonDown("JoyButtonB"))
+            {
+                // First Escape only leaves the search box.
+                if (IsTyping)
+                {
+                    _searchField.DeactivateInputField();
+                    return;
+                }
                 Close();
+            }
+        }
+
+        private static void OnSearchChanged(string text)
+        {
+            string next = (text ?? "").Trim();
+            if (next == _search)
+                return;
+            _search = next;
+            _pendingItems = false;
+            RebuildUi(buildItems: true, preserveCatScroll: true, resetItemScroll: true);
+        }
+
+        /// <summary>Picking a category leaves search mode (the grid shows that category again).</summary>
+        private static void ClearSearch()
+        {
+            if (string.IsNullOrEmpty(_search))
+                return;
+            _search = "";
+            if (_searchField != null)
+                _searchField.SetTextWithoutNotify("");
         }
 
         private static void ToggleCategory(int id)
         {
             if (_board == null || id <= 0)
                 return;
+            ClearSearch();
             _board.ToggleFilter(id);
             bool sameFocus = _focusId == id;
             _focusId = id;
@@ -195,6 +328,7 @@ namespace StoreAndCraft
         {
             if (id <= 0)
                 return;
+            ClearSearch();
             bool changed = _focusId != id;
             _focusId = id;
             _pendingItems = false;
@@ -263,6 +397,8 @@ namespace StoreAndCraft
             _itemContent = null;
             _catScroll = null;
             _itemScroll = null;
+            _searchField = null;
+            _search = "";
             if (_root != null)
             {
                 Object.Destroy(_root);
@@ -276,10 +412,11 @@ namespace StoreAndCraft
             panel.transform.SetParent(host, false);
             RectTransform rt = panel.transform as RectTransform;
             PlaceTopLeft(rt, LeftX, LeftY, LeftW, LeftH);
-            ApplySprite(panel.GetComponent<Image>(), UiAssets.PanelLeft, Color.white);
+            ApplySprite(panel.GetComponent<Image>(), PanelSprite(true), Color.white);
 
             // Layer: panel → inset → content (clip to white rim, not gray halo)
-            PlaceInsetBg(rt, UiAssets.PanelLeftInset, CatInsetL, CatInsetT, CatInsetR, CatInsetB);
+            PlaceInsetBg(rt, InsetSprite(true), CatInsetL, CatInsetT, CatInsetR, CatInsetB);
+            PlaceVanillaInset(rt, CatInsetL, CatInsetT, CatInsetR, CatInsetB);
             PlacePanelHeader(rt, Loc.T("Select type", "Select type"), CatInsetT);
 
             var scrollGo = new GameObject("CatScroll", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(ScrollRect));
@@ -329,7 +466,7 @@ namespace StoreAndCraft
             applyRt.pivot = new Vector2(0.5f, 0f);
             applyRt.anchoredPosition = new Vector2(0f, 44f);
             applyRt.sizeDelta = new Vector2(ApplyW, ApplyH);
-            ApplySprite(apply.GetComponent<Image>(), UiAssets.BtnApply, Color.white);
+            ApplySprite(apply.GetComponent<Image>(), V("button") ?? UiAssets.BtnApply, Color.white);
             Button applyBtn = apply.GetComponent<Button>();
             applyBtn.transition = Selectable.Transition.None;
             applyBtn.onClick.AddListener(Close);
@@ -350,10 +487,12 @@ namespace StoreAndCraft
             panel.transform.SetParent(host, false);
             RectTransform rt = panel.transform as RectTransform;
             PlaceTopLeft(rt, RightX, RightY, RightW, RightH);
-            ApplySprite(panel.GetComponent<Image>(), UiAssets.PanelRight, Color.white);
+            ApplySprite(panel.GetComponent<Image>(), PanelSprite(false), Color.white);
 
-            PlaceInsetBg(rt, UiAssets.PanelRightInset, ItemInsetL, ItemInsetT, ItemInsetR, ItemInsetB);
+            PlaceInsetBg(rt, InsetSprite(false), ItemInsetL, ItemInsetT, ItemInsetR, ItemInsetB);
+            PlaceVanillaInset(rt, ItemInsetL, ItemInsetT, ItemInsetR, ItemInsetB);
             PlacePanelHeader(rt, Loc.T("Filter", "Filter"), ItemInsetT);
+            BuildSearchField(rt);
 
             var scrollGo = new GameObject("ItemScroll", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(ScrollRect));
             scrollGo.transform.SetParent(rt, false);
@@ -392,6 +531,110 @@ namespace StoreAndCraft
             _itemScroll.scrollSensitivity = 540f;
             _itemScroll.inertia = true;
             _itemScroll.verticalScrollbar = null;
+        }
+
+        /// <summary>Search box in the header band, left of "FILTER".</summary>
+        private static void BuildSearchField(RectTransform panel)
+        {
+            // Built inactive: TMP_InputField must be fully wired before OnEnable (see SettingsPanel).
+            var go = new GameObject("Search", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(TMP_InputField));
+            go.SetActive(false);
+            go.transform.SetParent(panel, false);
+            RectTransform rt = go.transform as RectTransform;
+            PlaceTopLeft(rt, ItemInsetL + 20f, 22f, 330f, 40f);
+            Image bg = go.GetComponent<Image>();
+            SetStyled(bg, V("text_field"), new Color(0.08f, 0.05f, 0.02f, 0.55f));
+            bg.raycastTarget = true;
+
+            var area = new GameObject("Text Area", typeof(RectTransform), typeof(RectMask2D));
+            area.transform.SetParent(rt, false);
+            RectTransform areaRt = area.transform as RectTransform;
+            Stretch(areaRt);
+            areaRt.offsetMin = new Vector2(12f, 2f);
+            areaRt.offsetMax = new Vector2(-12f, -2f);
+
+            var textGo = new GameObject("Text", typeof(RectTransform));
+            textGo.transform.SetParent(areaRt, false);
+            Stretch(textGo.transform as RectTransform);
+            TextMeshProUGUI text = UiFonts.CreateLabel(textGo, ItemFont + 4f);
+            text.color = Gold;
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.raycastTarget = false;
+
+            var phGo = new GameObject("Placeholder", typeof(RectTransform));
+            phGo.transform.SetParent(areaRt, false);
+            Stretch(phGo.transform as RectTransform);
+            TextMeshProUGUI placeholder = UiFonts.CreateLabel(phGo, ItemFont + 4f);
+            placeholder.color = new Color(Muted.r, Muted.g, Muted.b, 0.75f);
+            placeholder.alignment = TextAlignmentOptions.MidlineLeft;
+            placeholder.textWrappingMode = TextWrappingModes.NoWrap;
+            placeholder.fontStyle = FontStyles.Italic;
+            placeholder.raycastTarget = false;
+            placeholder.text = Loc.T("Search item...", "Item suchen...");
+
+            TMP_InputField input = go.GetComponent<TMP_InputField>();
+            input.textViewport = areaRt;
+            input.textComponent = text;
+            input.placeholder = placeholder;
+            input.targetGraphic = bg;
+            input.contentType = TMP_InputField.ContentType.Standard;
+            input.lineType = TMP_InputField.LineType.SingleLine;
+            input.characterLimit = 40;
+            input.SetTextWithoutNotify(_search ?? "");
+            input.onValueChanged.AddListener(OnSearchChanged);
+            _searchField = input;
+            go.SetActive(true);
+        }
+
+        /// <summary>Items of every category whose name contains the search text.</summary>
+        private static List<ItemCellData> SearchCells(string query, HashSet<int> selectedSet, HashSet<string> selectedItemSet)
+        {
+            var found = new List<KeyValuePair<string, ItemCellData>>();
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
+            string q = query.ToLowerInvariant();
+            bool elAll = selectedSet.Contains(DisplayFilters.EpicLootGroupId);
+            for (int i = 0; i < DisplayFilters.Choices.Length; i++)
+            {
+                int catId = DisplayFilters.Choices[i].Id;
+                if (DisplayFilters.IsEpicLootSubFilter(catId))
+                    continue;
+                List<string> items = DisplayFilters.SubItems(catId);
+                if (items == null)
+                    continue;
+                for (int s = 0; s < items.Count; s++)
+                {
+                    string shared = items[s];
+                    if (string.IsNullOrEmpty(shared) || !seen.Add(shared))
+                        continue;
+                    string label = DisplayFilters.ItemLabel(shared) ?? "";
+                    if (label.ToLowerInvariant().IndexOf(q, System.StringComparison.Ordinal) < 0
+                        && shared.ToLowerInvariant().IndexOf(q, System.StringComparison.Ordinal) < 0)
+                        continue;
+                    int parent = catId;
+                    if (catId == DisplayFilters.EpicLootGroupId)
+                    {
+                        int p = DisplayFilters.ParentFilterIdFromToken(shared);
+                        if (p > 0)
+                            parent = p;
+                    }
+                    string captured = shared;
+                    int capturedParent = parent;
+                    found.Add(new KeyValuePair<string, ItemCellData>(label, new ItemCellData
+                    {
+                        Label = label,
+                        On = selectedSet.Contains(parent) || selectedItemSet.Contains(shared)
+                            || (catId == DisplayFilters.EpicLootGroupId && elAll),
+                        Icon = ItemIcon(shared),
+                        Click = () => PickItem(captured, capturedParent)
+                    }));
+                }
+            }
+            found.Sort((a, b) => string.Compare(a.Key, b.Key, System.StringComparison.CurrentCultureIgnoreCase));
+            var cells = new List<ItemCellData>(found.Count);
+            for (int i = 0; i < found.Count; i++)
+                cells.Add(found[i].Value);
+            return cells;
         }
 
         private static void PlaceInsetBg(RectTransform panel, Sprite sprite, float padL, float padT, float padR, float padB)
@@ -493,7 +736,11 @@ namespace StoreAndCraft
                 return;
 
             var cells = new List<ItemCellData>();
-            if (_focusId == DisplayFilters.EpicLootGroupId)
+            if (!string.IsNullOrEmpty(_search))
+            {
+                cells = SearchCells(_search, selectedSet, selectedItemSet);
+            }
+            else if (_focusId == DisplayFilters.EpicLootGroupId)
             {
                 bool allOn = selectedSet.Contains(DisplayFilters.EpicLootGroupId);
                 cells.Add(new ItemCellData
@@ -597,7 +844,12 @@ namespace StoreAndCraft
 
             Sprite rowSp = focused ? UiAssets.RawCategoryFocus : UiAssets.RawCategory;
             Image rowImg = row.GetComponent<Image>();
-            if (rowSp != null)
+            Sprite vRow = V(focused ? "button_highlight" : "button");
+            if (vRow != null)
+            {
+                SetStyled(rowImg, vRow, Color.white);
+            }
+            else if (rowSp != null)
             {
                 rowImg.sprite = rowSp;
                 rowImg.type = Image.Type.Simple;
@@ -639,15 +891,13 @@ namespace StoreAndCraft
             tmp.color = focused || on ? Gold : Muted;
             tmp.text = label;
 
-            GameObject toggle = UiToggle.Create(
-                rt, "Toggle", on, true, onToggle, UiFonts.ThinNorse(),
-                ToggleW, ToggleH);
+            GameObject toggle = CreateToggle(rt, on, onToggle);
             RectTransform togRt = toggle.transform as RectTransform;
             togRt.anchorMin = new Vector2(1f, 0.5f);
             togRt.anchorMax = new Vector2(1f, 0.5f);
             togRt.pivot = new Vector2(1f, 0.5f);
             togRt.anchoredPosition = new Vector2(-28f, 0f);
-            togRt.sizeDelta = new Vector2(ToggleW, ToggleH);
+            togRt.sizeDelta = ToggleSize();
             Image togImg = toggle.GetComponent<Image>();
             if (togImg != null)
                 togImg.preserveAspect = true;
@@ -683,12 +933,38 @@ namespace StoreAndCraft
             rt.anchoredPosition = new Vector2(
                 ItemContentPadL + col * (ItemCellW + ItemGapX),
                 -(ItemContentPadT + row * (ItemCellH + ItemGapY)));
-            ApplySprite(go.GetComponent<Image>(), UiAssets.ItemCell, Color.white);
+            Sprite vCell = V(data.On ? "button_highlight" : "button_small");
             Image cellImg = go.GetComponent<Image>();
-            if (cellImg != null && cellImg.sprite != null)
+            bool wholeCellClick = vCell != null;
+            if (vCell != null)
             {
-                cellImg.type = Image.Type.Simple;
-                cellImg.preserveAspect = false;
+                SetStyled(cellImg, vCell, Color.white);
+                // Lighter tile so the wood shows through; selected stays a bit stronger.
+                cellImg.color = new Color(1f, 1f, 1f, data.On ? 0.75f : 0.45f);
+                cellImg.raycastTarget = true;
+
+                // Vanilla look: the whole tile is the switch (no checkbox on the edge).
+                Button cellBtn = go.AddComponent<Button>();
+                cellBtn.targetGraphic = cellImg;
+                cellBtn.transition = Selectable.Transition.ColorTint;
+                ColorBlock colors = cellBtn.colors;
+                colors.normalColor = new Color(0.9f, 0.9f, 0.9f, 1f);
+                colors.highlightedColor = Color.white;
+                colors.pressedColor = new Color(0.75f, 0.75f, 0.75f, 1f);
+                colors.selectedColor = colors.normalColor;
+                colors.fadeDuration = 0.08f;
+                cellBtn.colors = colors;
+                if (data.Click != null)
+                    cellBtn.onClick.AddListener(data.Click);
+            }
+            else
+            {
+                ApplySprite(cellImg, UiAssets.ItemCell, Color.white);
+                if (cellImg != null && cellImg.sprite != null)
+                {
+                    cellImg.type = Image.Type.Simple;
+                    cellImg.preserveAspect = false;
+                }
             }
 
             // Icon top-center
@@ -707,6 +983,13 @@ namespace StoreAndCraft
                 iconImg.preserveAspect = true;
                 iconImg.raycastTarget = false;
                 iconImg.color = Color.white;
+                if (_vanillaStyle)
+                {
+                    // Soft drop shadow so icons lift off the lighter tile.
+                    Shadow shadow = iconGo.AddComponent<Shadow>();
+                    shadow.effectColor = new Color(0f, 0f, 0f, 0.55f);
+                    shadow.effectDistance = new Vector2(3f, -3f);
+                }
             }
 
             // Name under icon
@@ -715,7 +998,8 @@ namespace StoreAndCraft
             RectTransform labelRt = labelGo.transform as RectTransform;
             labelRt.anchorMin = new Vector2(0f, 0f);
             labelRt.anchorMax = new Vector2(1f, 1f);
-            labelRt.offsetMin = new Vector2(4f, ToggleH + 6f);
+            // No edge checkbox in the Vanilla look → the name may use the bottom strip too.
+            labelRt.offsetMin = new Vector2(4f, wholeCellClick ? 6f : ToggleH + 6f);
             labelRt.offsetMax = new Vector2(-4f, -50f);
             TextMeshProUGUI tmp = UiFonts.CreateLabel(labelGo, ItemFont);
             StyleLabel(tmp, ItemFont, LetterSpace * 0.7f);
@@ -726,16 +1010,17 @@ namespace StoreAndCraft
             tmp.color = data.On ? Gold : Muted;
             tmp.text = data.Label;
 
+            if (wholeCellClick)
+                return;
+
             // Toggle bottom-right (mockup)
-            GameObject toggle = UiToggle.Create(
-                rt, "Toggle", data.On, true, data.Click, UiFonts.ThinNorse(),
-                ToggleW, ToggleH);
+            GameObject toggle = CreateToggle(rt, data.On, data.Click);
             RectTransform togRt = toggle.transform as RectTransform;
             togRt.anchorMin = new Vector2(1f, 0f);
             togRt.anchorMax = new Vector2(1f, 0f);
             togRt.pivot = new Vector2(1f, 0f);
             togRt.anchoredPosition = new Vector2(-6f, 6f);
-            togRt.sizeDelta = new Vector2(ToggleW, ToggleH);
+            togRt.sizeDelta = ToggleSize();
             Image togImg = toggle.GetComponent<Image>();
             if (togImg != null)
                 togImg.preserveAspect = true;

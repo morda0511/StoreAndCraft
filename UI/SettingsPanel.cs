@@ -618,8 +618,9 @@ namespace StoreAndCraft
         /// <summary>
         /// Vanilla UI sprite by name (same names Jotunn's GUIManager uses). Scans once and
         /// again only while something is still missing. Null = not found → caller falls back.
+        /// Also used by DisplayTypeMenu's Vanilla style.
         /// </summary>
-        private static Sprite Vanilla(string name)
+        internal static Sprite Vanilla(string name)
         {
             Sprite sprite;
             if (VanillaSprites.TryGetValue(name, out sprite) && sprite != null)
@@ -722,12 +723,14 @@ namespace StoreAndCraft
     }
 
     // Vanilla treats TextInput as open: cursor free, no player input, Escape does not open the menu.
+    // Also while the storage-display filter menu is open: PlayerController.TakeInput only honours
+    // InventoryGui.IsVisible with a gamepad, so keyboard movement / hotkeys leaked through.
     [HarmonyPatch(typeof(TextInput), nameof(TextInput.IsVisible))]
     internal static class SettingsPanelTextInputPatch
     {
         private static void Postfix(ref bool __result)
         {
-            if (SettingsPanel.BlocksInput)
+            if (SettingsPanel.BlocksInput || DisplayTypeMenu.IsOpen)
                 __result = true;
         }
     }
@@ -738,7 +741,7 @@ namespace StoreAndCraft
     {
         private static void Postfix(ref float __result)
         {
-            if (SettingsPanel.BlocksInput)
+            if (SettingsPanel.BlocksInput || DisplayTypeMenu.IsOpen)
                 __result = 0f;
         }
     }

@@ -40,6 +40,7 @@ namespace StoreAndCraft
         public ConfigEntry<KeyboardShortcut> AutoDropKey { get; }
         public ConfigEntry<KeyboardShortcut> ActivityLogKey { get; }
         public ConfigEntry<bool> ActivityLogVisible { get; }
+        public ConfigEntry<string> DisplayMenuStyle { get; }
         public ConfigEntry<KeyboardShortcut> DisplayRangeKey { get; }
         public ConfigEntry<KeyboardShortcut> BuildGrabKey { get; }
         public ConfigEntry<bool> FeedTroughEnabled { get; }
@@ -116,6 +117,10 @@ namespace StoreAndCraft
                 ActivityLogKey.Value = new KeyboardShortcut(KeyCode.F10);
             ActivityLogVisible = file.Bind("4 - Keys", "ActivityLogVisible", false,
                 "Remember whether the activity log is shown. Local only, not synced. Changed by the F10 panel checkbox.");
+            DisplayMenuStyle = file.Bind("4 - Keys", "DisplayMenuStyle", "Classic", new ConfigDescription(
+                "Look of the Storage Display filter menu (E on a display): Classic = SAC artwork, "
+                + "Vanilla = Valheim's own panels, buttons and checkboxes. Local only, not synced. Reopen the menu to see it.",
+                new AcceptableValueList<string>("Classic", "Vanilla")));
             DisplayRangeKey = file.Bind("4 - Keys", "DisplayRangeKey", new KeyboardShortcut(KeyCode.R, KeyCode.LeftAlt),
                 "Look at a Storage Display and press to set that board's chest-scan range (5–50 m). Per display.");
             BuildGrabKey = file.Bind("4 - Keys", "BuildGrabKey", new KeyboardShortcut(KeyCode.C),

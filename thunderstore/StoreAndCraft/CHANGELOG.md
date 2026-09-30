@@ -5,6 +5,8 @@
 ### NEW FEATURES
 - Carved storage displays in the hammer (Storage tab): new wooden board models for small, medium and large displays
 - Large carved display shows each selected category in its own area with the category name above its items. **Shift+RMB** switches between layouts (Categories / Big / All), then Classic / Compact as before
+- Small carved display (upright) can show categories too: **E** picks categories, **Shift+RMB** switches layouts, hotbar **1-8** still adds a single item
+- Search box in the Storage Display filter menu (**E**): type a name to find items from every category
 - Optional catch-up while away (`CatchUpWhileAway`, off by default): smelters, kilns etc. with auto-fill (B) and auto-store (N) finish the time their area was unloaded once you come back (max `CatchUpMaxHours`)
 - Torches can start with auto-fill on (`TorchAutoFillDefault`, off by default, checkbox in F10 or `/torchautofill on|off`). **B** on a torch still turns it off
 - Manual-fill chests: type `[M]` at the start of a chest name. Dump, ground pickup and auto-store no longer put items into it, stations and crafting can still take from it. Works with links, e.g. `[M] [l3] Wood`
@@ -12,6 +14,7 @@
 
 ### UI IMPROVEMENTS
 - F10 settings panel rebuilt in the Valheim look (wood panel, vanilla buttons and checkboxes). Checked boxes show a clear yellow tick, and scrolling moves much further per wheel step
+- Optional Valheim look for the Storage Display filter menu: set `DisplayMenuStyle = Vanilla` in the config (vanilla panels and buttons, click the whole item tile to select it)
 - Sorting moved from the **R** key to the new **Sort** button (R is free again)
 - Activity log on/off is remembered
 
@@ -21,6 +24,7 @@
 - Epic Loot items are no longer sent into another player's chest (their magic data could be lost)
 - Carved display items sat at the wooden foot, were mirrored and counts were invisible — they now sit on the board, readable, with counts
 - Removed an error in the log (NullReferenceException in WearNTear.UpdateBiome) caused by storage displays
+- The character no longer walks around (and hotkeys no longer fire) while the Storage Display filter menu is open
 
 **Beta:** needs the same version on server and all clients (network protocol changed).
 

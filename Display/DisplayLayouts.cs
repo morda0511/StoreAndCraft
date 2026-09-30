@@ -75,6 +75,8 @@ namespace StoreAndCraft
             CacheWrite.Remove(visualId);
             _generation++;
             StorageDisplayBoard.RebuildVisual(visualId);
+            // Hammer template + placement ghost too, so snaps / collider apply to new pieces.
+            DisplayPrefab.RefreshTemplates(visualId);
             return true;
         }
 

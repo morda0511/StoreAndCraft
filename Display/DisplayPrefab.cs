@@ -242,6 +242,46 @@ namespace StoreAndCraft
         }
 
         /// <summary>
+        /// PrefabStudio preview only: re-apply collider / snap / ItemGrid layout on the hammer
+        /// templates of this visual (same Ensure path as registration), then rebuild the
+        /// placement ghost so a new piece uses the new snaps / collider right away.
+        /// </summary>
+        internal static void RefreshTemplates(string visualId)
+        {
+            if (string.IsNullOrEmpty(visualId))
+                return;
+            bool any = false;
+            for (int i = 0; i < AllPrefabs.Count; i++)
+            {
+                GameObject prefab = AllPrefabs[i];
+                StorageDisplayBoard board = prefab != null ? prefab.GetComponent<StorageDisplayBoard>() : null;
+                if (board == null
+                    || !string.Equals(board.CurrentVisualId(), visualId, System.StringComparison.OrdinalIgnoreCase))
+                    continue;
+                board.AppliedLayoutGen = 0;
+                DisplayVisual.Ensure(board, templateMeshOnly: false);
+                any = true;
+            }
+            if (!any)
+                return;
+
+            // Player.SetupPlacementGhost is private; it re-instantiates the ghost from the
+            // selected (now updated) prefab. Harmless when nothing is selected.
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return;
+            try
+            {
+                System.Reflection.MethodInfo setup = HarmonyLib.AccessTools.Method(typeof(Player), "SetupPlacementGhost");
+                setup?.Invoke(player, null);
+            }
+            catch (System.Exception ex)
+            {
+                Plugin.Log.LogDebug("Display preview: placement ghost refresh skipped: " + ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Large/Medium signs scale into full walls. Keep solid colliders (placement needs them)
         /// but shrink depth so they are harder to stand on / use as traps.
         /// Do not use triggers — that breaks PlacePiece (mats eaten, nothing built).

@@ -103,6 +103,7 @@ namespace StoreAndCraft
         public const string ZdoLayoutVariantKey = "sac_ui_layout_var";
         private SectionUi[] _sections;
         private int _builtVariant = int.MinValue;
+        private bool _buildingSections;
 
         public DisplayKind Kind
         {
@@ -293,6 +294,16 @@ namespace StoreAndCraft
         /// </summary>
         public void CycleLayoutMode()
         {
+            if (_kind == DisplayKind.Small)
+            {
+                // Small has no Classic/Compact mesh swap — only step through its v2 layouts.
+                int smallCount = UsesSections() ? DisplayLayouts.LayoutCount(CurrentVisualId()) : 0;
+                if (smallCount < 2)
+                    return;
+                SetLayoutVariant((LayoutVariant() + 1) % smallCount);
+                RebuildUiNow();
+                return;
+            }
             if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
                 return;
             int count = DisplayLayouts.LayoutCount(CurrentVisualId());
@@ -328,8 +339,8 @@ namespace StoreAndCraft
         /// <summary>v2 definition (layouts/sections) drives this board's face.</summary>
         private bool UsesSections()
         {
-            return _kind != DisplayKind.Small
-                && !string.IsNullOrEmpty(VisualBase)
+            // Also carved Small boards: with v2 layouts they show categories like Large.
+            return !string.IsNullOrEmpty(VisualBase)
                 && DisplayLayouts.HasSections(CurrentVisualId());
         }
 
@@ -466,7 +477,8 @@ namespace StoreAndCraft
             StorageDisplayBoard board = HoveredBoard();
             if (board == null)
                 return false;
-            if (board.Kind != DisplayKind.Medium && board.Kind != DisplayKind.Large)
+            if (board.Kind != DisplayKind.Medium && board.Kind != DisplayKind.Large
+                && !(board.Kind == DisplayKind.Small && board.UsesSections()))
                 return false;
 
             if (!PrivateArea.CheckAccess(board.transform.position, 0f, false, true))
@@ -779,7 +791,16 @@ namespace StoreAndCraft
         private void ApplyScaleToLayout()
         {
             if (_kind == DisplayKind.Small)
+            {
+                // Back from a v2 sections chassis (editor preview) → the one-slot Small chassis.
+                if (!UsesSections())
+                {
+                    _slotCount = 1;
+                    _columns = 1;
+                    _rows = 1;
+                }
                 return;
+            }
 
             // v2 definition: sections size themselves in BuildSectionsUi.
             if (UsesSections())
@@ -971,6 +992,12 @@ namespace StoreAndCraft
                 string head = string.IsNullOrEmpty(token)
                     ? BoardTitle()
                     : BoardTitle() + " (" + ItemLabel(token) + ")";
+                if (UsesSections())
+                {
+                    string sLayout = "[<color=yellow><b>Shift+RMB</b></color>] " + FormatHoverLayoutLine();
+                    string sUse = "[<color=yellow><b>E</b></color>] " + Loc.T("Select type", "Typ wählen");
+                    return head + "\n" + sLayout + "\n" + rangeLine + "\n" + sUse + "\n" + hotbar;
+                }
                 return head + "\n" + modeLine + "\n" + rangeLine + "\n" + hotbar;
             }
 
@@ -1350,6 +1377,8 @@ namespace StoreAndCraft
             {
                 if (alt)
                     DisplaySmallOptions.Open(this);
+                else if (UsesSections())
+                    DisplayTypeMenu.Open(this); // v2 layouts: pick categories like Large
                 return true;
             }
 
@@ -1373,6 +1402,9 @@ namespace StoreAndCraft
                 needsRebuild = true;
             // v2 sections have their own chassis (no band labels / single grid).
             bool sections = _slots != null && UsesSections();
+            // Small boards with v2 layouts switch layouts too (Shift+RMB).
+            if (sections && _kind == DisplayKind.Small && LayoutVariant() != _builtVariant)
+                needsRebuild = true;
             // Definition switched between v2 and older chassis (editor preview / file change).
             if (_slots != null && sections != (_sections != null))
                 needsRebuild = true;
@@ -1409,7 +1441,7 @@ namespace StoreAndCraft
             {
                 needsRebuild = true;
             }
-            if (_slots != null && _kind == DisplayKind.Small && _slots.Length == 1
+            if (_slots != null && _kind == DisplayKind.Small && _sections == null && _slots.Length == 1
                 && (_slots[0].Name == null
                     || (_slots[0].Amount != null && _slots[0].Amount.fontSize < 1f)))
                 needsRebuild = true;
@@ -1934,6 +1966,24 @@ namespace StoreAndCraft
             _gridRoot = null;
 
             int idx = 0;
+            _buildingSections = true;
+            try
+            {
+                BuildSectionCells(template, defs, container.transform, uiScale, ref idx);
+            }
+            finally
+            {
+                _buildingSections = false;
+            }
+
+            Plugin.Log.LogInfo("Display sections UI id=" + CurrentVisualId()
+                + " layout=" + layout.name + " sections=" + defs.Length + " cells=" + total
+                + " source=" + DisplayLayouts.SourceLabel);
+        }
+
+        private void BuildSectionCells(
+            TextMeshProUGUI template, DisplayLayouts.SectionDef[] defs, Transform container, float uiScale, ref int idx)
+        {
             for (int k = 0; k < defs.Length; k++)
             {
                 DisplayLayouts.SectionDef def = defs[k];
@@ -1948,7 +1998,7 @@ namespace StoreAndCraft
                 int rows = Mathf.Max(1, g.rows);
                 float wM = cols * g.spacingX;
                 float hM = rows * g.spacingY;
-                RectTransform gridRt = NewSectionCanvas(container.transform, "Grid_" + k, g.offset, g.euler, wM, hM, uiScale);
+                RectTransform gridRt = NewSectionCanvas(container, "Grid_" + k, g.offset, g.euler, wM, hM, uiScale);
 
                 // CreateSlotCell / LayoutSlotPair measure against the current board size.
                 _boardW = wM / uiScale;
@@ -1971,14 +2021,10 @@ namespace StoreAndCraft
                 }
 
                 TextMeshProUGUI label = def.label != null && def.label.enabled
-                    ? CreateSectionLabel(container.transform, template, k, def.label, uiScale)
+                    ? CreateSectionLabel(container, template, k, def.label, uiScale)
                     : null;
                 _sections[k] = new SectionUi { Def = def, Start = start, Count = idx - start, Label = label };
             }
-
-            Plugin.Log.LogInfo("Display sections UI id=" + CurrentVisualId()
-                + " layout=" + layout.name + " sections=" + defs.Length + " cells=" + total
-                + " source=" + DisplayLayouts.SourceLabel);
         }
 
         private static void DestroyOldCanvas(Transform parent)
@@ -2189,7 +2235,9 @@ namespace StoreAndCraft
             float cellWFrac = Mathf.Max(0.001f, (x1 - x0) - 2f * padX);
             float cellHFrac = Mathf.Max(0.001f, (y1 - y0) - 2f * padY);
             SlotPairLayout pair = default(SlotPairLayout);
-            if (_kind != DisplayKind.Small)
+            // v2 section cells use the icon+count pair on every board size (also Small).
+            bool smallCell = _kind == DisplayKind.Small && !_buildingSections;
+            if (!smallCell)
             {
                 pair = LayoutSlotPair(cellWFrac, cellHFrac, font);
                 _slotFont = pair.FontSize;
@@ -2209,7 +2257,7 @@ namespace StoreAndCraft
             textGo.SetActive(true);
             textGo.transform.SetAsLastSibling();
             RectTransform textRt = textGo.GetComponent<RectTransform>();
-            if (_kind == DisplayKind.Small)
+            if (smallCell)
             {
                 // Filled in by LayoutSmallIconAndLabels after name exists.
             }
@@ -2237,7 +2285,7 @@ namespace StoreAndCraft
             amount.textWrappingMode = TextWrappingModes.NoWrap;
             amount.overflowMode = TextOverflowModes.Overflow;
             amount.enableAutoSizing = false;
-            amount.fontSize = _kind == DisplayKind.Small
+            amount.fontSize = smallCell
                 ? Mathf.Max(font, template.fontSize * 0.30f)
                 : pair.FontSize;
             amount.color = new Color(1f, 0.95f, 0.75f, 1f);
@@ -2248,7 +2296,7 @@ namespace StoreAndCraft
 
             TextMeshProUGUI nameLabel = null;
             RectTransform nameRt = null;
-            if (_kind == DisplayKind.Small)
+            if (smallCell)
             {
                 GameObject nameGo = Object.Instantiate(template.gameObject, cell.transform);
                 nameGo.name = "ItemName";
@@ -2593,7 +2641,7 @@ namespace StoreAndCraft
             ApplyTitle();
             ClearHeaders();
 
-            if (_kind == DisplayKind.Small)
+            if (_kind == DisplayKind.Small && _sections == null)
             {
                 PaintExactItem();
                 return;
@@ -2601,6 +2649,13 @@ namespace StoreAndCraft
 
             List<int> filters = FilterIds();
             List<string> itemTokens = ItemTokens();
+            // Small with v2 sections: the hotbar item (1-8) counts as one more selected item.
+            if (_kind == DisplayKind.Small)
+            {
+                string hotbar = ItemToken();
+                if (!string.IsNullOrEmpty(hotbar) && !itemTokens.Contains(hotbar))
+                    itemTokens.Add(hotbar);
+            }
             if (filters.Count == 0 && itemTokens.Count == 0)
             {
                 for (int i = 0; i < _slotCount; i++)

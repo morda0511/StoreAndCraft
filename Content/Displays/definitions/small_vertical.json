@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "prefabId": "small_vertical",
+  "model": {
+    "localScale": { "x": 1, "y": 1, "z": 1 }
+  },
+  "itemGrid": {
+    "enabled": true,
+    "columns": 3,
+    "rows": 3,
+    "spacingX": 0.27,
+    "spacingY": 0.34,
+    "offsetX": 0.06,
+    "offsetY": 0.59,
+    "offsetZ": -0.04,
+    "cellSize": 0.23,
+    "euler": { "x": 0, "y": 0, "z": 0 }
+  },
+  "layouts": [
+    {
+      "name": "Standard",
+      "sections": [
+        {
+          "id": "Alles",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 5, "rows": 4, "spacingX": 0.18, "spacingY": 0.23, "offsetX": 0.06, "offsetY": 0.51, "offsetZ": -0.04, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.05, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.81, "height": 0.28, "fontSize": 0.17, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Layout 2",
+      "sections": [
+        {
+          "id": "Bereich 1",
+          "category": "1",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "0",
+          "amountColor": "",
+          "grid": { "columns": 1, "rows": 1, "spacingX": 0.87, "spacingY": 1.07, "offsetX": 0.05, "offsetY": 0.62, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 4.75, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 2.87, "height": 0.28, "fontSize": 0.17, "align": "left", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    }
+  ],
+  "colliders": [
+    {
+      "id": "BoxCollider_0",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0.05, "y": 0.7, "z": -0.05 },
+      "size": { "x": 1.1, "y": 1.22, "z": 0.14 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    }
+  ],
+  "snapPoints": [
+    {
+      "id": "SnapPoint_0",
+      "enabled": true,
+      "localPosition": { "x": 0.44, "y": 1.9, "z": -0.05 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "id": "SnapPoint_1",
+      "enabled": true,
+      "localPosition": { "x": -0.3, "y": 1.93, "z": 0 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    }
+  ]
+}
