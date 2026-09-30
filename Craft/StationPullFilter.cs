@@ -34,6 +34,65 @@ namespace StoreAndCraft
             return HoveredComponent<Fireplace>();
         }
 
+        /// <summary>SAC feed trough under the crosshair (its Container), or null.</summary>
+        public static Container HoveredTrough()
+        {
+            FeedTrough trough = HoveredComponent<FeedTrough>();
+            return trough != null ? trough.GetComponent<Container>() : null;
+        }
+
+        // Fermenter: same ZDO deny-list, choices = mead bases this fermenter converts.
+        public static List<string> MeadChoices(Fermenter fermenter)
+        {
+            return FermenterInteractPatch.MeadNames(fermenter);
+        }
+
+        public static List<string> AllowedMeadNames(Fermenter fermenter)
+        {
+            return FilterAllowed(MeadChoices(fermenter), ReadDenied(View(fermenter)));
+        }
+
+        public static bool IsAllowed(Fermenter fermenter, string shared)
+        {
+            return !IsDenied(View(fermenter), shared);
+        }
+
+        public static void SetDenied(Fermenter fermenter, string shared, bool denied)
+        {
+            SetDenied(View(fermenter), shared, denied);
+        }
+
+        public static void Clear(Fermenter fermenter)
+        {
+            Clear(View(fermenter));
+        }
+
+        // Feed trough: same ZDO deny-list, choices = foods tameable animals eat.
+        public static List<string> TroughFoodChoices()
+        {
+            return FeedTroughFoods.All();
+        }
+
+        public static List<string> AllowedTroughFoods(Container trough)
+        {
+            return FilterAllowed(TroughFoodChoices(), ReadDenied(View(trough)));
+        }
+
+        public static bool IsAllowed(Container trough, string shared)
+        {
+            return !IsDenied(View(trough), shared);
+        }
+
+        public static void SetDenied(Container trough, string shared, bool denied)
+        {
+            SetDenied(View(trough), shared, denied);
+        }
+
+        public static void Clear(Container trough)
+        {
+            Clear(View(trough));
+        }
+
         private static T HoveredComponent<T>() where T : Component
         {
             Player player = Player.m_localPlayer;
@@ -213,6 +272,19 @@ namespace StoreAndCraft
                     return true;
                 }
                 StationFilterMenu.Open(fermenter);
+                return true;
+            }
+
+            // Feed trough: food filter + link + auto-fill instead of chest settings.
+            Container trough = HoveredTrough();
+            if (trough != null)
+            {
+                if (!PrivateArea.CheckAccess(trough.transform.position, 0f, false, true))
+                {
+                    player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                    return true;
+                }
+                StationFilterMenu.Open(trough);
                 return true;
             }
 

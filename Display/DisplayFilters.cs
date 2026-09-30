@@ -828,6 +828,19 @@ namespace StoreAndCraft
             return string.Compare(ItemLabel(a), ItemLabel(b), System.StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// Filter menus list only items the local player has discovered (vanilla known materials:
+        /// picked up / crafted), so new players do not see late-game items. No player or no-cost
+        /// cheat (admin creative) → everything.
+        /// </summary>
+        public static bool IsKnownToPlayer(string shared)
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null || string.IsNullOrEmpty(shared) || player.NoCostCheat())
+                return true;
+            return player.IsMaterialKnown(shared);
+        }
+
         public static string ItemLabel(string shared)
         {
             if (string.IsNullOrEmpty(shared))

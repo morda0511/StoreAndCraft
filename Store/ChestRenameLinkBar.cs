@@ -8,7 +8,7 @@ using UnityEngine.UI;
 namespace StoreAndCraft
 {
     /// <summary>
-    /// Rename-chest extras: Ignore / Show-on-display toggles + l1–l9 link grid.
+    /// Rename-chest extras: Ignore / Manual fill / Show-on-display toggles + l1–l9 link grid.
     /// </summary>
     internal static class ChestRenameLinkBar
     {
@@ -20,6 +20,7 @@ namespace StoreAndCraft
 
         private static GameObject _ignoreToggle;
         private static GameObject _showToggle;
+        private static GameObject _manualToggle;
         private static GameObject _linkGrid;
         private static TMP_FontAsset _font;
         private static Container _chest;
@@ -47,6 +48,7 @@ namespace StoreAndCraft
             bool showOnDisplay = ChestNames.IsHiddenName(current);
             int linkId = StationLink.ParseFromName(current);
             bool showOk = ignore;
+            bool manual = ChestNames.IsManualFillName(current);
 
             // Ignore — always clickable (clears link if one is set)
             var ignoreBlock = new GameObject("SAC_IgnoreBlock", typeof(RectTransform));
@@ -69,6 +71,28 @@ namespace StoreAndCraft
                 UiToggle.CompactWidth,
                 UiToggle.CompactHeight);
             PlaceToggle(_ignoreToggle, new Vector2(0f, -16f));
+
+            // Manual fill [M] — right of Ignore. Works together with a link ([M] stays first).
+            var manualBlock = new GameObject("SAC_ManualBlock", typeof(RectTransform));
+            manualBlock.transform.SetParent(panel.transform, false);
+            RectTransform manualRt = manualBlock.transform as RectTransform;
+            manualRt.anchorMin = new Vector2(0f, 1f);
+            manualRt.anchorMax = new Vector2(0f, 1f);
+            manualRt.pivot = new Vector2(0f, 1f);
+            manualRt.anchoredPosition = new Vector2(10f + UiToggle.CompactWidth + 18f, -6f);
+            manualRt.sizeDelta = new Vector2(UiToggle.CompactWidth + 8f, UiToggle.CompactHeight + 20f);
+            Owned.Add(manualBlock);
+            AddLabel(manualRt, Loc.T("Manual fill", "Manuell befüllen"), new Vector2(0f, -1f));
+            _manualToggle = UiToggle.Create(
+                manualRt,
+                "SAC_ManualToggle",
+                manual,
+                true,
+                OnManualClicked,
+                _font,
+                UiToggle.CompactWidth,
+                UiToggle.CompactHeight);
+            PlaceToggle(_manualToggle, new Vector2(0f, -16f));
 
             // Show on display — only when Ignore is on
             var showBlock = new GameObject("SAC_ShowBlock", typeof(RectTransform));
@@ -107,6 +131,7 @@ namespace StoreAndCraft
         {
             _ignoreToggle = null;
             _showToggle = null;
+            _manualToggle = null;
             _linkGrid = null;
             _chest = null;
             for (int i = 0; i < Owned.Count; i++)
@@ -133,6 +158,8 @@ namespace StoreAndCraft
                 rt.pivot = new Vector2(0f, 1f);
             }
             rt.anchoredPosition = anchored;
+            // Pivot moved the drawn checkbox to the edge — keep the yellow tick on it.
+            UiToggle.RefreshMarker(toggle);
         }
 
         private static void AddLabel(RectTransform parent, string text, Vector2 pos, bool fromRight = false)
@@ -190,6 +217,28 @@ namespace StoreAndCraft
             RefreshLinks();
         }
 
+        /// <summary>
+        /// [M] on: clears Ignore / Show ([I]/[H] are incompatible) and puts [M] first, before a
+        /// link tag ([M] [l3] Wood). [M] off: only the prefix goes, the link stays.
+        /// </summary>
+        private static void OnManualClicked()
+        {
+            string current = ReadFieldText();
+            string next;
+            if (ChestNames.IsManualFillName(current))
+            {
+                next = ChestNames.StripManualPrefix(current).Trim();
+            }
+            else
+            {
+                string work = ChestNames.StripManualPrefix(ChestNames.ApplyIgnoreFlags(current, false, false));
+                next = (ChestNames.ManualPrefix + (string.IsNullOrEmpty(work) ? "" : " " + work)).Trim();
+            }
+            WriteFieldText(next);
+            RefreshToggles();
+            RefreshLinks();
+        }
+
         private static string FallbackName()
         {
             return ChestNames.LocalizedVanillaName(_chest);
@@ -215,6 +264,7 @@ namespace StoreAndCraft
             bool show = ChestNames.IsHiddenName(current);
             UiToggle.SetState(_ignoreToggle, ignore, true);
             UiToggle.SetState(_showToggle, show, ignore);
+            UiToggle.SetState(_manualToggle, ChestNames.IsManualFillName(current), true);
         }
 
         private static void RefreshLinks()

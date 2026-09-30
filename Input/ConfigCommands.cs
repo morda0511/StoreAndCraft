@@ -372,7 +372,7 @@ namespace StoreAndCraft
             }
 
             // SAC-CATCHUP: on/off switch rides the same admin path as the ranges.
-            if (key == "catchup" || key == "torchautofill")
+            if (key == "catchup" || key == "torchautofill" || BoolEntryFor(key) != null)
             {
                 string t = valueToken.ToLowerInvariant();
                 if (t == "on" || t == "true" || t == "enable")
@@ -411,10 +411,36 @@ namespace StoreAndCraft
                 return true;
             }
 
+            // F10 on/off switches for the other synced gameplay settings (same admin path).
+            ConfigEntry<bool> boolEntry = BoolEntryFor(key);
+            if (boolEntry != null)
+            {
+                bool on = value >= 0.5f;
+                boolEntry.Value = on;
+                // /store enable|disable is a session override — the saved value must win again.
+                if (key == "autointake")
+                    _sessionAutoIntake = null;
+                message = boolEntry.Definition.Key + " = " + (on ? "on" : "off") + " (saved + synced)";
+                ActivityLog.Note(Loc.T("Config", "Config"), message);
+                return true;
+            }
+
             if (key == "catchuphours" && (value < 0.5f || value > 48f))
             {
                 message = "Catch-up hours must be between 0.5 and 48.";
                 return false;
+            }
+
+            if (IsStationCapKey(key))
+            {
+                float min = key == "fermenterbatch" ? 1f : 0f;
+                if (value < min || value > ModConfig.MaxStationCap)
+                {
+                    message = "Station capacity must be between " + min.ToString("0", CultureInfo.InvariantCulture)
+                        + " and " + ModConfig.MaxStationCap.ToString("0", CultureInfo.InvariantCulture) + ".";
+                    return false;
+                }
+                value = Mathf.Round(value);
             }
 
             if (value < 0f || value > ModConfig.MaxRange)
@@ -447,7 +473,8 @@ namespace StoreAndCraft
 
             if (cmd == "storerange" || cmd == "dumprange" || cmd == "craftrange" || cmd == "storagerange" || cmd == "autofillrange"
                 || cmd == "autofillchestrange" || cmd == "displayrange" || cmd == "feedtroughrange"
-                || cmd == "catchup" || cmd == "catchuphours" || cmd == "torchautofill")
+                || cmd == "catchup" || cmd == "catchuphours" || cmd == "torchautofill"
+                || BoolEntryFor(cmd) != null)
             {
                 if (parts.Length < 2)
                     return false;
@@ -488,6 +515,47 @@ namespace StoreAndCraft
             return false;
         }
 
+        /// <summary>
+        /// Synced on/off settings the F10 panel can switch (admin path). ModEnabled / LockConfig
+        /// are left out on purpose: ModEnabled off also disables the F10 key (lock-out).
+        /// catchup / torchautofill keep their own branches above.
+        /// </summary>
+        internal static ConfigEntry<bool> BoolEntryFor(string key)
+        {
+            if (Plugin.Settings == null || string.IsNullOrEmpty(key))
+                return null;
+            switch (key.ToLowerInvariant())
+            {
+                case "storeenabled": return Plugin.Settings.StoreEnabled;
+                case "autointake": return Plugin.Settings.AutoIntakeEnabled;
+                case "musthaveexisting": return Plugin.Settings.MustHaveExisting;
+                case "autostack": return Plugin.Settings.AutoStackEnabled;
+                case "craftenabled": return Plugin.Settings.CraftEnabled;
+                case "leaveone": return Plugin.Settings.LeaveOneItem;
+                case "feedtroughenabled": return Plugin.Settings.FeedTroughEnabled;
+                default: return null;
+            }
+        }
+
+        private static bool IsStationCapKey(string key)
+        {
+            switch (key)
+            {
+                case "kilnmax":
+                case "smeltermaxore":
+                case "smeltermaxfuel":
+                case "blastmaxore":
+                case "blastmaxfuel":
+                case "eitrmaxore":
+                case "eitrmaxfuel":
+                case "beehivemax":
+                case "fermenterbatch":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         internal static ConfigEntry<float> EntryFor(string key)
         {
             switch (key.ToLowerInvariant())
@@ -510,6 +578,25 @@ namespace StoreAndCraft
                     return Plugin.Settings.FeedTroughRange;
                 case "catchuphours":
                     return Plugin.Settings.CatchUpMaxHours;
+                // Station capacities (0 = vanilla) + fermenter batch.
+                case "kilnmax":
+                    return Plugin.Settings.KilnMaxWood;
+                case "smeltermaxore":
+                    return Plugin.Settings.SmelterMaxOre;
+                case "smeltermaxfuel":
+                    return Plugin.Settings.SmelterMaxCoal;
+                case "blastmaxore":
+                    return Plugin.Settings.BlastFurnaceMaxOre;
+                case "blastmaxfuel":
+                    return Plugin.Settings.BlastFurnaceMaxCoal;
+                case "eitrmaxore":
+                    return Plugin.Settings.EitrRefineryMaxInput;
+                case "eitrmaxfuel":
+                    return Plugin.Settings.EitrRefineryMaxSap;
+                case "beehivemax":
+                    return Plugin.Settings.BeehiveMaxHoney;
+                case "fermenterbatch":
+                    return Plugin.Settings.FermenterBatch;
                 default:
                     return null;
             }

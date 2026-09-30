@@ -405,7 +405,8 @@ namespace StoreAndCraft
                 if (string.IsNullOrEmpty(shared))
                     continue;
 
-                for (int s = 0; s < BaitOffsets.Length; s++)
+                int baitCount = BaitCount();
+                for (int s = 0; s < baitCount; s++)
                 {
                     string key = BaitKey(shared, s);
                     wanted.Add(key);
@@ -453,9 +454,7 @@ namespace StoreAndCraft
         private ItemDrop CreateBait(ItemDrop.ItemData stack, int side, string key)
         {
             EnsureEatRoot();
-            Vector3 offset = side >= 0 && side < BaitOffsets.Length
-                ? BaitOffsets[side]
-                : Vector3.zero;
+            Vector3 offset = BaitOffset(side);
 
             var go = new GameObject(BaitRootName);
             go.SetActive(false);
@@ -520,11 +519,105 @@ namespace StoreAndCraft
             _eatRoot = hit != null ? hit : transform;
         }
 
+        /// <summary>Trough has any food (auto-fill only refills an empty trough).</summary>
+        internal bool HasFood => _hasFood;
+
         private void SetHasFood(bool has)
         {
+            bool becameEmpty = _hasFood && !has;
             _hasFood = has;
             if (!has)
                 HideVisual();
+            ApplyModelState(has);
+            // Just ran empty: ask auto-fill once (it does not poll troughs that still have food).
+            if (becameEmpty && Placed() && Plugin.Settings != null && Plugin.Settings.FeedTroughEnabled.Value)
+                StationAutoFill.NudgeIfNeedy(_container);
+        }
+
+        private GameObject _modelEmpty;
+        private GameObject _modelFull;
+        private bool _modelsLooked;
+        private int _modelState = -1;
+
+        /// <summary>Unity trough model: show the "full" variant while there is food (SetActive only).</summary>
+        private void ApplyModelState(bool full)
+        {
+            if (!_modelsLooked)
+            {
+                _modelsLooked = true;
+                Transform e = transform.Find(FeedTroughPrefab.ModelEmptyName);
+                Transform f = transform.Find(FeedTroughPrefab.ModelFullName);
+                _modelEmpty = e != null ? e.gameObject : null;
+                _modelFull = f != null ? f.gameObject : null;
+            }
+            if (_modelEmpty == null || _modelFull == null)
+                return;
+            int state = full ? 1 : 0;
+            if (state == _modelState)
+                return;
+            _modelState = state;
+            _modelFull.SetActive(full);
+            _modelEmpty.SetActive(!full);
+        }
+
+        /// <summary>
+        /// Eat point for one side, fitted to the SacTroughHit box: 0.40 m beside the long sides,
+        /// 0.05 m past the ends (same numbers the bed trough's 0.9 × 2.2 box gives BaitOffsets).
+        /// </summary>
+        private static List<Vector3> _defPoints;
+        private static int _defPointsGen = -1;
+
+        /// <summary>Eat points from feed_trough.json (PrefabStudio), cached per definition generation.</summary>
+        private static List<Vector3> DefinitionEatPoints()
+        {
+            if (_defPointsGen != DisplayLayouts.Generation)
+            {
+                _defPointsGen = DisplayLayouts.Generation;
+                _defPoints = DisplayLayouts.GetEatPoints(FeedTroughPrefab.DefinitionId);
+            }
+            return _defPoints;
+        }
+
+        private static int BaitCount()
+        {
+            List<Vector3> pts = DefinitionEatPoints();
+            return pts != null ? pts.Count : BaitOffsets.Length;
+        }
+
+        /// <summary>PrefabStudio preview changed the eat points: drop baits, next refresh rebuilds.</summary>
+        internal void ResetBaits()
+        {
+            ClearBaits();
+            _nextRefresh = 0f;
+        }
+
+        private Vector3 BaitOffset(int side)
+        {
+            // Authored points (piece-local) win; converted into the eat root's space.
+            List<Vector3> pts = DefinitionEatPoints();
+            if (pts != null)
+            {
+                Vector3 p = side >= 0 && side < pts.Count ? pts[side] : Vector3.zero;
+                return _eatRoot != null && _eatRoot != transform
+                    ? _eatRoot.InverseTransformPoint(transform.TransformPoint(p))
+                    : p;
+            }
+
+            Vector3 o = side >= 0 && side < BaitOffsets.Length ? BaitOffsets[side] : Vector3.zero;
+            BoxCollider box = _eatRoot != null && _eatRoot != transform ? _eatRoot.GetComponent<BoxCollider>() : null;
+            if (box == null)
+                return o;
+            // BaitOffsets are authored for a trough long along Z (bed): o.x = beside the long
+            // sides, o.z = along the length. A model long along X swaps the two axes.
+            bool longX = box.size.x > box.size.z;
+            float halfSide = (longX ? box.size.z : box.size.x) * 0.5f;
+            float halfLen = (longX ? box.size.x : box.size.z) * 0.5f;
+            float beside = Mathf.Abs(o.x) > 0.01f ? Mathf.Sign(o.x) * (halfSide + 0.40f) : 0f;
+            float along = Mathf.Abs(o.z) >= 1f ? Mathf.Sign(o.z) * (halfLen + 0.05f)
+                : Mathf.Abs(o.z) > 0.01f ? o.z / 1.1f * halfLen : 0f;
+            return longX
+                ? new Vector3(box.center.x + along, o.y, box.center.z + beside)
+                : new Vector3(box.center.x + beside, o.y, box.center.z + along);
         }
 
         private void ShowVisual(ItemDrop.ItemData sample)

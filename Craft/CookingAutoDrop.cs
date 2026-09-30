@@ -304,7 +304,8 @@ namespace StoreAndCraft
                 return;
 
             string prefab = conv.m_to.gameObject.name;
-            int count = conv.m_producedItems;
+            // Batch barrels give m_producedItems per base.
+            int count = conv.m_producedItems * Mathf.Max(1, FermenterBatch.Count(fermenter));
 
             StationAutoFill.RequestSoon();
 
@@ -314,6 +315,7 @@ namespace StoreAndCraft
                 nv.GetZDO().Set(ZDOVars.s_content, 0);
                 nv.GetZDO().Set(ZDOVars.s_startTime, 0L);
                 nv.GetZDO().Set(ZDOVars.s_cheatedQueued, false);
+                FermenterBatch.ClearAfterDeposit(fermenter);
                 if (fermenter.m_tapEffects != null)
                     fermenter.m_tapEffects.Create(fermenter.transform.position, fermenter.transform.rotation);
                 ActivityLog.ToChest(StationOutput.StationLabel(fermenter), count, label);

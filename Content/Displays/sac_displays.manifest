@@ -1,16 +1,16 @@
 ManifestFileVersion: 0
 UnityVersion: 6000.0.75f1
-CRC: 3966427302
+CRC: 459110703
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: fabc13b4ebdb91788a35e152fba689ba
+    Hash: 9d7d7e55e3f180eac4ebf419dc45250b
   TypeTreeHash:
     serializedVersion: 2
     Hash: 3219c50854ff2a782d7e36576b5dbf5b
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: b07dd838c6b13ea41bc18541e785e3df
+    Hash: 1db1c19e38c62c943ee9fdec1ec74279
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -31,8 +31,11 @@ ClassTypes:
   Script: {instanceID: 0}
 SerializeReferenceClassIdentifiers: []
 Assets:
+- Assets/Materials/Food_Though_full.mat
 - Assets/Prefabs/medium_horizontal.prefab
+- Assets/Prefabs/SM_FeedTroughFull.prefab
 - Assets/Prefabs/large_vertical.prefab
+- Assets/Prefabs/SM_FeedTrough.prefab
 - Assets/Prefabs/large_horizontal.prefab
 - Assets/Prefabs/small_horizontal.prefab
 - Assets/Prefabs/medium_vertical.prefab

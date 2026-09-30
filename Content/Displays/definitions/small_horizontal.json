@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "prefabId": "small_horizontal",
   "model": {
     "localScale": { "x": 1, "y": 1, "z": 1 }
@@ -8,22 +8,125 @@
     "enabled": true,
     "columns": 4,
     "rows": 2,
-    "spacingX": 0.325,
-    "spacingY": 0.415,
+    "spacingX": 0.32,
+    "spacingY": 0.42,
     "offsetX": 0,
     "offsetY": 0.37,
     "offsetZ": -0.04,
     "cellSize": 0.3,
     "euler": { "x": 0, "y": 0, "z": 0 }
   },
+  "layouts": [
+    {
+      "name": "Standard",
+      "sections": [
+        {
+          "id": "All",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 4, "rows": 2, "spacingX": 0.34, "spacingY": 0.24, "offsetX": 0, "offsetY": 0.3, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.69, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.28, "height": 0.2, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Row",
+      "sections": [
+        {
+          "id": "Row",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.66, "spacingY": 0.26, "offsetX": 0, "offsetY": 0.3, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.67, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.18, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "One item + Category",
+      "sections": [
+        {
+          "id": "Item",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1.1,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 1, "rows": 1, "spacingX": 1.32, "spacingY": 0.52, "offsetX": 0, "offsetY": 0.3, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.67, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.18, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Four items",
+      "sections": [
+        {
+          "id": "Items",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.66, "spacingY": 0.36, "offsetX": 0, "offsetY": 0.4, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": false, "text": "", "offsetX": 0, "offsetY": 0.76, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.1, "fontSize": 0.01, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "One item ",
+      "sections": [
+        {
+          "id": "Item",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1.1,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 1, "rows": 1, "spacingX": 1.32, "spacingY": 0.61, "offsetX": 0, "offsetY": 0.38, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": false, "text": "", "offsetX": 0, "offsetY": 0.67, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.18, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    }
+  ],
   "colliders": [
     {
       "id": "BoxCollider_0",
       "kind": "Box",
       "enabled": true,
       "isTrigger": false,
-      "center": { "x": 0, "y": 0.35, "z": -0.05 },
-      "size": { "x": 1.7, "y": 1.15, "z": 0.35 },
+      "center": { "x": 0, "y": 0.42, "z": -0.1 },
+      "size": { "x": 1.7, "y": 1.02, "z": 0.25 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    },
+    {
+      "id": "BoxCollider_1",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0, "y": 1.19, "z": 0 },
+      "size": { "x": 1.11, "y": 0.6, "z": 0.12 },
       "radius": 0.5,
       "height": 1,
       "direction": 0

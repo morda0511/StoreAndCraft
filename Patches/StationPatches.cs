@@ -268,6 +268,12 @@ namespace StoreAndCraft
         private static bool Prefix(Fireplace __instance, Humanoid user, bool hold, bool alt, ref bool __result)
         {
             Player player = StationFeed.LocalPlayer(user);
+            // Settings chord (Alt+E) held: no vanilla [E] (add fuel / turn off) on the same press.
+            if (player != null && !hold && ChestRename.BlocksStationUse())
+            {
+                __result = false;
+                return false;
+            }
             if (player == null || __instance == null || !__instance.m_canRefill)
                 return true;
 
@@ -631,12 +637,29 @@ namespace StoreAndCraft
     [HarmonyPatch(typeof(Fermenter), nameof(Fermenter.Interact))]
     internal static class FermenterInteractPatch
     {
-        private static void Prefix(Fermenter __instance, Humanoid user)
+        private static bool Prefix(Fermenter __instance, Humanoid user, bool hold, ref bool __result)
         {
             Player player = StationFeed.LocalPlayer(user);
             if (player == null || __instance == null)
-                return;
-            StationFeed.EnsureAny(player, MeadNames(__instance), 1);
+                return true;
+            // Settings chord (Alt+E) held: open settings only, no vanilla [E] (add / tap) too.
+            if (!hold && ChestRename.BlocksStationUse())
+            {
+                __result = false;
+                return false;
+            }
+            // Running batch (first 60 s): [E] adds one more of the same base (bag, else chests).
+            if (!hold && FermenterBatch.CanAddMore(__instance))
+            {
+                string same = FermenterBatch.ContentShared(__instance);
+                if (!string.IsNullOrEmpty(same))
+                    StationFeed.EnsureAny(player, new List<string> { same }, 1);
+                __result = FermenterBatch.TryAddFrom(__instance, user, null);
+                return false;
+            }
+            // Chest pull on [E]: only mead bases the fermenter filter allows.
+            StationFeed.EnsureAny(player, StationPullFilter.AllowedMeadNames(__instance), 1);
+            return true;
         }
 
         internal static List<string> MeadNames(Fermenter fermenter)

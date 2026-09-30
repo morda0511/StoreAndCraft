@@ -13,7 +13,7 @@ namespace StoreAndCraft
         /// <summary>
         /// Manual fill: dump / ground intake / auto-store skip depositing into this chest.
         /// Station pull, craft pull, and [lN] links still work. Combines with links: [M] [l3] Wood.
-        /// Type the prefix in the chest name (no extra toggle). Not compatible with [I]/[H].
+        /// Set via the Manual fill toggle in chest settings or by typing it. Not compatible with [I]/[H].
         /// </summary>
         public const string ManualPrefix = "[M]";
 

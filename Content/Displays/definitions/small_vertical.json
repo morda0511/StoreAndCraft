@@ -21,33 +21,89 @@
       "name": "Standard",
       "sections": [
         {
-          "id": "Alles",
+          "id": "Category 1",
+          "category": "1",
+          "showAmount": true,
+          "amountScale": 2.16,
+          "iconScale": 0.8,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.45, "spacingY": 0.48, "offsetX": 0.06, "offsetY": 0.51, "offsetZ": -0.02, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.08, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.81, "height": 0.2, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "One item",
+      "sections": [
+        {
+          "id": "Area 1",
           "category": "all",
           "showAmount": true,
           "amountScale": 1,
           "iconScale": 1,
           "sort": "count",
-          "emptyText": "",
+          "fill": "top",
+          "emptyText": "0",
           "amountColor": "",
-          "grid": { "columns": 5, "rows": 4, "spacingX": 0.18, "spacingY": 0.23, "offsetX": 0.06, "offsetY": 0.51, "offsetZ": -0.04, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.05, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.81, "height": 0.28, "fontSize": 0.17, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 1, "rows": 1, "spacingX": 0.87, "spacingY": 1.07, "offsetX": 0.05, "offsetY": 0.62, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 4.75, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 2.87, "height": 0.28, "fontSize": 0.17, "align": "left", "color": "#FFD966", "uppercase": true }
         }
       ]
     },
     {
-      "name": "Layout 2",
+      "name": "One item+Category",
       "sections": [
         {
-          "id": "Bereich 1",
-          "category": "1",
+          "id": "Item",
+          "category": "all",
           "showAmount": true,
-          "amountScale": 1,
+          "amountScale": 1.1,
           "iconScale": 1,
           "sort": "count",
-          "emptyText": "0",
+          "fill": "top",
+          "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 1, "rows": 1, "spacingX": 0.87, "spacingY": 1.07, "offsetX": 0.05, "offsetY": 0.62, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 4.75, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 2.87, "height": 0.28, "fontSize": 0.17, "align": "left", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 1, "rows": 1, "spacingX": 0.88, "spacingY": 0.86, "offsetX": 0.06, "offsetY": 0.47, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.02, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.88, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Only icons",
+      "sections": [
+        {
+          "id": "Icons",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 2.48,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.44, "spacingY": 0.43, "offsetX": 0.06, "offsetY": 0.47, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.02, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.88, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Pile",
+      "sections": [
+        {
+          "id": "Column",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 4,
+          "iconScale": 0.97,
+          "sort": "count",
+          "fill": "bottom",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 1, "rows": 4, "spacingX": 0.88, "spacingY": 0.22, "offsetX": 0.06, "offsetY": 0.47, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.02, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.88, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     }
@@ -58,8 +114,19 @@
       "kind": "Box",
       "enabled": true,
       "isTrigger": false,
-      "center": { "x": 0.05, "y": 0.7, "z": -0.05 },
-      "size": { "x": 1.1, "y": 1.22, "z": 0.14 },
+      "center": { "x": 0.05, "y": 0.66, "z": -0.05 },
+      "size": { "x": 1.1, "y": 1.3, "z": 0.14 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    },
+    {
+      "id": "BoxCollider_1",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0.07, "y": 1.48, "z": 0 },
+      "size": { "x": 0.77, "y": 0.94, "z": 0.12 },
       "radius": 0.5,
       "height": 1,
       "direction": 0

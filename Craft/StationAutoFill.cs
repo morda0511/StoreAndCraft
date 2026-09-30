@@ -35,6 +35,9 @@ namespace StoreAndCraft
         private static readonly List<Turret> Turrets = new List<Turret>();
         private static readonly HashSet<int> TurretIds = new HashSet<int>();
         private static readonly List<ItemStand> FoodTrays = new List<ItemStand>();
+        // SAC feed troughs (their Container), refreshed from FeedTrough.Live each pulse.
+        private static readonly List<Container> Troughs = new List<Container>();
+        private const int TroughTarget = 50;
         private static readonly HashSet<int> FoodTrayIds = new HashSet<int>();
         private static readonly Dictionary<string, float> QuietUntil = new Dictionary<string, float>();
         // Non-owner handover time per station (instance id). The ZDO owner fills first; others only
@@ -382,8 +385,11 @@ namespace StoreAndCraft
             ItemStand tray = smelter == null && oven == null && fermenter == null && fire == null && turret == null
                 ? HoveredFoodTray() : null;
 
+            Container trough = smelter == null && oven == null && fermenter == null && fire == null
+                && turret == null && tray == null ? StationPullFilter.HoveredTrough() : null;
+
             Component station = (Component)smelter ?? oven ?? (Component)fermenter ?? fire
-                ?? (Component)turret ?? tray;
+                ?? (Component)turret ?? (Component)tray ?? trough;
             ZNetView nv = station != null ? station.GetComponent<ZNetView>() : null;
             if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
                 return false;
@@ -406,6 +412,7 @@ namespace StoreAndCraft
             ClearQuiet(fire);
             ClearQuiet(turret);
             ClearQuiet(tray);
+            ClearQuiet(trough);
 
             player.Message(
                 MessageHud.MessageType.Center,
@@ -459,6 +466,7 @@ namespace StoreAndCraft
             if (Time.unscaledTime < _nextPulse)
                 return;
             _nextPulse = Time.unscaledTime + Interval;
+            StationMissingLabel.Validate();
 
             // Nested Push/Pop can leave ActiveId stuck if a path returns early.
             StationLink.ResetFrame();
@@ -472,6 +480,7 @@ namespace StoreAndCraft
             float range = Plugin.Settings.AutoFillRange.Value;
             float rangeSq = range * range;
             Vector3 origin = player.transform.position;
+            RefreshTroughs();
 
             // No station with auto-fill ON in range → no chest snapshot / fill work.
             if (!AnyOnInRange(origin, rangeSq))
@@ -508,6 +517,7 @@ namespace StoreAndCraft
                 AddStations(Fermenters);
                 AddStations(Turrets);
                 AddStations(FoodTrays);
+                AddStations(Troughs);
                 RoundRobinFill(
                     AllStations, ref _stationCursor, origin, rangeSq, player, ref bursts, checks,
                     StationNeedsFill, FillStation);
@@ -530,7 +540,8 @@ namespace StoreAndCraft
                 || AnyNeedy(Ovens, origin, rangeSq)
                 || AnyNeedy(Fermenters, origin, rangeSq)
                 || AnyNeedy(Turrets, origin, rangeSq)
-                || AnyNeedy(FoodTrays, origin, rangeSq);
+                || AnyNeedy(FoodTrays, origin, rangeSq)
+                || AnyNeedy(Troughs, origin, rangeSq);
         }
 
         private static bool AnyNeedy<T>(List<T> list, Vector3 origin, float rangeSq) where T : Component
@@ -576,6 +587,9 @@ namespace StoreAndCraft
             else if (station is ItemStand tray)
                 needs = !IsQuiet(tray, "tray") && IsOn(tray.GetComponent<ZNetView>())
                     && !IsTrue(ItemStandHaveAttachment, tray);
+            else if (station is Container trough)
+                needs = !IsQuiet(trough, "feed") && IsOn(trough.GetComponent<ZNetView>())
+                    && !trough.IsInUse() && TroughEmpty(trough);
             else
                 return false;
 
@@ -596,6 +610,8 @@ namespace StoreAndCraft
                 return FillTurretWhenEmpty(t, player);
             if (station is ItemStand tray)
                 return FillFoodTrayWhenEmpty(tray, player);
+            if (station is Container trough)
+                return FillTroughWhenLow(trough, player);
             return false;
         }
 
@@ -609,6 +625,7 @@ namespace StoreAndCraft
             AppendOrigins(Fermenters, playerOrigin, rangeSq, dest, f => IsOn(f.GetComponent<ZNetView>()));
             AppendOrigins(Turrets, playerOrigin, rangeSq, dest, t => IsOn(t.GetComponent<ZNetView>()));
             AppendOrigins(FoodTrays, playerOrigin, rangeSq, dest, s => IsOn(s.GetComponent<ZNetView>()));
+            AppendOrigins(Troughs, playerOrigin, rangeSq, dest, c => IsOn(c.GetComponent<ZNetView>()));
         }
 
         private static void AppendOrigins<T>(
@@ -696,6 +713,17 @@ namespace StoreAndCraft
                 if (ContainerFilter.SqrDistance(origin, s.transform.position) > rangeSq)
                     continue;
                 if (IsOn(s.GetComponent<ZNetView>()))
+                    return true;
+            }
+
+            for (int i = 0; i < Troughs.Count; i++)
+            {
+                Container t = Troughs[i];
+                if (t == null)
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, t.transform.position) > rangeSq)
+                    continue;
+                if (IsOn(t.GetComponent<ZNetView>()))
                     return true;
             }
 
@@ -934,8 +962,10 @@ namespace StoreAndCraft
             if (got <= 0)
             {
                 Quiet(smelter, "fuel", QuietEmptySeconds);
+                StationMissingLabel.SetMissing(smelter, "fuel", DisplayFilters.ItemLabel(fuel));
                 return false;
             }
+            StationMissingLabel.ClearMissing(smelter, "fuel");
 
             if (!nv.IsOwner())
                 nv.ClaimOwnership();
@@ -974,6 +1004,7 @@ namespace StoreAndCraft
             if (allowed == null || allowed.Count == 0)
             {
                 Quiet(smelter, "ore", QuietEmptySeconds);
+                StationMissingLabel.ClearMissing(smelter, "ore");
                 return false;
             }
 
@@ -1034,8 +1065,12 @@ namespace StoreAndCraft
             if (added == 0)
             {
                 Quiet(smelter, "ore", QuietEmptySeconds);
+                StationMissingLabel.SetMissing(smelter, "ore", allowed.Count == 1
+                    ? DisplayFilters.ItemLabel(allowed[0])
+                    : Loc.T("Ore", "Erz"));
                 return false;
             }
+            StationMissingLabel.ClearMissing(smelter, "ore");
 
             string station = StationOutput.StationLabel(smelter);
             foreach (KeyValuePair<string, int> kv in byShared)
@@ -1081,6 +1116,8 @@ namespace StoreAndCraft
                 return;
             int maxStack = Mathf.Max(1, proto.m_itemData.m_shared.m_maxStackSize);
             Vector3 pos = station.transform.position + Vector3.up * 1f;
+            // Linked station: the ground stack may only go back into matching [lN] chests.
+            int linkId = StationLink.Get(station);
             while (amount > 0)
             {
                 int stack = Mathf.Min(amount, maxStack);
@@ -1090,6 +1127,8 @@ namespace StoreAndCraft
                     continue;
                 drop.m_itemData.m_stack = stack;
                 ItemDrop.OnCreateNew(drop);
+                if (linkId >= 1)
+                    StationOutput.SetIntakeLink(drop, linkId);
             }
         }
 
@@ -1144,8 +1183,10 @@ namespace StoreAndCraft
             if (got <= 0)
             {
                 Quiet(fire, "fire", QuietEmptySeconds);
+                StationMissingLabel.SetMissing(fire, "fire", DisplayFilters.ItemLabel(fuel));
                 return false;
             }
+            StationMissingLabel.ClearMissing(fire, "fire");
 
             if (!nv.IsOwner())
                 nv.ClaimOwnership();
@@ -1220,8 +1261,10 @@ namespace StoreAndCraft
             if (got <= 0)
             {
                 Quiet(oven, "fuel", QuietEmptySeconds);
+                StationMissingLabel.SetMissing(oven, "fuel", DisplayFilters.ItemLabel(fuel));
                 return false;
             }
+            StationMissingLabel.ClearMissing(oven, "fuel");
 
             if (!nv.IsOwner())
                 nv.ClaimOwnership();
@@ -1337,10 +1380,12 @@ namespace StoreAndCraft
             if (ReadEnumInt(FermenterGetStatus, fermenter) != 0)
                 return false;
 
-            List<string> meads = FermenterInteractPatch.MeadNames(fermenter);
+            // Only mead bases allowed in the fermenter filter (Alt+E). All blocked = a setting, not missing.
+            List<string> meads = StationPullFilter.AllowedMeadNames(fermenter);
             if (meads == null || meads.Count == 0)
             {
                 Quiet(fermenter, "mead", QuietEmptySeconds);
+                StationMissingLabel.ClearMissing(fermenter, "mead");
                 return false;
             }
 
@@ -1348,8 +1393,12 @@ namespace StoreAndCraft
             if (!ChestsHaveAny(player, meads, linkId))
             {
                 Quiet(fermenter, "mead", QuietEmptySeconds);
+                StationMissingLabel.SetMissing(fermenter, "mead", meads.Count == 1
+                    ? DisplayFilters.ItemLabel(meads[0])
+                    : Loc.T("Mead base", "Met-Basis"));
                 return false;
             }
+            StationMissingLabel.ClearMissing(fermenter, "mead");
 
             string shared = FirstChestItem(player, meads, linkId);
             string prefab = PrefabName(shared);
@@ -1371,9 +1420,14 @@ namespace StoreAndCraft
             {
                 EndSilence();
             }
+            // Batch: same base up to the F10 limit in one go (RPCs reach the owner in order).
+            int more = FermenterBatch.MaxBatch() - 1;
+            int extra = more > 0 ? StationFeed.ConsumeFromChests(player, shared, more, linkId) : 0;
+            if (extra > 0)
+                FermenterBatch.AddCounted(fermenter, hash, extra);
             ActivityLog.FromChest(
                 StationOutput.StationLabel(fermenter),
-                1,
+                1 + extra,
                 DisplayFilters.ItemLabel(shared));
             return true;
         }
@@ -1410,9 +1464,16 @@ namespace StoreAndCraft
                 if (!ChestsHaveAny(player, allowed, linkId))
                 {
                     if (added == 0)
+                    {
                         Quiet(turret, "ammo", QuietEmptySeconds);
+                        if (ammo <= 0)
+                            StationMissingLabel.SetMissing(turret, "ammo", allowed.Count == 1
+                                ? DisplayFilters.ItemLabel(allowed[0])
+                                : Loc.T("Ammo", "Munition"));
+                    }
                     break;
                 }
+                StationMissingLabel.ClearMissing(turret, "ammo");
 
                 string shared = FirstChestItem(player, allowed, linkId);
                 string prefab = PrefabName(shared);
@@ -1589,6 +1650,172 @@ namespace StoreAndCraft
                 Silence--;
         }
 
+        /// <summary>Settings menu switch (same ZDO flag as [B]).</summary>
+        internal static void SetOn(Component station, bool on)
+        {
+            ZNetView nv = station != null ? station.GetComponent<ZNetView>() : null;
+            if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
+                return;
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+            nv.GetZDO().Set(ZdoKey, on ? 1 : 0);
+            ClearQuiet(station);
+            ActivityLog.Note(StationOutput.StationLabel(station),
+                on ? Loc.T("Auto-fill on", "Auto-Fill an") : Loc.T("Auto-fill off", "Auto-Fill aus"));
+        }
+
+        private static void RefreshTroughs()
+        {
+            Troughs.Clear();
+            for (int i = 0; i < FeedTrough.Live.Count; i++)
+            {
+                FeedTrough t = FeedTrough.Live[i];
+                Container c = t != null ? t.GetComponent<Container>() : null;
+                if (c != null)
+                    Troughs.Add(c);
+            }
+        }
+
+        /// <summary>Cached flag from the trough itself (no inventory walk on every pulse).</summary>
+        private static bool TroughEmpty(Container trough)
+        {
+            FeedTrough t = trough != null ? trough.GetComponent<FeedTrough>() : null;
+            return t != null && !t.HasFood;
+        }
+
+        private static int TroughFoodCount(Container trough)
+        {
+            Inventory inv = trough != null ? trough.GetInventory() : null;
+            List<ItemDrop.ItemData> items = inv != null ? inv.GetAllItems() : null;
+            if (items == null)
+                return 0;
+            int n = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i] != null && items[i].m_stack > 0)
+                    n += items[i].m_stack;
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// Empty feed trough: fill up to TroughTarget with allowed animal food
+        /// from (linked) chests. Troughs are never a source here (no self / trough-to-trough fill).
+        /// </summary>
+        private static bool FillTroughWhenLow(Container trough, Player player)
+        {
+            if (trough == null || player == null || trough.IsInUse())
+                return false;
+            ZNetView nv = trough.GetComponent<ZNetView>();
+            Inventory inv = trough.GetInventory();
+            if (nv == null || !nv.IsValid() || inv == null)
+                return false;
+
+            List<string> allowed = StationPullFilter.AllowedTroughFoods(trough);
+            if (allowed == null || allowed.Count == 0)
+            {
+                Quiet(trough, "feed", QuietEmptySeconds);
+                StationMissingLabel.ClearMissing(trough, "feed");
+                return false;
+            }
+
+            int need = TroughTarget - TroughFoodCount(trough);
+            if (need <= 0)
+                return false;
+
+            int linkId = StationLink.Get(trough);
+            int added = 0;
+            var byShared = new Dictionary<string, int>(4);
+            StationLink.ExcludeTroughs = true;
+            try
+            {
+                for (int guard = 0; guard < allowed.Count && added < need; guard++)
+                {
+                    string shared = FirstChestItem(player, allowed, linkId);
+                    GameObject prefab = ItemIds.PrefabFromToken(shared);
+                    if (prefab == null)
+                        break;
+
+                    int got = TakeFromChests(player, shared, need - added, linkId);
+                    if (got <= 0)
+                        break;
+
+                    if (!nv.IsOwner())
+                        nv.ClaimOwnership();
+                    int fit = got;
+                    while (fit > 0 && !inv.CanAddItem(prefab, fit))
+                        fit--;
+                    if (fit > 0 && !inv.AddItem(prefab, fit))
+                        fit = 0;
+                    ReturnUnused(trough, shared, got - fit);
+                    if (fit <= 0)
+                        break;
+
+                    added += fit;
+                    int n;
+                    byShared.TryGetValue(shared, out n);
+                    byShared[shared] = n + fit;
+                }
+            }
+            finally
+            {
+                StationLink.ExcludeTroughs = false;
+            }
+
+            if (added == 0)
+            {
+                Quiet(trough, "feed", QuietEmptySeconds);
+                StationMissingLabel.SetMissing(trough, "feed", allowed.Count == 1
+                    ? DisplayFilters.ItemLabel(allowed[0])
+                    : Loc.T("Animal food", "Tierfutter"));
+                return false;
+            }
+
+            ContainerFilter.SaveInventory(trough);
+            StationMissingLabel.ClearMissing(trough, "feed");
+            string label = StationOutput.StationLabel(trough);
+            foreach (KeyValuePair<string, int> kv in byShared)
+                ActivityLog.FromChest(label, kv.Value, DisplayFilters.ItemLabel(kv.Key));
+            return true;
+        }
+
+        /// <summary>Auto-fill switched on for this station (missing-label keep check).</summary>
+        internal static bool IsAutoFillOn(Component station)
+        {
+            if (station is Smelter s)
+                return IsOn(s);
+            if (station is Fireplace f)
+                return IsOn(f);
+            return station != null && IsOn(station.GetComponent<ZNetView>());
+        }
+
+        /// <summary>
+        /// Slot still empty (same reads as StationNeedsFill, ignoring the quiet timer). Used on the
+        /// pulse to drop a missing-label once the station got fuel/ore some other way.
+        /// </summary>
+        internal static bool SlotStillEmpty(Component station, string slot)
+        {
+            if (station is Smelter s)
+            {
+                if (slot == "fuel")
+                    return HasFuelSlot(s) && ReadNumber(SmelterGetFuel, s) <= 0.01f;
+                if (slot == "ore")
+                    return HasOreSlot(s) && ReadNumber(SmelterGetQueue, s) < 1f;
+                return false;
+            }
+            if (station is Fireplace f)
+                return slot == "fire" && ReadFireFuel(f) <= 0.01f;
+            if (station is CookingStation o)
+                return slot == "fuel" && ReadNumber(CookGetFuel, o) <= 0.01f;
+            if (station is Fermenter m)
+                return slot == "mead" && ReadEnumInt(FermenterGetStatus, m) == 0;
+            if (station is Turret t)
+                return slot == "ammo" && Mathf.RoundToInt(ReadNumber(TurretGetAmmo, t)) <= 0;
+            if (station is Container trough)
+                return slot == "feed" && TroughEmpty(trough);
+            return false;
+        }
+
         private static bool IsQuiet(UnityEngine.Object obj, string slot)
         {
             if (obj == null)
@@ -1617,6 +1844,7 @@ namespace StoreAndCraft
             any |= QuietUntil.Remove(id + ":mead");
             any |= QuietUntil.Remove(id + ":ammo");
             any |= QuietUntil.Remove(id + ":tray");
+            any |= QuietUntil.Remove(id + ":feed");
             return any;
         }
 
@@ -2094,6 +2322,7 @@ namespace StoreAndCraft
         {
             if (__instance == null)
                 return;
+            FermenterBatch.AppendHover(ref __result, __instance);
             StationAutoFill.AppendFuelStationHover(ref __result, __instance, __instance.GetComponent<ZNetView>());
             CookingAutoDrop.AppendHover(ref __result, __instance);
         }

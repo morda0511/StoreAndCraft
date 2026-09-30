@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 2,
+  "prefabId": "medium_horizontal",
+  "model": {
+    "localScale": { "x": 1, "y": 1, "z": 1 }
+  },
+  "layouts": [
+    {
+      "name": "One Category",
+      "sections": [
+        {
+          "id": "Category",
+          "category": "1",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 4, "rows": 4, "spacingX": 0.78, "spacingY": 0.31, "offsetX": 0, "offsetY": 0.85, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 1.6, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 3.1, "height": 0.22, "fontSize": 0.16, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Two Categories",
+      "sections": [
+        {
+          "id": "Area 1",
+          "category": "1",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 4, "spacingX": 0.76, "spacingY": 0.31, "offsetX": 0.79, "offsetY": 0.85, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.79, "offsetY": 1.6, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.53, "height": 0.22, "fontSize": 0.16, "align": "center", "color": "#FFD966", "uppercase": true }
+        },
+        {
+          "id": "Area 2",
+          "category": "2",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 4, "spacingX": 0.76, "spacingY": 0.31, "offsetX": -0.79, "offsetY": 0.85, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": -0.79, "offsetY": 1.6, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.53, "height": 0.22, "fontSize": 0.16, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Three Categories",
+      "sections": [
+        {
+          "id": "Area 1",
+          "category": "1",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 5, "spacingX": 0.5, "spacingY": 0.25, "offsetX": 1.05, "offsetY": 0.86, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 1.05, "offsetY": 1.61, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.01, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
+        },
+        {
+          "id": "Area 2",
+          "category": "2",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 5, "spacingX": 0.49, "spacingY": 0.25, "offsetX": 0, "offsetY": 0.86, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 1.61, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.98, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
+        },
+        {
+          "id": "Area 3",
+          "category": "3",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 5, "spacingX": 0.5, "spacingY": 0.25, "offsetX": -1.05, "offsetY": 0.86, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": -1.05, "offsetY": 1.61, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.01, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Large",
+      "sections": [
+        {
+          "id": "Category",
+          "category": "1",
+          "showAmount": true,
+          "amountScale": 1.1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 3, "rows": 2, "spacingX": 1.03, "spacingY": 0.63, "offsetX": 0, "offsetY": 0.85, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 1.6, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 3.1, "height": 0.22, "fontSize": 0.16, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "All",
+      "sections": [
+        {
+          "id": "All",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 5, "rows": 5, "spacingX": 0.62, "spacingY": 0.25, "offsetX": 0, "offsetY": 0.85, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 1.6, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 3.1, "height": 0.22, "fontSize": 0.16, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    }
+  ],
+  "colliders": [
+    {
+      "id": "BoxCollider_0",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0, "y": 1.03, "z": -0.05 },
+      "size": { "x": 3.84, "y": 2.06, "z": 0.15 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    }
+  ],
+  "snapPoints": [
+    {
+      "id": "SnapPoint_0",
+      "enabled": true,
+      "localPosition": { "x": 1.92, "y": 0.08, "z": 0 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "id": "SnapPoint_1",
+      "enabled": true,
+      "localPosition": { "x": -1.92, "y": 0.08, "z": 0 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    }
+  ]
+}

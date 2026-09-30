@@ -168,10 +168,12 @@ namespace StoreAndCraft
             mark.transform.SetParent(go.transform, false);
             RectTransform markRt = mark.transform as RectTransform;
             Stretch(markRt);
-            markRt.offsetMin = new Vector2(3f, 3f);
-            markRt.offsetMax = new Vector2(-3f, -3f);
+            markRt.offsetMin = new Vector2(7f, 7f);
+            markRt.offsetMax = new Vector2(-7f, -7f);
             Image markImg = mark.GetComponent<Image>();
-            markImg.sprite = V("checkbox_marker");
+            // checkbox_marker sits off-centre in its sprite → centred smaller yellow checkbox knob.
+            markImg.sprite = V("checkbox");
+            markImg.preserveAspect = true;
             markImg.color = new Color(1f, 0.86f, 0.1f, 1f);
             markImg.raycastTarget = false;
             mark.SetActive(on);
@@ -607,6 +609,9 @@ namespace StoreAndCraft
                     string shared = items[s];
                     if (string.IsNullOrEmpty(shared) || !seen.Add(shared))
                         continue;
+                    // Undiscovered items stay hidden (unless already selected on this board).
+                    if (!DisplayFilters.IsKnownToPlayer(shared) && !selectedItemSet.Contains(shared))
+                        continue;
                     string label = DisplayFilters.ItemLabel(shared) ?? "";
                     if (label.ToLowerInvariant().IndexOf(q, System.StringComparison.Ordinal) < 0
                         && shared.ToLowerInvariant().IndexOf(q, System.StringComparison.Ordinal) < 0)
@@ -773,6 +778,8 @@ namespace StoreAndCraft
                     for (int s = 0; s < elItems.Count; s++)
                     {
                         string shared = elItems[s];
+                        if (!DisplayFilters.IsKnownToPlayer(shared) && !selectedItemSet.Contains(shared))
+                            continue;
                         string captured = shared;
                         int parent = DisplayFilters.ParentFilterIdFromToken(shared);
                         if (parent <= 0)
@@ -799,6 +806,8 @@ namespace StoreAndCraft
                     for (int s = 0; s < items.Count; s++)
                     {
                         string shared = items[s];
+                        if (!DisplayFilters.IsKnownToPlayer(shared) && !selectedItemSet.Contains(shared))
+                            continue;
                         string captured = shared;
                         int parent = _focusId;
                         cells.Add(new ItemCellData

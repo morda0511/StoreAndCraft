@@ -28,6 +28,13 @@ namespace StoreAndCraft
         private const float InventoryLoadCooldown = 4f;
         private const float EmptyProbeBackoff = 20f;
         private const int MaxForceLoadsPerStorePass = 5;
+        /// <summary>
+        /// Physics fallback at most this often. An empty Cached skips the TickAt throttle, so
+        /// without this OverlapSphere ran every frame far from chests. Chests register via
+        /// Container.Awake / BootstrapExisting; the fallback only catches the rest.
+        /// </summary>
+        private const float OverlapFallbackSeconds = 10f;
+        private static float _nextOverlap;
 
         public static IReadOnlyList<Container> Current
         {
@@ -249,8 +256,11 @@ namespace StoreAndCraft
                 Cached.Add(container);
             }
 
-            if (Cached.Count == 0)
+            if (Cached.Count == 0 && Time.unscaledTime >= _nextOverlap)
+            {
+                _nextOverlap = Time.unscaledTime + OverlapFallbackSeconds;
                 FillFromOverlap(origin, range, rangeSq, seen);
+            }
         }
 
         private static void FillFromOverlap(Vector3 origin, float range, float rangeSq, HashSet<int> seen)
@@ -316,6 +326,57 @@ namespace StoreAndCraft
                 dest.Add(container);
             }
         }
+
+        /// <summary>
+        /// CollectNear for one AutoIntake pass: same result and registry order, but IsReady +
+        /// PlayerMayUse are evaluated once per chest per pass (memo). Both only depend on the
+        /// chest (PlayerMayUse ignores its origin; ward check uses the chest position), not on
+        /// the drop, item or player. Distance is checked first so far chests skip the reflection.
+        /// Caller clears the memo at the start of every pass.
+        /// </summary>
+        public static void CollectNear(Vector3 origin, float range, List<Container> dest, Dictionary<int, bool> usableMemo)
+        {
+            if (usableMemo == null)
+            {
+                CollectNear(origin, range, dest);
+                return;
+            }
+            if (dest == null)
+                return;
+            dest.Clear();
+            if (range <= 0f)
+                return;
+
+            if (Time.unscaledTime >= _nextPrune)
+            {
+                PruneDead();
+                if (Registered.Count == 0)
+                    BootstrapExisting();
+                _nextPrune = Time.unscaledTime + 5f;
+            }
+
+            float rangeSq = range * range;
+            for (int i = 0; i < Registered.Count; i++)
+            {
+                Container container = Registered[i];
+                if (IsDestroyed(container))
+                    continue;
+                if (ContainerFilter.SqrDistance(origin, container.transform.position) > rangeSq)
+                    continue;
+                int id = container.GetInstanceID();
+                bool usable;
+                if (!usableMemo.TryGetValue(id, out usable))
+                {
+                    usable = IsReady(container) && ContainerFilter.PlayerMayUse(container, origin);
+                    usableMemo[id] = usable;
+                }
+                if (usable)
+                    dest.Add(container);
+            }
+        }
+
+        /// <summary>False when TryForceProbeForStore can no longer probe anything this pass.</summary>
+        public static bool HasStoreForceBudget => _storeForceBudget > 0;
 
         public static List<Container> Within(Vector3 origin, float range)
         {

@@ -183,9 +183,17 @@ namespace StoreAndCraft
             return ParseFromName(ChestNames.Get(chest));
         }
 
+        /// <summary>
+        /// Set (try/finally) only while a feed trough is being auto-filled: troughs are then no
+        /// pull source, so a trough never refills from itself or another trough.
+        /// </summary>
+        internal static bool ExcludeTroughs;
+
         public static bool ChestAllowed(Container chest, int stationLinkId)
         {
             if (chest == null || ChestNames.IsIgnored(chest))
+                return false;
+            if (ExcludeTroughs && FeedTrough.IsTrough(chest))
                 return false;
 
             if (stationLinkId < 0)

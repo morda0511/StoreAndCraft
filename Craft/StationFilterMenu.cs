@@ -59,6 +59,8 @@ namespace StoreAndCraft
         private static CookingStation _cook;
         private static Fermenter _fermenter;
         private static Fireplace _fire;
+        // SAC feed trough (Container): animal-food filter + link + auto-fill.
+        private static Container _trough;
         private static float _openedAt;
         private static int _suppressMenuFrame;
         private static bool _closing;
@@ -76,31 +78,37 @@ namespace StoreAndCraft
 
         public static void Open(Smelter smelter)
         {
-            OpenInternal(smelter, null, null, null);
+            OpenInternal(smelter, null, null, null, null);
         }
 
         public static void Open(CookingStation cook)
         {
-            OpenInternal(null, cook, null, null);
+            OpenInternal(null, cook, null, null, null);
         }
 
         public static void Open(Fermenter fermenter)
         {
-            OpenInternal(null, null, fermenter, null);
+            OpenInternal(null, null, fermenter, null, null);
         }
 
         public static void Open(Fireplace fire)
         {
-            OpenInternal(null, null, null, fire);
+            OpenInternal(null, null, null, fire, null);
+        }
+
+        public static void Open(Container trough)
+        {
+            OpenInternal(null, null, null, null, trough);
         }
 
         private static void OpenInternal(
             Smelter smelter,
             CookingStation cook,
             Fermenter fermenter,
-            Fireplace fire)
+            Fireplace fire,
+            Container trough)
         {
-            if ((smelter == null && cook == null && fermenter == null && fire == null)
+            if ((smelter == null && cook == null && fermenter == null && fire == null && trough == null)
                 || Player.m_localPlayer == null)
                 return;
 
@@ -120,6 +128,7 @@ namespace StoreAndCraft
             _cook = cook;
             _fermenter = fermenter;
             _fire = fire;
+            _trough = trough;
             _openedAt = Time.unscaledTime;
 
             UiFonts.ThinNorse();
@@ -143,6 +152,7 @@ namespace StoreAndCraft
                 _cook = null;
                 _fermenter = null;
                 _fire = null;
+                _trough = null;
                 _suppressMenuFrame = Time.frameCount;
                 DestroyRoot();
             }
@@ -185,7 +195,7 @@ namespace StoreAndCraft
         {
             if (!IsOpen)
                 return;
-            if ((_smelter == null && _cook == null && _fermenter == null && _fire == null)
+            if ((_smelter == null && _cook == null && _fermenter == null && _fire == null && _trough == null)
                 || Player.m_localPlayer == null)
             {
                 Close();
@@ -213,6 +223,16 @@ namespace StoreAndCraft
                 denied = !StationPullFilter.IsDenied(_cook, shared);
                 StationPullFilter.SetDenied(_cook, shared, denied);
             }
+            else if (_trough != null)
+            {
+                denied = StationPullFilter.IsAllowed(_trough, shared);
+                StationPullFilter.SetDenied(_trough, shared, denied);
+            }
+            else if (_fermenter != null)
+            {
+                denied = StationPullFilter.IsAllowed(_fermenter, shared);
+                StationPullFilter.SetDenied(_fermenter, shared, denied);
+            }
             else
                 return;
             ActivityLog.Note(StationOutput.StationLabel(ActiveStation()),
@@ -236,7 +256,16 @@ namespace StoreAndCraft
 
         private static Component ActiveStation()
         {
-            return (Component)_smelter ?? _cook ?? (Component)_fermenter ?? _fire;
+            return (Component)_smelter ?? _cook ?? (Component)_fermenter ?? (Component)_fire ?? _trough;
+        }
+
+        private static void ToggleAutoFill()
+        {
+            Component host = _trough != null ? (Component)_trough : _fermenter;
+            if (host == null)
+                return;
+            StationAutoFill.SetOn(host, !StationAutoFill.IsOn(host.GetComponent<ZNetView>()));
+            RebuildRows(preserveScroll: true);
         }
 
         private static void AllowAll()
@@ -245,6 +274,10 @@ namespace StoreAndCraft
                 StationPullFilter.Clear(_smelter);
             else if (_cook != null)
                 StationPullFilter.Clear(_cook);
+            else if (_trough != null)
+                StationPullFilter.Clear(_trough);
+            else if (_fermenter != null)
+                StationPullFilter.Clear(_fermenter);
             else
                 return;
             ActivityLog.Note(StationOutput.StationLabel(ActiveStation()), Loc.T("Filter: allow all", "Filter: alles erlaubt"));
@@ -310,9 +343,13 @@ namespace StoreAndCraft
             _panelRt.pivot = new Vector2(0.5f, 0.5f);
             _panelRt.sizeDelta = new Vector2(PanelW, PanelH);
             _panelRt.anchoredPosition = Vector2.zero;
-            ApplySprite(_panelRt.GetComponent<Image>(), UiAssets.PanelLeft, Color.white);
+            ApplySprite(_panelRt.GetComponent<Image>(), UiStyle.Sprite("woodpanel_settings") ?? UiAssets.PanelLeft, Color.white);
 
-            PlaceInsetBg(_panelRt, UiAssets.PanelLeftInset, InsetL, InsetT, InsetR, InsetB);
+            // Vanilla look: dark wash instead of the SAC inset art (same as the display filter).
+            if (UiStyle.Vanilla)
+                UiStyle.AddDarkInset(_panelRt, InsetL, InsetT, InsetR, InsetB);
+            else
+                PlaceInsetBg(_panelRt, UiAssets.PanelLeftInset, InsetL, InsetT, InsetR, InsetB);
             PlaceHeader(_panelRt, Loc.T("Settings", "Einstellungen"));
 
             var scrollGo = new GameObject("ListScroll", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(ScrollRect));
@@ -361,7 +398,7 @@ namespace StoreAndCraft
             applyRt.pivot = new Vector2(0.5f, 0f);
             applyRt.anchoredPosition = new Vector2(0f, 44f);
             applyRt.sizeDelta = new Vector2(ApplyW, ApplyH);
-            ApplySprite(apply.GetComponent<Image>(), UiAssets.BtnApply, Color.white);
+            ApplySprite(apply.GetComponent<Image>(), UiStyle.Sprite("button") ?? UiAssets.BtnApply, Color.white);
             Button applyBtn = apply.GetComponent<Button>();
             applyBtn.transition = Selectable.Transition.None;
             applyBtn.onClick.AddListener(Close);
@@ -385,19 +422,19 @@ namespace StoreAndCraft
                 return;
             Component station = ActiveStation();
             int current = StationLink.Get(station);
-            // Compact grid in the bottom parchment margin (between dark inset and outer panel).
+            // Same link buttons (size + look) as Chest Settings, in the bottom margin.
             _linkGrid = UiLinkGrid.Build(
                 _panelRt,
                 "SAC_StationLinks",
                 current,
                 id => SetLink(id),
-                UiLinkGrid.CompactCell,
-                UiLinkGrid.CompactGap);
+                UiLinkGrid.Cell,
+                UiLinkGrid.Gap);
             RectTransform rt = _linkGrid.transform as RectTransform;
             rt.anchorMin = new Vector2(0f, 0f);
             rt.anchorMax = new Vector2(0f, 0f);
             rt.pivot = new Vector2(0f, 0f);
-            float block = UiLinkGrid.BlockSize(UiLinkGrid.CompactCell, UiLinkGrid.CompactGap);
+            float block = UiLinkGrid.BlockSize(UiLinkGrid.Cell, UiLinkGrid.Gap);
             // Bottom parchment margin: inset from outer corner (not glued to the edge).
             float x = 28f;
             float y = Mathf.Max(28f, (InsetB - block) * 0.42f);
@@ -418,15 +455,32 @@ namespace StoreAndCraft
 
             List<string> choices = _cook != null
                 ? StationPullFilter.FoodChoices(_cook)
-                : (_smelter != null ? StationPullFilter.OreChoices(_smelter) : new List<string>());
+                : _smelter != null ? StationPullFilter.OreChoices(_smelter)
+                : _trough != null ? StationPullFilter.TroughFoodChoices()
+                : _fermenter != null ? StationPullFilter.MeadChoices(_fermenter)
+                : new List<string>();
+            // Only discovered items (a blocked undiscovered one stays visible so it can be allowed again).
+            var shown = new List<string>(choices.Count);
+            for (int i = 0; i < choices.Count; i++)
+            {
+                string c = choices[i];
+                bool allowedNow = _cook != null ? StationPullFilter.IsAllowed(_cook, c)
+                    : _trough != null ? StationPullFilter.IsAllowed(_trough, c)
+                    : _fermenter != null ? StationPullFilter.IsAllowed(_fermenter, c)
+                    : StationPullFilter.IsAllowed(_smelter, c);
+                if (DisplayFilters.IsKnownToPlayer(c) || !allowedNow)
+                    shown.Add(c);
+            }
+            choices = shown;
 
             Component station = ActiveStation();
             int n = choices.Count;
             for (int i = 0; i < n; i++)
             {
                 string shared = choices[i];
-                bool allowed = _cook != null
-                    ? StationPullFilter.IsAllowed(_cook, shared)
+                bool allowed = _cook != null ? StationPullFilter.IsAllowed(_cook, shared)
+                    : _trough != null ? StationPullFilter.IsAllowed(_trough, shared)
+                    : _fermenter != null ? StationPullFilter.IsAllowed(_fermenter, shared)
                     : StationPullFilter.IsAllowed(_smelter, shared);
                 string label = StationPullFilter.DisplayName(shared);
                 string captured = shared;
@@ -440,10 +494,21 @@ namespace StoreAndCraft
                 ? ItemPadT + gridRows * (ItemCellH + ItemGapY)
                 : 0f;
 
-            if (_smelter != null || _cook != null)
+            bool filterStation = _smelter != null || _cook != null || _trough != null || _fermenter != null;
+            if (filterStation)
                 AddActionRow(gridH, Loc.T("Allow all inputs", "Allow all inputs"), AllowAll);
 
-            float actionH = (_smelter != null || _cook != null) ? ActionRowH + 8f : 0f;
+            float actionH = filterStation ? ActionRowH + 8f : 0f;
+            // Trough / fermenter: auto-fill switch as a second action row (same as [B]).
+            Component autoFillHost = _trough != null ? (Component)_trough : _fermenter;
+            if (autoFillHost != null)
+            {
+                bool on = StationAutoFill.IsOn(autoFillHost.GetComponent<ZNetView>());
+                AddActionRow(gridH + actionH,
+                    Loc.T("Auto-fill: ", "Auto-Fill: ") + (on ? Loc.T("on", "an") : Loc.T("off", "aus")),
+                    ToggleAutoFill);
+                actionH += ActionRowH + 8f;
+            }
             _listContent.sizeDelta = new Vector2(0f, gridH + actionH + 4f);
             if (_listScroll != null)
                 _listScroll.verticalNormalizedPosition = preserveScroll ? scrollPos : 1f;
@@ -476,12 +541,36 @@ namespace StoreAndCraft
             rt.anchoredPosition = new Vector2(
                 ItemPadL + col * (ItemCellW + ItemGapX),
                 -(ItemPadT + row * (ItemCellH + ItemGapY)));
-            ApplySprite(go.GetComponent<Image>(), UiAssets.ItemCell, new Color(0.14f, 0.1f, 0.08f, 0.95f));
             Image cellImg = go.GetComponent<Image>();
-            if (cellImg != null && cellImg.sprite != null)
+            // Vanilla look (same as the display filter): lighter tile, whole tile is the switch.
+            Sprite vCell = UiStyle.Sprite(on ? "button_highlight" : "button_small");
+            bool wholeCellClick = vCell != null;
+            if (wholeCellClick)
             {
-                cellImg.type = Image.Type.Simple;
-                cellImg.preserveAspect = false;
+                UiStyle.SetFrame(cellImg, vCell);
+                cellImg.color = new Color(1f, 1f, 1f, on ? 0.75f : 0.45f);
+                cellImg.raycastTarget = true;
+                Button cellBtn = go.AddComponent<Button>();
+                cellBtn.targetGraphic = cellImg;
+                cellBtn.transition = Selectable.Transition.ColorTint;
+                ColorBlock colors = cellBtn.colors;
+                colors.normalColor = new Color(0.9f, 0.9f, 0.9f, 1f);
+                colors.highlightedColor = Color.white;
+                colors.pressedColor = new Color(0.75f, 0.75f, 0.75f, 1f);
+                colors.selectedColor = colors.normalColor;
+                colors.fadeDuration = 0.08f;
+                cellBtn.colors = colors;
+                if (onToggle != null)
+                    cellBtn.onClick.AddListener(onToggle);
+            }
+            else
+            {
+                ApplySprite(cellImg, UiAssets.ItemCell, new Color(0.14f, 0.1f, 0.08f, 0.95f));
+                if (cellImg != null && cellImg.sprite != null)
+                {
+                    cellImg.type = Image.Type.Simple;
+                    cellImg.preserveAspect = false;
+                }
             }
 
             if (icon != null)
@@ -499,6 +588,8 @@ namespace StoreAndCraft
                 iconImg.preserveAspect = true;
                 iconImg.raycastTarget = false;
                 iconImg.color = Color.white;
+                if (wholeCellClick)
+                    UiStyle.AddIconShadow(iconGo);
             }
 
             var labelGo = new GameObject("Label", typeof(RectTransform));
@@ -506,7 +597,8 @@ namespace StoreAndCraft
             RectTransform labelRt = labelGo.transform as RectTransform;
             labelRt.anchorMin = Vector2.zero;
             labelRt.anchorMax = Vector2.one;
-            labelRt.offsetMin = new Vector2(4f, ToggleH + 6f);
+            // No edge toggle in the Vanilla look → the name may use the bottom strip too.
+            labelRt.offsetMin = new Vector2(4f, wholeCellClick ? 6f : ToggleH + 6f);
             labelRt.offsetMax = new Vector2(-4f, -(IconSize + 10f));
             TextMeshProUGUI tmp = UiFonts.CreateLabel(labelGo, ItemFont);
             StyleLabel(tmp, ItemFont, LetterSpace * 0.55f);
@@ -516,6 +608,9 @@ namespace StoreAndCraft
             tmp.maxVisibleLines = 2;
             tmp.color = on ? Gold : Muted;
             tmp.text = label;
+
+            if (wholeCellClick)
+                return;
 
             GameObject toggle = UiToggle.Create(
                 rt, "Toggle", on, true, onToggle, UiFonts.ThinNorse(),
@@ -560,7 +655,12 @@ namespace StoreAndCraft
             rt.anchoredPosition = new Vector2(ItemPadL, -(yFromTop + 4f));
 
             Image rowImg = row.GetComponent<Image>();
-            if (UiAssets.BtnApply != null)
+            Sprite vRow = UiStyle.Sprite("button");
+            if (vRow != null)
+            {
+                UiStyle.SetFrame(rowImg, vRow);
+            }
+            else if (UiAssets.BtnApply != null)
             {
                 rowImg.sprite = UiAssets.BtnApply;
                 rowImg.type = Image.Type.Sliced;

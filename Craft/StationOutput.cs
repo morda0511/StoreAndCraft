@@ -32,7 +32,8 @@ namespace StoreAndCraft
 
         /// <summary>
         /// Put <paramref name="amount"/> of prefab/token into a chest near <paramref name="station"/>.
-        /// Priority: matching [lN] first; if full / no space, untagged. Never a different link.
+        /// Linked station: only matching [lN] chests — never untagged or a different link.
+        /// Unlinked station: untagged chests only.
         /// MustHaveExisting: only chests that already hold that item (empty never).
         /// No match → false (caller ground-drops + tags intake link). Honors [I].
         /// </summary>
@@ -70,13 +71,10 @@ namespace StoreAndCraft
 
             bool mustHave = Plugin.Settings == null || Plugin.Settings.MustHaveExisting.Value;
 
-            // Linked station: matching [lN] first, then untagged fallback.
+            // Linked station: matching [lN] only. No room there → false, the caller drops it on
+            // the ground tagged with the link (AutoIntake then also only uses [lN]).
             if (linkId >= 1)
-            {
-                if (TryDepositPass(NearScratch, prefabOrToken, shared, amount, exactChestLink: linkId, requireExisting: mustHave))
-                    return true;
-                return TryDepositPass(NearScratch, prefabOrToken, shared, amount, exactChestLink: 0, requireExisting: mustHave);
-            }
+                return TryDepositPass(NearScratch, prefabOrToken, shared, amount, exactChestLink: linkId, requireExisting: mustHave);
 
             // Unlinked station: untagged only.
             return TryDepositPass(NearScratch, prefabOrToken, shared, amount, exactChestLink: 0, requireExisting: mustHave);
@@ -236,6 +234,9 @@ namespace StoreAndCraft
                 }
             }
 
+            // Feed trough (Container) and other container "stations": their piece name.
+            if (string.IsNullOrEmpty(name) && station is Container box)
+                name = box.m_name;
             if (string.IsNullOrEmpty(name))
                 return station.gameObject.name;
             return Localization.instance != null

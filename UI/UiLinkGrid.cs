@@ -102,6 +102,14 @@ namespace StoreAndCraft
                         outImg.color = c;
                     }
                 }
+                Transform num = child.Find("Num");
+                TMPro.TMP_Text numText = num != null ? num.GetComponent<TMPro.TMP_Text>() : null;
+                if (numText != null)
+                {
+                    Color c = numText.color;
+                    c.a = a;
+                    numText.color = c;
+                }
             }
         }
 
@@ -129,6 +137,33 @@ namespace StoreAndCraft
             rt.sizeDelta = new Vector2(cell, cell);
 
             Image img = go.GetComponent<Image>();
+            Button vanillaBtn = go.GetComponent<Button>();
+            // Vanilla look: Valheim button with the number; selection = highlight frame.
+            if (UiStyle.Sprite("button_small") != null)
+            {
+                ApplyVanillaCell(go, selected, cell);
+                var numGo = new GameObject("Num", typeof(RectTransform));
+                numGo.transform.SetParent(go.transform, false);
+                RectTransform numRt = numGo.transform as RectTransform;
+                numRt.anchorMin = Vector2.zero;
+                numRt.anchorMax = Vector2.one;
+                numRt.offsetMin = Vector2.zero;
+                numRt.offsetMax = Vector2.zero;
+                TMPro.TextMeshProUGUI num = UiFonts.CreateLabel(numGo, Mathf.Max(9f, cell * 0.62f));
+                num.alignment = TMPro.TextAlignmentOptions.Center;
+                num.raycastTarget = false;
+                num.text = linkId.ToString();
+                num.color = selected ? LinkGold : LinkMuted;
+                vanillaBtn.transition = Selectable.Transition.None;
+                int capturedV = linkId;
+                vanillaBtn.onClick.AddListener(() =>
+                {
+                    if (onClick != null)
+                        onClick(capturedV);
+                });
+                return;
+            }
+
             Sprite sprite = UiAssets.Link(linkId);
             if (sprite != null)
             {
@@ -175,7 +210,42 @@ namespace StoreAndCraft
         {
             Transform t = cell.transform.Find("Outline");
             if (t != null)
+            {
                 t.gameObject.SetActive(on);
+                return;
+            }
+            // Vanilla cell (no outline): swap frame + number colour.
+            Transform num = cell.transform.Find("Num");
+            if (num == null)
+                return;
+            RectTransform rt = cell.transform as RectTransform;
+            ApplyVanillaCell(cell, on, rt != null ? rt.sizeDelta.x : Cell);
+            TMPro.TMP_Text text = num.GetComponent<TMPro.TMP_Text>();
+            if (text != null)
+            {
+                float a = text.color.a;
+                Color c = on ? LinkGold : LinkMuted;
+                c.a = a;
+                text.color = c;
+            }
+        }
+
+        private static readonly Color LinkGold = new Color(1f, 0.85f, 0.35f, 1f);
+        private static readonly Color LinkMuted = new Color(0.85f, 0.8f, 0.7f, 1f);
+
+        private static void ApplyVanillaCell(GameObject cell, bool selected, float side)
+        {
+            Image img = cell.GetComponent<Image>();
+            if (img == null)
+                return;
+            float a = img.color.a;
+            Sprite frame = selected
+                ? (UiStyle.Sprite("button_highlight") ?? UiStyle.Sprite("button_small"))
+                : UiStyle.Sprite("button_small");
+            UiStyle.SetFrame(img, frame, side);
+            Color c = img.color;
+            c.a = a <= 0f ? 1f : a; // keep SetDimmed alpha
+            img.color = c;
         }
 
         public static void DestroyAll(List<GameObject> owned)

@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 2,
+  "prefabId": "sign_small",
+  "model": {
+    "localScale": { "x": 1, "y": 1, "z": 1 }
+  },
+  "itemGrid": {
+    "enabled": true,
+    "columns": 3,
+    "rows": 3,
+    "spacingX": 0.42,
+    "spacingY": 0.42,
+    "offsetX": 0,
+    "offsetY": 0,
+    "offsetZ": 0,
+    "cellSize": 0.35,
+    "euler": { "x": 0, "y": 0, "z": 0 }
+  },
+  "layouts": [
+    {
+      "name": "Single",
+      "sections": [
+        {
+          "id": "Item",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 1, "rows": 1, "spacingX": 0.9, "spacingY": 0.26, "offsetX": 0, "offsetY": -0.07, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.14, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.9, "height": 0.12, "fontSize": 0.08, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Two by Two",
+      "sections": [
+        {
+          "id": "Items",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.45, "spacingY": 0.2, "offsetX": 0, "offsetY": 0, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": false, "text": "", "offsetX": 0, "offsetY": 0.2, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.9, "height": 0.1, "fontSize": 0, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Titled Two by Two",
+      "sections": [
+        {
+          "id": "Items",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1.4,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.48, "spacingY": 0.17, "offsetX": 0.02, "offsetY": -0.05, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.02, "offsetY": 0.15, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.9, "height": 0.1, "fontSize": 0.07, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    },
+    {
+      "name": "Single +amount",
+      "sections": [
+        {
+          "id": "Item",
+          "category": "all",
+          "showAmount": true,
+          "amountScale": 1,
+          "iconScale": 1,
+          "sort": "count",
+          "fill": "top",
+          "emptyText": "",
+          "amountColor": "",
+          "grid": { "columns": 1, "rows": 1, "spacingX": 0.92, "spacingY": 0.43, "offsetX": 0.01, "offsetY": -0.01, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": false, "text": "", "offsetX": 0, "offsetY": 0.14, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.9, "height": 0.14, "fontSize": 0.08, "align": "center", "color": "#FFD966", "uppercase": true }
+        }
+      ]
+    }
+  ],
+  "colliders": [
+
+  ],
+  "snapPoints": [
+
+  ]
+}

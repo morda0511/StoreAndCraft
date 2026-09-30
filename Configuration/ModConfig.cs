@@ -7,7 +7,10 @@ namespace StoreAndCraft
     {
         // Bump when package layout or shared station behavior changes. v18 = SAC-CATCHUP settings synced.
         // v19 = TorchAutoFillDefault synced.
-        public const int ProtocolVersion = 19;
+        // v20 = station capacities (6 - Stations) + fermenter batch synced.
+        public const int ProtocolVersion = 20;
+        /// <summary>Highest station capacity the F10 panel / config accepts.</summary>
+        public const float MaxStationCap = 50f;
         public const float MaxRange = 1000f;
 
         public ConfigEntry<bool> LockConfig { get; }
@@ -50,6 +53,19 @@ namespace StoreAndCraft
         public ConfigEntry<float> CatchUpMaxHours { get; }
         public ConfigEntry<double> CatchUpSince { get; }
         public ConfigEntry<bool> TorchAutoFillDefault { get; }
+        // Station capacities: 0 = vanilla, else 1–50 (StationCaps applies them live).
+        public ConfigEntry<float> KilnMaxWood { get; }
+        public ConfigEntry<float> SmelterMaxOre { get; }
+        public ConfigEntry<float> SmelterMaxCoal { get; }
+        public ConfigEntry<float> BlastFurnaceMaxOre { get; }
+        public ConfigEntry<float> BlastFurnaceMaxCoal { get; }
+        public ConfigEntry<float> EitrRefineryMaxInput { get; }
+        public ConfigEntry<float> EitrRefineryMaxSap { get; }
+        public ConfigEntry<float> BeehiveMaxHoney { get; }
+        public ConfigEntry<float> FermenterBatch { get; }
+        // Local only (not synced): Hugin release news once per version.
+        public ConfigEntry<bool> ShowReleaseNews { get; }
+        public ConfigEntry<string> ReleaseNewsSeen { get; }
 
         public ModConfig(ConfigFile file)
         {
@@ -118,8 +134,9 @@ namespace StoreAndCraft
             ActivityLogVisible = file.Bind("4 - Keys", "ActivityLogVisible", false,
                 "Remember whether the activity log is shown. Local only, not synced. Changed by the F10 panel checkbox.");
             DisplayMenuStyle = file.Bind("4 - Keys", "DisplayMenuStyle", "Classic", new ConfigDescription(
-                "Look of the Storage Display filter menu (E on a display): Classic = SAC artwork, "
-                + "Vanilla = Valheim's own panels, buttons and checkboxes. Local only, not synced. Reopen the menu to see it.",
+                "Look of the StoreAndCraft menus (Storage Display filter, station Select Filter, chest settings "
+                + "toggles and l1-l9 link buttons): Classic = SAC artwork, Vanilla = Valheim's own panels, buttons "
+                + "and checkboxes. Local only, not synced. Reopen the menu to see it.",
                 new AcceptableValueList<string>("Classic", "Vanilla")));
             DisplayRangeKey = file.Bind("4 - Keys", "DisplayRangeKey", new KeyboardShortcut(KeyCode.R, KeyCode.LeftAlt),
                 "Look at a Storage Display and press to set that board's chest-scan range (5–50 m). Per display.");
@@ -139,6 +156,33 @@ namespace StoreAndCraft
                 "Set automatically: world time (seconds) when CatchUpWhileAway was switched on. Time before this is never caught up. Do not edit.");
             TorchAutoFillDefault = file.Bind("3 - Craft", "TorchAutoFillDefault", false,
                 "If on, torches of every kind (standing, wall, green / blue / mist, modded *torch*) have auto-fill ON until someone presses B on them. Torches switched off with B stay off. Off = old behavior (B needed). Synced from server when LockConfig is on.");
+
+            ShowReleaseNews = file.Bind("1 - General", "ShowReleaseNews", true,
+                "After an update, Hugin (the raven) visits once and tells you what is new in StoreAndCraft. Local only, not synced.");
+            ReleaseNewsSeen = file.Bind("1 - General", "ReleaseNewsSeen", "",
+                "Set automatically: the StoreAndCraft version whose news Hugin already told you. Do not edit.");
+
+            var cap = new AcceptableValueRange<float>(0f, MaxStationCap);
+            const string capNote = " 0 = vanilla, otherwise 1-50. Applied live to every station. Synced from server when LockConfig is on.";
+            KilnMaxWood = file.Bind("6 - Stations", "KilnMaxWood", 0f, new ConfigDescription(
+                "Charcoal kiln: most wood in the queue." + capNote, cap));
+            SmelterMaxOre = file.Bind("6 - Stations", "SmelterMaxOre", 0f, new ConfigDescription(
+                "Smelter: most ore in the queue." + capNote, cap));
+            SmelterMaxCoal = file.Bind("6 - Stations", "SmelterMaxCoal", 0f, new ConfigDescription(
+                "Smelter: most coal." + capNote, cap));
+            BlastFurnaceMaxOre = file.Bind("6 - Stations", "BlastFurnaceMaxOre", 0f, new ConfigDescription(
+                "Blast furnace: most ore in the queue." + capNote, cap));
+            BlastFurnaceMaxCoal = file.Bind("6 - Stations", "BlastFurnaceMaxCoal", 0f, new ConfigDescription(
+                "Blast furnace: most coal." + capNote, cap));
+            EitrRefineryMaxInput = file.Bind("6 - Stations", "EitrRefineryMaxInput", 0f, new ConfigDescription(
+                "Eitr refinery: most soft tissue in the queue." + capNote, cap));
+            EitrRefineryMaxSap = file.Bind("6 - Stations", "EitrRefineryMaxSap", 0f, new ConfigDescription(
+                "Eitr refinery: most sap." + capNote, cap));
+            BeehiveMaxHoney = file.Bind("6 - Stations", "BeehiveMaxHoney", 0f, new ConfigDescription(
+                "Beehive: most honey it collects before it is full." + capNote, cap));
+            FermenterBatch = file.Bind("6 - Stations", "FermenterBatch", 5f, new ConfigDescription(
+                "Fermenter: how many of the same mead base fit in one batch. More can be added only in the first 60 seconds; all finish in the time of one. 1 = vanilla. Synced from server when LockConfig is on.",
+                new AcceptableValueRange<float>(1f, MaxStationCap)));
         }
 
         public float StationPullRange()
@@ -196,6 +240,16 @@ namespace StoreAndCraft
             pkg.Write(CatchUpMaxHours.Value);
             pkg.Write(CatchUpSince.Value);
             pkg.Write(TorchAutoFillDefault.Value);
+            // v20
+            pkg.Write(KilnMaxWood.Value);
+            pkg.Write(SmelterMaxOre.Value);
+            pkg.Write(SmelterMaxCoal.Value);
+            pkg.Write(BlastFurnaceMaxOre.Value);
+            pkg.Write(BlastFurnaceMaxCoal.Value);
+            pkg.Write(EitrRefineryMaxInput.Value);
+            pkg.Write(EitrRefineryMaxSap.Value);
+            pkg.Write(BeehiveMaxHoney.Value);
+            pkg.Write(FermenterBatch.Value);
         }
 
         public void ReadFromPackage(ZPackage pkg)
@@ -223,6 +277,16 @@ namespace StoreAndCraft
             CatchUpMaxHours.Value = pkg.ReadSingle();
             CatchUpSince.Value = pkg.ReadDouble();
             TorchAutoFillDefault.Value = pkg.ReadBool();
+            // v20
+            KilnMaxWood.Value = pkg.ReadSingle();
+            SmelterMaxOre.Value = pkg.ReadSingle();
+            SmelterMaxCoal.Value = pkg.ReadSingle();
+            BlastFurnaceMaxOre.Value = pkg.ReadSingle();
+            BlastFurnaceMaxCoal.Value = pkg.ReadSingle();
+            EitrRefineryMaxInput.Value = pkg.ReadSingle();
+            EitrRefineryMaxSap.Value = pkg.ReadSingle();
+            BeehiveMaxHoney.Value = pkg.ReadSingle();
+            FermenterBatch.Value = pkg.ReadSingle();
         }
     }
 }

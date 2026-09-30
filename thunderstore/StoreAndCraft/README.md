@@ -62,7 +62,7 @@ Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters
 ### Station Settings (Alt+E)
 - Look at a kiln, multi-input smelter, cooking station, or similar → **Alt+E** → **Settings**.
 - Choose which wood / ore / food types may be pulled (also blocked from your bag on that station).
-- Same menu: **l1-l9** station link. Fill pulls only matching linked chests (or untagged when the station has no link).
+- Same menu: **l1-l9** station link. Fill pulls only matching linked chests (or untagged when the station has no link). Output of a linked station goes only into chests with the same link; if none has room it stays on the ground.
 
 ### Storage Display (Hammer)
 - Build **Small**, **Medium**, or **Large Storage Display**.

@@ -228,7 +228,7 @@ namespace StoreAndCraft
             return LoadPrefab(id) != null;
         }
 
-        private static GameObject LoadPrefab(string id)
+        internal static GameObject LoadPrefab(string id)
         {
             AssetBundle bundle = Bundle();
             if (bundle == null)
@@ -284,7 +284,7 @@ namespace StoreAndCraft
             return Path.Combine(Path.GetDirectoryName(dll) ?? "", "displays");
         }
 
-        private static void ApplyValheimShaders(GameObject model)
+        internal static void ApplyValheimShaders(GameObject model)
         {
             Shader piece = Shader.Find("Custom/Piece");
             if (piece == null)
@@ -313,6 +313,7 @@ namespace StoreAndCraft
                     float metallic = mat.HasProperty("_Metallic") ? mat.GetFloat("_Metallic") : 0f;
                     float gloss = mat.HasProperty("_Glossiness") ? mat.GetFloat("_Glossiness") : 0.3f;
                     string n = mat.name.ToLowerInvariant();
+                    LogMaterialOnce(model.name, renderer.gameObject.name, mat, piece);
                     mat.shader = piece;
                     if (tex != null && mat.HasProperty("_MainTex"))
                         mat.SetTexture("_MainTex", tex);
@@ -324,13 +325,61 @@ namespace StoreAndCraft
                         mat.SetFloat("_Glossiness", gloss);
                     if (mat.HasProperty("_MetalColor"))
                     {
+                        // Untextured metal (e.g. DarkIron from Blender) keeps its own colour;
+                        // textured materials keep the old silver tint.
                         Color metal = (n.Contains("gold") || n.Contains("nail"))
                             ? new Color(1f, 0.72f, 0.28f)
-                            : new Color(0.75f, 0.75f, 0.78f);
+                            : tex == null ? color : new Color(0.75f, 0.75f, 0.78f);
                         mat.SetColor("_MetalColor", metal);
                     }
                 }
                 renderer.materials = mats;
+            }
+        }
+
+        /// <summary>
+        /// Diagnostics for Blender/Unity → Valheim: once per material, log what the bundle
+        /// material carries before the swap to Custom/Piece (only _MainTex/_Color/_Metallic/
+        /// _Glossiness are carried over). Once: which texture slots Custom/Piece itself has.
+        /// </summary>
+        private static void LogMaterialOnce(string model, string part, Material mat, Shader piece)
+        {
+            if (mat == null)
+                return;
+            string key = "mat " + mat.name;
+            if (Logged.Contains(key))
+                return;
+            Logged.Add(key);
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append("Display material '").Append(mat.name.Replace(" (Instance)", ""))
+                .Append("' on ").Append(model).Append('/').Append(part)
+                .Append(" shader=").Append(mat.shader != null ? mat.shader.name : "null");
+            if (mat.HasProperty("_Color"))
+                sb.Append(" color=").Append(ColorUtility.ToHtmlStringRGBA(mat.GetColor("_Color")));
+            string[] slots = mat.GetTexturePropertyNames();
+            for (int i = 0; i < slots.Length; i++)
+            {
+                Texture t = mat.GetTexture(slots[i]);
+                if (t == null)
+                    continue;
+                Vector2 tiling = mat.GetTextureScale(slots[i]);
+                sb.Append(' ').Append(slots[i]).Append('=').Append(t.name)
+                    .Append('(').Append(t.width).Append('x').Append(t.height).Append(')');
+                if (tiling != Vector2.one)
+                    sb.Append(" tiling=").Append(tiling.x.ToString("0.##")).Append('/').Append(tiling.y.ToString("0.##"));
+            }
+            if (mat.HasProperty("_Metallic"))
+                sb.Append(" metallic=").Append(mat.GetFloat("_Metallic").ToString("0.##"));
+            if (mat.HasProperty("_Glossiness"))
+                sb.Append(" smooth=").Append(mat.GetFloat("_Glossiness").ToString("0.##"));
+            Plugin.Log.LogInfo(sb.ToString());
+
+            if (piece != null && Logged.Add("piece shader slots"))
+            {
+                var tmp = new Material(piece);
+                Plugin.Log.LogInfo("Custom/Piece texture slots: " + string.Join(", ", tmp.GetTexturePropertyNames()));
+                UnityEngine.Object.Destroy(tmp);
             }
         }
 
@@ -387,6 +436,19 @@ namespace StoreAndCraft
             {
                 if (boxes[i] != null)
                     boxes[i].enabled = false;
+            }
+
+            // Definition with an empty collider list: ApplyColliders disabled every box first.
+            // Keep the piece placeable with an enabled mesh-fit box on the root.
+            if (!box.enabled)
+            {
+                BoxCollider rootBox = root.GetComponent<BoxCollider>();
+                if (rootBox == null)
+                    rootBox = root.AddComponent<BoxCollider>();
+                rootBox.center = local.center;
+                rootBox.size = size;
+                rootBox.isTrigger = false;
+                rootBox.enabled = true;
             }
         }
 

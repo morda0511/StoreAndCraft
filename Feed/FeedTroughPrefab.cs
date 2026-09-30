@@ -107,8 +107,15 @@ namespace StoreAndCraft
             if (bedComp != null)
                 Object.DestroyImmediate(bedComp);
 
+            // Own Unity model from sac_displays when present; else the squashed bed mesh.
+            bool custom = TryAttachCustomModel(clone);
+            // PrefabStudio definition (feed_trough.json): colliders / snaps / model scale.
+            if (custom)
+                ApplyDefinition(clone);
+
             // Clone-only: squash the tall headboard end down to the short foot height.
-            SymmetrizeEnds(clone);
+            if (!custom)
+                SymmetrizeEnds(clone);
 
             Piece piece = clone.GetComponent<Piece>();
             if (piece == null)
@@ -142,9 +149,13 @@ namespace StoreAndCraft
             if (piece.m_placeEffect == null)
                 piece.m_placeEffect = new EffectList { m_effectPrefabs = new EffectList.EffectData[0] };
 
-            // Hammer icon: squeeze vanilla bed sprite (keeps Valheim shadow style, true alpha).
+            // Hammer icon: rendered filled trough (Content/UI/icon_feed_trough.png). Fallback:
+            // squeeze vanilla bed sprite (keeps Valheim shadow style, true alpha).
+            Sprite own = UiAssets.Get("icon_feed_trough.png");
             Piece bedPiece = bed.GetComponent<Piece>();
-            if (bedPiece != null && bedPiece.m_icon != null)
+            if (own != null)
+                piece.m_icon = own;
+            else if (bedPiece != null && bedPiece.m_icon != null)
             {
                 Sprite narrow = MakeNarrowIcon(bedPiece.m_icon, WidthScale);
                 if (narrow != null)
@@ -163,15 +174,144 @@ namespace StoreAndCraft
             if (clone.GetComponent<FeedTrough>() == null)
                 clone.AddComponent<FeedTrough>();
 
-            // Half of previous 75% width → 37.5% of the bed (long thin trough). Keep length/height.
-            Vector3 s = clone.transform.localScale;
-            clone.transform.localScale = new Vector3(s.x * WidthScale, s.y, s.z);
-            AddInteractCollider(clone);
+            if (!custom)
+            {
+                // Half of previous 75% width → 37.5% of the bed (long thin trough). Keep length/height.
+                Vector3 s = clone.transform.localScale;
+                clone.transform.localScale = new Vector3(s.x * WidthScale, s.y, s.z);
+                AddInteractCollider(clone);
+            }
 
             _prefab = clone;
             ByHash[FeedTrough.PrefabName.GetStableHashCode()] = clone;
             EnsureNamed(scene, clone);
-            Plugin.Log.LogDebug("StoreAndCraft feed trough registered (bed base).");
+            Plugin.Log.LogDebug("StoreAndCraft feed trough registered (" + (custom ? "Unity model" : "bed base") + ").");
+        }
+
+        /// <summary>Definition id (displays/definitions/feed_trough.json, PrefabStudio F8).</summary>
+        internal const string DefinitionId = "feed_trough";
+
+        private static void ApplyDefinition(GameObject trough)
+        {
+            Transform empty = trough.transform.Find(ModelEmptyName);
+            Transform full = trough.transform.Find(ModelFullName);
+            DisplayLayouts.TryApplyPiece(trough, DefinitionId, empty, full);
+        }
+
+        /// <summary>
+        /// PrefabStudio preview (DisplayLayouts.EditorPreview): re-apply on the hammer template and
+        /// every loaded trough, rebuild their eat points, refresh the placement ghost.
+        /// </summary>
+        internal static void ApplyPreview(string id)
+        {
+            if (!string.Equals(id, DefinitionId, System.StringComparison.OrdinalIgnoreCase))
+                return;
+            if (_prefab != null && _prefab.transform.Find(ModelEmptyName) != null)
+                ApplyDefinition(_prefab);
+            for (int i = 0; i < FeedTrough.Live.Count; i++)
+            {
+                FeedTrough trough = FeedTrough.Live[i];
+                if (trough == null || trough.transform.Find(ModelEmptyName) == null)
+                    continue;
+                ApplyDefinition(trough.gameObject);
+                trough.ResetBaits();
+            }
+            DisplayPrefab.RefreshPlacementGhost();
+        }
+
+        /// <summary>Unity models in sac_displays: empty trough / trough with food.</summary>
+        internal const string ModelEmpty = "SM_FeedTrough";
+        internal const string ModelFull = "SM_FeedTroughFull";
+        internal const string ModelEmptyName = "SacTroughModel";
+        internal const string ModelFullName = "SacTroughModelFull";
+
+        /// <summary>
+        /// Swap the bed look for the Unity trough. Bed renderers / colliders are only disabled
+        /// (never destroyed — see class note). The hit box is fitted to the model and drives the
+        /// animal eat points (FeedTrough.BaitOffset). Full model starts hidden; FeedTrough toggles.
+        /// </summary>
+        private static bool TryAttachCustomModel(GameObject clone)
+        {
+            GameObject empty = DisplayVisual.LoadPrefab(ModelEmpty);
+            if (empty == null)
+                return false;
+            GameObject full = DisplayVisual.LoadPrefab(ModelFull);
+
+            Renderer[] bedRenderers = clone.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < bedRenderers.Length; i++)
+            {
+                if (bedRenderers[i] != null)
+                    bedRenderers[i].enabled = false;
+            }
+            Collider[] bedColliders = clone.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < bedColliders.Length; i++)
+            {
+                if (bedColliders[i] != null)
+                    bedColliders[i].enabled = false;
+            }
+
+            GameObject emptyGo = AttachModel(clone, empty, ModelEmptyName);
+            if (full != null)
+            {
+                GameObject fullGo = AttachModel(clone, full, ModelFullName);
+                fullGo.SetActive(false);
+            }
+
+            // Hit / placement box = model bounds (clone space, root scale stays 1).
+            Bounds b;
+            if (!ModelBounds(clone.transform, emptyGo.transform, out b))
+                b = new Bounds(new Vector3(0f, 0.25f, 0f), new Vector3(0.9f, 0.55f, 2.2f));
+            var hit = new GameObject("SacTroughHit");
+            hit.transform.SetParent(clone.transform, false);
+            BoxCollider box = hit.AddComponent<BoxCollider>();
+            box.center = b.center;
+            box.size = new Vector3(Mathf.Max(0.1f, b.size.x), Mathf.Max(0.1f, b.size.y), Mathf.Max(0.1f, b.size.z));
+            box.isTrigger = false;
+            return true;
+        }
+
+        private static GameObject AttachModel(GameObject clone, GameObject prefab, string name)
+        {
+            GameObject model = Object.Instantiate(prefab, clone.transform, false);
+            model.name = name;
+            model.transform.localPosition = Vector3.zero;
+            model.transform.localRotation = Quaternion.identity;
+            model.transform.localScale = Vector3.one;
+            DisplayVisual.ApplyValheimShaders(model);
+            return model;
+        }
+
+        private static bool ModelBounds(Transform root, Transform model, out Bounds bounds)
+        {
+            bounds = new Bounds();
+            bool any = false;
+            MeshFilter[] filters = model.GetComponentsInChildren<MeshFilter>(true);
+            for (int i = 0; i < filters.Length; i++)
+            {
+                Mesh mesh = filters[i] != null ? filters[i].sharedMesh : null;
+                if (mesh == null)
+                    continue;
+                Bounds mb = mesh.bounds;
+                Transform t = filters[i].transform;
+                for (int c = 0; c < 8; c++)
+                {
+                    Vector3 corner = new Vector3(
+                        (c & 1) == 0 ? mb.min.x : mb.max.x,
+                        (c & 2) == 0 ? mb.min.y : mb.max.y,
+                        (c & 4) == 0 ? mb.min.z : mb.max.z);
+                    Vector3 local = root.InverseTransformPoint(t.TransformPoint(corner));
+                    if (!any)
+                    {
+                        bounds = new Bounds(local, Vector3.zero);
+                        any = true;
+                    }
+                    else
+                    {
+                        bounds.Encapsulate(local);
+                    }
+                }
+            }
+            return any;
         }
 
         private static void EnsureContainer(GameObject clone, GameObject woodChest)

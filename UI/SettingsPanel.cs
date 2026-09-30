@@ -41,6 +41,10 @@ namespace StoreAndCraft
             public float Min;
             public float SliderMax = SettingsPanel.SliderMax;
             public float Max = ModConfig.MaxRange;
+            /// <summary>Whole numbers only (station capacities: no 13.5 ore).</summary>
+            public bool Whole;
+            /// <summary>Capacity row: config 0 = this vanilla amount (shown as the real number). -1 = none.</summary>
+            public float Vanilla = -1f;
             public Slider Slider;
             public TMP_InputField Input;
             public bool Syncing;
@@ -49,6 +53,17 @@ namespace StoreAndCraft
         // SAC-CATCHUP
         private static bool _catchUp;
         private static bool _torchAutoFill;
+
+        /// <summary>Synced on/off setting (admin, sent on Save via ConfigCommands.BoolEntryFor key).</summary>
+        private sealed class BoolRow
+        {
+            public string Key;
+            public string En;
+            public string De;
+            public bool Value;
+        }
+
+        private static readonly List<BoolRow> BoolRows = new List<BoolRow>();
 
         public static bool IsOpen { get; private set; }
 
@@ -190,6 +205,62 @@ namespace StoreAndCraft
             hours.Min = 0.5f;
             hours.SliderMax = 48f;
             hours.Max = 48f;
+
+            // Station capacities: 0 = vanilla, up to 50. Applied live after Save.
+            AddCapRow("kilnmax", "Charcoal kiln: max wood (0 = vanilla)", "Köhler: max. Holz (0 = Vanilla)");
+            AddCapRow("smeltermaxore", "Smelter: max ore (0 = vanilla)", "Schmelze: max. Erz (0 = Vanilla)");
+            AddCapRow("smeltermaxfuel", "Smelter: max coal (0 = vanilla)", "Schmelze: max. Kohle (0 = Vanilla)");
+            AddCapRow("blastmaxore", "Blast furnace: max ore (0 = vanilla)", "Hochofen: max. Erz (0 = Vanilla)");
+            AddCapRow("blastmaxfuel", "Blast furnace: max coal (0 = vanilla)", "Hochofen: max. Kohle (0 = Vanilla)");
+            AddCapRow("eitrmaxore", "Eitr refinery: max soft tissue (0 = vanilla)", "Eitr-Raffinerie: max. Weichgewebe (0 = Vanilla)");
+            AddCapRow("eitrmaxfuel", "Eitr refinery: max sap (0 = vanilla)", "Eitr-Raffinerie: max. Saft (0 = Vanilla)");
+            AddCapRow("beehivemax", "Beehive: max honey (0 = vanilla)", "Bienenstock: max. Honig (0 = Vanilla)");
+            AddCapRow("fermenterbatch", "Fermenter: mead bases per batch", "Fermenter: Met-Basen pro Charge");
+
+            BoolRows.Clear();
+            AddBool("storeenabled", "Dump / middle-click store, take stack", "Einlagern / Mittelklick, Stack holen");
+            AddBool("autointake", "Auto-store ground items", "Auto-Lagern vom Boden");
+            AddBool("musthaveexisting", "Chests only take items they already hold", "Kisten nehmen nur Items, die schon drin sind");
+            AddBool("autostack", "Auto-stack inside chests", "Stapel in Kisten automatisch zusammenlegen");
+            AddBool("craftenabled", "Craft / build / stations use chest items", "Craften / Bauen / Stationen nutzen Kisten-Items");
+            AddBool("leaveone", "Leave 1 item in chests when taking", "Beim Entnehmen 1 Item in der Kiste lassen");
+            AddBool("feedtroughenabled", "Feed trough in the hammer (after restart)", "Futtertrog im Hammer (nach Neustart)");
+        }
+
+        private static void AddBool(string key, string en, string de)
+        {
+            ConfigEntry<bool> entry = ConfigCommands.BoolEntryFor(key);
+            if (entry == null)
+                return;
+            BoolRows.Add(new BoolRow { Key = key, En = en, De = de, Value = entry.Value });
+        }
+
+        private static void AddCapRow(string key, string en, string de)
+        {
+            AddRow(key, en, de,
+                "How much fits into this station type. 0 keeps the vanilla amount. Applies to every station at once.",
+                "Wie viel in diese Station passt. 0 lässt den Vanilla-Wert. Gilt sofort für alle Stationen dieser Art.");
+            if (Rows.Count == 0 || Rows[Rows.Count - 1].Key != key)
+                return;
+            Row row = Rows[Rows.Count - 1];
+            row.Unit = "";
+            row.Whole = true;
+            row.SliderMax = ModConfig.MaxStationCap;
+            row.Max = ModConfig.MaxStationCap;
+            if (key == "fermenterbatch")
+            {
+                // Plain count, vanilla = 1.
+                row.Min = 1f;
+                row.Value = Mathf.Clamp(Mathf.Round(row.Value), 1f, row.Max);
+                return;
+            }
+            // Left end = the station's vanilla amount; config 0 is shown as that real number.
+            int vanilla = StationCaps.Vanilla(key);
+            row.Vanilla = vanilla > 0 ? vanilla : 1f;
+            row.Min = row.Vanilla;
+            if (row.Vanilla > row.SliderMax)
+                row.SliderMax = row.Max = row.Vanilla;
+            row.Value = row.Value <= 0f ? row.Vanilla : Mathf.Clamp(Mathf.Round(row.Value), row.Min, row.Max);
         }
 
         private static void AddRow(string key, string en, string de, string helpEn, string helpDe)
@@ -219,14 +290,26 @@ namespace StoreAndCraft
             for (int i = 0; i < Rows.Count; i++)
             {
                 ConfigEntry<float> entry = ConfigCommands.EntryFor(Rows[i].Key);
-                if (entry == null || Mathf.Abs(entry.Value - Rows[i].Value) < 0.001f)
+                if (entry == null)
                     continue;
-                changes.Add(new KeyValuePair<string, float>(Rows[i].Key, Rows[i].Value));
+                float wanted = Rows[i].Whole ? Mathf.Round(Rows[i].Value) : Rows[i].Value;
+                // Capacity back at vanilla → store 0 (follows future vanilla changes).
+                if (Rows[i].Vanilla > 0f && wanted <= Rows[i].Vanilla)
+                    wanted = 0f;
+                if (Mathf.Abs(entry.Value - wanted) < 0.001f)
+                    continue;
+                changes.Add(new KeyValuePair<string, float>(Rows[i].Key, wanted));
             }
             if (_catchUp != Plugin.Settings.CatchUpEnabled.Value) // SAC-CATCHUP
                 changes.Add(new KeyValuePair<string, float>("catchup", _catchUp ? 1f : 0f));
             if (_torchAutoFill != Plugin.Settings.TorchAutoFillDefault.Value)
                 changes.Add(new KeyValuePair<string, float>("torchautofill", _torchAutoFill ? 1f : 0f));
+            for (int i = 0; i < BoolRows.Count; i++)
+            {
+                ConfigEntry<bool> entry = ConfigCommands.BoolEntryFor(BoolRows[i].Key);
+                if (entry != null && entry.Value != BoolRows[i].Value)
+                    changes.Add(new KeyValuePair<string, float>(BoolRows[i].Key, BoolRows[i].Value ? 1f : 0f));
+            }
 
             string result = ConfigCommands.ApplyFromPanel(changes);
             // Rebuild so sliders / fields show what is really stored now.
@@ -356,6 +439,20 @@ namespace StoreAndCraft
                     "Torches start with auto-fill on (B still turns one off)",
                     "Fackeln haben Auto-Fill von Anfang an (B schaltet einzeln aus)"),
                 _torchAutoFill, _canEdit, on => _torchAutoFill = on);
+
+            // Other synced on/off settings — admin, applied on Save like the ranges.
+            AddHeader(Loc.T("Store / craft (on / off)", "Lagern / Craften (an / aus)"));
+            for (int i = 0; i < BoolRows.Count; i++)
+            {
+                BoolRow row = BoolRows[i];
+                AddToggle(Loc.T(row.En, row.De), row.Value, _canEdit, on => row.Value = on);
+            }
+
+            // Local only (this PC) — applied right away, like the activity log checkbox.
+            AddHeader(Loc.T("Only for me (this PC)", "Nur für mich (dieser PC)"));
+            AddLocalToggle(Loc.T("Dump skips the hotbar", "Einlagern lässt die Hotbar aus"), Plugin.Settings.IgnoreHotbar);
+            AddLocalToggle(Loc.T("Chest flashes when something is stored", "Kiste blinkt beim Einlagern"), Plugin.Settings.HighlightOnStore);
+            AddLocalToggle(Loc.T("Map ping on the chest after storing", "Karten-Ping an der Kiste nach dem Einlagern"), Plugin.Settings.PingOnStore);
 
             // Collapsible help.
             Button infoBtn = MakeButton(_content, "InfoToggle", "", ToggleInfo);
@@ -501,7 +598,7 @@ namespace StoreAndCraft
             slider.direction = Slider.Direction.LeftToRight;
             slider.minValue = row.Min;
             slider.maxValue = row.SliderMax;
-            slider.wholeNumbers = row.SliderMax > 50f;
+            slider.wholeNumbers = row.Whole || row.SliderMax > 50f;
             slider.SetValueWithoutNotify(Mathf.Min(row.Value, row.SliderMax));
             slider.interactable = _canEdit;
             row.Slider = slider;
@@ -540,7 +637,7 @@ namespace StoreAndCraft
                 if (row.Syncing)
                     return;
                 row.Syncing = true;
-                row.Value = Mathf.Max(row.Min, row.SliderMax > 50f ? Mathf.Round(v) : Mathf.Round(v * 2f) * 0.5f);
+                row.Value = Mathf.Max(row.Min, row.Whole || row.SliderMax > 50f ? Mathf.Round(v) : Mathf.Round(v * 2f) * 0.5f);
                 if (row.Input != null)
                     row.Input.SetTextWithoutNotify(Format(row.Value));
                 row.Syncing = false;
@@ -554,13 +651,20 @@ namespace StoreAndCraft
                 float parsed;
                 if (float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed)
                     || float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out parsed))
-                    row.Value = Mathf.Clamp(parsed, row.Min, row.Max);
+                    row.Value = Mathf.Clamp(row.Whole ? Mathf.Round(parsed) : parsed, row.Min, row.Max);
                 if (row.Input != null)
                     row.Input.SetTextWithoutNotify(Format(row.Value));
                 if (row.Slider != null)
                     row.Slider.SetValueWithoutNotify(Mathf.Min(row.Value, row.SliderMax));
                 row.Syncing = false;
             });
+        }
+
+        private static void AddLocalToggle(string text, ConfigEntry<bool> entry)
+        {
+            if (entry == null)
+                return;
+            AddToggle(text, entry.Value, true, on => entry.Value = on);
         }
 
         private static void AddToggle(string text, bool value, bool interactable, System.Action<bool> changed)
@@ -576,10 +680,12 @@ namespace StoreAndCraft
             SetSprite(box.GetComponent<Image>(), Vanilla("checkbox") ?? UiAssets.ToggleOff, new Color(0f, 0f, 0f, 0.6f));
 
             var mark = NewUi("Checkmark", box, typeof(Image));
-            Place(mark, 0f, 0f, 1f, 1f, 3f, 3f, -3f, -3f);
+            // Centered yellow knob: vanilla checkbox_marker sits off-centre in its sprite (showed
+            // at the edge / hidden), so the checkbox sprite itself is used, smaller and tinted.
+            Place(mark, 0f, 0f, 1f, 1f, 7f, 7f, -7f, -7f);
             Image markImg = mark.GetComponent<Image>();
-            SetSprite(markImg, Vanilla("checkbox_marker"), Gold);
-            // SetSprite tints real sprites white — force a bright yellow tick so on/off is obvious.
+            SetSprite(markImg, Vanilla("checkbox"), Gold);
+            markImg.preserveAspect = true;
             markImg.color = CheckYellow;
             markImg.raycastTarget = false;
 

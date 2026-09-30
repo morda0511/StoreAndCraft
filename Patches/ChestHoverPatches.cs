@@ -15,6 +15,16 @@ namespace StoreAndCraft
             if (!ChestRename.WantsRename(alt))
                 return true;
 
+            // Feed trough: food filter / link / auto-fill menu instead of chest settings.
+            if (FeedTrough.IsTrough(__instance))
+            {
+                if (!PrivateArea.CheckAccess(__instance.transform.position, 0f, false, true))
+                    return true;
+                StationFilterMenu.Open(__instance);
+                __result = true;
+                return false;
+            }
+
             if (!ChestRename.TryOpen(__instance, false))
                 return true;
 
@@ -65,6 +75,14 @@ namespace StoreAndCraft
 
             __result += "\n[<color=yellow><b>" + ChestRename.PromptLabel() + "</b></color>] "
                 + Loc.T("Settings", "Einstellungen");
+
+            // Feed trough: [B] auto-fill line + station link (ZDO), not the chest-name link.
+            if (FeedTrough.IsTrough(__instance))
+            {
+                StationAutoFill.AppendHover(ref __result, __instance.GetComponent<ZNetView>(), includeManualFill: false);
+                StationLink.PrependHover(ref __result, StationLink.Get(__instance), chest: false);
+                return;
+            }
 
             int link = StationLink.ParseFromName(custom);
             if (link > 0)

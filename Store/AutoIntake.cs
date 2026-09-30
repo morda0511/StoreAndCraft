@@ -11,6 +11,8 @@ namespace StoreAndCraft
         private static readonly List<Player> PlayerScratch = new List<Player>(8);
         private static readonly List<Container> ChestScratch = new List<Container>(32);
         private static readonly List<Container> ProbeOrder = new List<Container>(32);
+        /// <summary>Chest usable (IsReady + PlayerMayUse) — one pass only, cleared in Run.</summary>
+        private static readonly Dictionary<int, bool> UsableMemo = new Dictionary<int, bool>(64);
 
         public static void Tick()
         {
@@ -53,6 +55,7 @@ namespace StoreAndCraft
             int cap = Plugin.Settings.MaxTransfersPerTick.Value;
             int moved = 0;
             NearbyIndex.BeginStorePass();
+            UsableMemo.Clear();
 
             try
             {
@@ -126,21 +129,19 @@ namespace StoreAndCraft
 
         private static Container BestChest(ItemDrop drop, float storeRange)
         {
-            NearbyIndex.CollectNear(drop.transform.position, storeRange, ChestScratch);
+            NearbyIndex.CollectNear(drop.transform.position, storeRange, ChestScratch, UsableMemo);
             bool mustExist = Plugin.Settings.MustHaveExisting.Value;
             Vector3 pos = drop.transform.position;
             int intakeLink = StationOutput.GetIntakeLink(drop);
 
-            // Station-tagged drops: matching [lN] first, then untagged (same as Auto-store deposit).
+            // Linked station output: matching [lN] only (same as StationOutput.TryDepositNear).
+            // No linked chest takes it → it stays on the ground, never an untagged chest.
             if (intakeLink >= 1)
             {
                 Container linked = PickAccepting(ChestScratch, drop.m_itemData, pos, mustExist, exactChestLink: intakeLink);
-                if (linked != null)
+                if (linked != null || !mustExist)
                     return linked;
-                Container untagged = PickAccepting(ChestScratch, drop.m_itemData, pos, mustExist, exactChestLink: 0);
-                if (untagged != null || !mustExist)
-                    return untagged;
-                return ProbePreferLink(drop, pos, mustExist, intakeLink);
+                return ProbePreferLink(drop, pos, mustExist, exactFirst: intakeLink, exactSecond: -1);
             }
 
             if (intakeLink == 0)
@@ -188,11 +189,6 @@ namespace StoreAndCraft
             return best;
         }
 
-        private static Container ProbePreferLink(ItemDrop drop, Vector3 pos, bool mustExist, int intakeLink)
-        {
-            return ProbePreferLink(drop, pos, mustExist, exactFirst: intakeLink, exactSecond: 0);
-        }
-
         private static Container ProbePreferLink(
             ItemDrop drop,
             Vector3 pos,
@@ -210,6 +206,11 @@ namespace StoreAndCraft
 
         private static Container ProbePass(ItemDrop drop, Vector3 pos, bool mustExist, int exactChestLink)
         {
+            // No force budget left: TryForceProbeForStore would return false for every chest
+            // (no side effect), so the pass ends with null anyway — skip the sort.
+            if (!NearbyIndex.HasStoreForceBudget)
+                return null;
+
             ProbeOrder.Clear();
             ProbeOrder.AddRange(ChestScratch);
             ProbeOrder.Sort((a, b) =>

@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "prefabId": "feed_trough",
+  "model": {
+    "localScale": { "x": 1, "y": 1, "z": 1 }
+  },
+  "itemGrid": {
+    "enabled": false,
+    "columns": 3,
+    "rows": 3,
+    "spacingX": 0.42,
+    "spacingY": 0.42,
+    "offsetX": 0,
+    "offsetY": 0,
+    "offsetZ": 0,
+    "cellSize": 0.35,
+    "euler": { "x": 0, "y": 0, "z": 0 }
+  },
+  "colliders": [
+    {
+      "id": "BoxCollider_0",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0.01, "y": 0.42, "z": 0.03 },
+      "size": { "x": 2.51, "y": 0.45, "z": 0.85 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    }
+  ],
+  "snapPoints": [
+    {
+      "id": "SnapPoint_0",
+      "enabled": true,
+      "localPosition": { "x": 1.04, "y": 0.05, "z": 0.25 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "id": "SnapPoint_1",
+      "enabled": true,
+      "localPosition": { "x": -1.04, "y": 0.01, "z": -0.27 },
+      "localEuler": { "x": 0, "y": 0, "z": 0 }
+    }
+  ],
+  "eatPoints": [
+    {
+      "id": "EatPoint_0",
+      "enabled": true,
+      "localPosition": { "x": 0.02, "y": 0.32, "z": 0.44 }
+    },
+    {
+      "id": "EatPoint_1",
+      "enabled": true,
+      "localPosition": { "x": 0.01, "y": 0.32, "z": -0.86 }
+    },
+    {
+      "id": "EatPoint_2",
+      "enabled": true,
+      "localPosition": { "x": 1.31, "y": 0.32, "z": -0.06 }
+    },
+    {
+      "id": "EatPoint_3",
+      "enabled": true,
+      "localPosition": { "x": -1.29, "y": 0.32, "z": 0.02 }
+    },
+    {
+      "id": "EatPoint_4",
+      "enabled": true,
+      "localPosition": { "x": 0.81, "y": 0.32, "z": 0.42 }
+    },
+    {
+      "id": "EatPoint_5",
+      "enabled": true,
+      "localPosition": { "x": 0.81, "y": 0.32, "z": -0.8 }
+    },
+    {
+      "id": "EatPoint_6",
+      "enabled": true,
+      "localPosition": { "x": -0.79, "y": 0.32, "z": 0.36 }
+    },
+    {
+      "id": "EatPoint_7",
+      "enabled": true,
+      "localPosition": { "x": -0.79, "y": 0.32, "z": -0.82 }
+    }
+  ]
+}

@@ -22,6 +22,12 @@ namespace StoreAndCraft
         public const string SmallWideName = "sac_storage_display_small_wide";
         public const string MediumCarvedName = "sac_storage_display_carved";
         public const string LargeCarvedName = "sac_storage_display_large_carved";
+        // Horizontal carved boards are their own hammer pieces (no Classic/Compact mesh swap).
+        public const string MediumCarvedWideName = "sac_storage_display_carved_wide";
+        public const string LargeCarvedWideName = "sac_storage_display_large_carved_wide";
+
+        /// <summary>Wood chest piece: hammer category / usage for all storage displays (Storage tab).</summary>
+        private static Piece _chestPiece;
 
         private static readonly Dictionary<int, GameObject> ByHash = new Dictionary<int, GameObject>();
         private static readonly List<GameObject> AllPrefabs = new List<GameObject>();
@@ -90,6 +96,9 @@ namespace StoreAndCraft
                 return;
             }
 
+            GameObject woodChest = scene.GetPrefab("piece_chest_wood");
+            _chestPiece = woodChest != null ? woodChest.GetComponent<Piece>() : null;
+
             if (_hide == null)
             {
                 _hide = new GameObject("sac_display_hide");
@@ -100,12 +109,12 @@ namespace StoreAndCraft
             // Vanilla wood signs (always available).
             BuildVariant(scene, sign, SmallName, DisplayKind.Small, null,
                 "Small Storage Display",
-                "Shows the total of one item from nearby chests. Look at it and press hotbar 1-8 to set the item.",
+                "Shows one category or up to 4 items from nearby chests. Press [E] to select.",
                 Vector3.one);
 
             BuildVariant(scene, sign, MediumName, DisplayKind.Medium, null,
                 "Medium Storage Display",
-                "Shows nearby chest totals for one item type. Press [E] and click a type.",
+                "Shows nearby chest totals by category. Press [E] and click types, Shift+RMB changes the layout.",
                 new Vector3(2.5f, 2.1f, 1f));
 
             BuildVariant(scene, sign, LargeName, DisplayKind.Large, null,
@@ -118,23 +127,35 @@ namespace StoreAndCraft
             {
                 BuildVariant(scene, sign, SmallCarvedName, DisplayKind.Small, "small_vertical",
                     "Small Storage Display (Carved)",
-                    "Carved hanging board. Shows one item total from nearby chests. Look at it and press hotbar 1-8 to set the item.",
+                    "Carved hanging board. Shows one category or up to 4 items from nearby chests. Press [E] to select.",
                     Vector3.one);
 
                 BuildVariant(scene, sign, SmallWideName, DisplayKind.Small, "small_horizontal",
                     "Small Wide Storage Display (Carved)",
-                    "Wide carved hanging board. Shows one item total from nearby chests. Look at it and press hotbar 1-8 to set the item.",
+                    "Wide carved hanging board. Shows one category or up to 4 items from nearby chests. Press [E] to select.",
                     Vector3.one);
 
-                BuildVariant(scene, sign, MediumCarvedName, DisplayKind.Medium, "medium",
+                BuildVariant(scene, sign, MediumCarvedName, DisplayKind.Medium, "medium_vertical",
                     "Medium Storage Display (Carved)",
-                    "Carved board. Shows nearby chest totals for one item type. Press [E] and click a type.",
+                    "Carved board. Shows nearby chest totals by category. Press [E] and click types, Shift+RMB changes the layout.",
                     Vector3.one);
 
-                BuildVariant(scene, sign, LargeCarvedName, DisplayKind.Large, "large",
+                if (DisplayVisual.Available("medium_horizontal"))
+                    BuildVariant(scene, sign, MediumCarvedWideName, DisplayKind.Medium, "medium_horizontal",
+                        "Medium Wide Storage Display (Carved)",
+                        "Wide carved board. Shows nearby chest totals by category. Press [E] and click types, Shift+RMB changes the layout.",
+                        Vector3.one);
+
+                BuildVariant(scene, sign, LargeCarvedName, DisplayKind.Large, "large_vertical",
                     "Large Storage Display (Carved)",
-                    "Large carved board with flowing category sections. Press [E] and click types.",
+                    "Large carved board with category sections. Press [E] and click types.",
                     Vector3.one);
+
+                if (DisplayVisual.Available("large_horizontal"))
+                    BuildVariant(scene, sign, LargeCarvedWideName, DisplayKind.Large, "large_horizontal",
+                        "Large Wide Storage Display (Carved)",
+                        "Large wide carved board with category sections. Press [E] and click types.",
+                        Vector3.one);
 
                 Plugin.Log.LogDebug("StoreAndCraft storage displays registered (vanilla + carved).");
             }
@@ -161,10 +182,34 @@ namespace StoreAndCraft
                 return "small_vertical";
             if (n == SmallWideName)
                 return "small_horizontal";
+            // Fixed mesh per piece (was "medium"/"large" + Classic/Compact swap). Boards already
+            // placed as medium/large carved now always show the vertical mesh.
             if (n == MediumCarvedName)
-                return "medium";
+                return "medium_vertical";
+            if (n == MediumCarvedWideName)
+                return "medium_horizontal";
             if (n == LargeCarvedName)
-                return "large";
+                return "large_vertical";
+            if (n == LargeCarvedWideName)
+                return "large_horizontal";
+            return null;
+        }
+
+        /// <summary>
+        /// Vanilla-sign display → layout definition id (sign_small / sign_medium / sign_large).
+        /// Signs have no Unity mesh; with a v2 definition they show its layouts like carved boards.
+        /// </summary>
+        internal static string SignLayoutForPrefab(string objectName)
+        {
+            if (string.IsNullOrEmpty(objectName))
+                return null;
+            string n = objectName.Replace("(Clone)", "").Trim();
+            if (n == SmallName)
+                return "sign_small";
+            if (n == MediumName)
+                return "sign_medium";
+            if (n == LargeName)
+                return "sign_large";
             return null;
         }
 
@@ -215,6 +260,19 @@ namespace StoreAndCraft
                     piece.m_placeEffect = new EffectList { m_effectPrefabs = new EffectList.EffectData[0] };
                 if (piece.m_resources == null && source != null)
                     piece.m_resources = source.m_resources;
+                // Hammer: Storage tab, next to the chests (same as the feed trough).
+                if (_chestPiece != null)
+                {
+                    piece.m_category = _chestPiece.m_category;
+                    piece.m_usage = _chestPiece.m_usage;
+                }
+                // Carved boards: own hammer icon (Content/UI/icon_display_<visual>.png); else keep sign icon.
+                if (custom)
+                {
+                    Sprite icon = UiAssets.Get("icon_display_" + visualBase + ".png");
+                    if (icon != null)
+                        piece.m_icon = icon;
+                }
             }
 
             StorageDisplayBoard board = clone.GetComponent<StorageDisplayBoard>();
@@ -222,6 +280,8 @@ namespace StoreAndCraft
                 board = clone.AddComponent<StorageDisplayBoard>();
             board.Configure(kind);
             board.VisualBase = visualBase;
+            if (string.IsNullOrEmpty(visualBase))
+                board.SignLayout = SignLayoutForPrefab(prefabName);
             if (custom)
             {
                 // Full layout on the hammer template too: Valheim placement uses this
@@ -262,11 +322,16 @@ namespace StoreAndCraft
                 DisplayVisual.Ensure(board, templateMeshOnly: false);
                 any = true;
             }
-            if (!any)
-                return;
+            if (any)
+                RefreshPlacementGhost();
+        }
 
-            // Player.SetupPlacementGhost is private; it re-instantiates the ghost from the
-            // selected (now updated) prefab. Harmless when nothing is selected.
+        /// <summary>
+        /// Player.SetupPlacementGhost is private; it re-instantiates the ghost from the selected
+        /// (now updated) prefab. Harmless when nothing is selected. Used by display + trough preview.
+        /// </summary>
+        internal static void RefreshPlacementGhost()
+        {
             Player player = Player.m_localPlayer;
             if (player == null)
                 return;

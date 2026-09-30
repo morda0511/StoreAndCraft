@@ -22,6 +22,8 @@ namespace StoreAndCraft
 
         private DisplayKind _kind = DisplayKind.Medium;
         internal string VisualBase;
+        /// <summary>Vanilla-sign display: definition id for its own layouts (null on carved).</summary>
+        internal string SignLayout;
         internal string AppliedVisual;
         /// <summary>Matches DisplayLayouts.Generation after layout apply (0 = not applied yet).</summary>
         internal int AppliedLayoutGen;
@@ -178,8 +180,31 @@ namespace StoreAndCraft
             ApplyScaleToLayout();
         }
 
+        /// <summary>
+        /// Carved Unity board, or a vanilla-sign display whose definition has v2 layouts.
+        /// No Display Scale and no Classic/Compact: its look comes only from the definition
+        /// layouts (Shift+RMB). A sign without such a definition keeps the classic behaviour.
+        /// </summary>
+        private bool HasOwnLayouts
+        {
+            get
+            {
+                return !string.IsNullOrEmpty(VisualBase)
+                    || (!string.IsNullOrEmpty(SignLayout) && DisplayLayouts.HasSections(SignLayout));
+            }
+        }
+
+        /// <summary>Definition id for layouts: carved visual, else the sign layout id.</summary>
+        private string LayoutId()
+        {
+            string id = CurrentVisualId();
+            return !string.IsNullOrEmpty(id) ? id : SignLayout;
+        }
+
         public int ContentScaleStep()
         {
+            if (HasOwnLayouts)
+                return 0;
             ZNetView nv = GetComponent<ZNetView>();
             ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
             if (zdo == null)
@@ -217,6 +242,8 @@ namespace StoreAndCraft
         {
             if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
                 return;
+            if (HasOwnLayouts)
+                return; // carved boards: layouts only, no scale
             int step = ContentScaleStep();
             int next = step >= ScaleMax ? ScaleMin : step + 1;
             SetContentScaleStep(next);
@@ -233,6 +260,8 @@ namespace StoreAndCraft
         {
             if (_kind != DisplayKind.Medium && _kind != DisplayKind.Large)
                 return LayoutClassic;
+            if (HasOwnLayouts)
+                return LayoutClassic; // no Compact mesh swap — horizontal is its own piece
             ZNetView nv = GetComponent<ZNetView>();
             ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
             if (zdo == null)
@@ -294,13 +323,13 @@ namespace StoreAndCraft
         /// </summary>
         public void CycleLayoutMode()
         {
-            if (_kind == DisplayKind.Small)
+            if (HasOwnLayouts)
             {
-                // Small has no Classic/Compact mesh swap — only step through its v2 layouts.
-                int smallCount = UsesSections() ? DisplayLayouts.LayoutCount(CurrentVisualId()) : 0;
-                if (smallCount < 2)
+                // Carved boards: only step through their own v2 layouts (no Classic/Compact).
+                int ownCount = UsesSections() ? DisplayLayouts.LayoutCount(LayoutId()) : 0;
+                if (ownCount < 2)
                     return;
-                SetLayoutVariant((LayoutVariant() + 1) % smallCount);
+                SetLayoutVariant((LayoutVariant() + 1) % ownCount);
                 RebuildUiNow();
                 return;
             }
@@ -340,18 +369,27 @@ namespace StoreAndCraft
         private bool UsesSections()
         {
             // Also carved Small boards: with v2 layouts they show categories like Large.
-            return !string.IsNullOrEmpty(VisualBase)
-                && DisplayLayouts.HasSections(CurrentVisualId());
+            // Vanilla-sign displays too when their sign_* definition has layouts.
+            string id = LayoutId();
+            return !string.IsNullOrEmpty(id) && DisplayLayouts.HasSections(id);
         }
 
         public string FormatHoverLayoutLine()
         {
+            if (HasOwnLayouts)
+            {
+                DisplayLayouts.LayoutDef own = UsesSections()
+                    ? DisplayLayouts.GetLayout(LayoutId(), LayoutVariant())
+                    : null;
+                string ownName = own != null && !string.IsNullOrEmpty(own.name) ? own.name : "Standard";
+                return Loc.T("Layout", "Layout") + " : " + "<color=yellow><b>" + ownName + "</b></color>";
+            }
             string mode = ContentLayoutMode() == LayoutCompact
                 ? Loc.T("Compact", "Compact")
                 : Loc.T("Classic", "Classic");
-            if (UsesSections() && DisplayLayouts.LayoutCount(CurrentVisualId()) > 1)
+            if (UsesSections() && DisplayLayouts.LayoutCount(LayoutId()) > 1)
             {
-                DisplayLayouts.LayoutDef layout = DisplayLayouts.GetLayout(CurrentVisualId(), LayoutVariant());
+                DisplayLayouts.LayoutDef layout = DisplayLayouts.GetLayout(LayoutId(), LayoutVariant());
                 if (layout != null && !string.IsNullOrEmpty(layout.name))
                     mode += " · " + layout.name;
             }
@@ -591,7 +629,7 @@ namespace StoreAndCraft
                 StorageDisplayBoard board = All[i];
                 if (board == null)
                     continue;
-                if (!string.Equals(board.CurrentVisualId(), visualId, System.StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(board.LayoutId(), visualId, System.StringComparison.OrdinalIgnoreCase))
                     continue;
                 board.AppliedLayoutGen = 0; // force DisplayVisual.EnsureLayout → TryApply
                 board.RebuildUiNow();
@@ -904,6 +942,8 @@ namespace StoreAndCraft
             if (!string.IsNullOrEmpty(VisualBase))
                 return;
             VisualBase = DisplayPrefab.VisualBaseForPrefab(gameObject.name);
+            if (string.IsNullOrEmpty(VisualBase) && string.IsNullOrEmpty(SignLayout))
+                SignLayout = DisplayPrefab.SignLayoutForPrefab(gameObject.name);
         }
 
         private void DetectKindFromName()
@@ -996,6 +1036,12 @@ namespace StoreAndCraft
                 {
                     string sLayout = "[<color=yellow><b>Shift+RMB</b></color>] " + FormatHoverLayoutLine();
                     string sUse = "[<color=yellow><b>E</b></color>] " + Loc.T("Select type", "Typ wählen");
+                    // Carved Small with own layouts: types via [E] only (no hotbar assign).
+                    if (HasOwnLayouts)
+                    {
+                        bool layouts = DisplayLayouts.LayoutCount(LayoutId()) > 1;
+                        return head + "\n" + (layouts ? sLayout + "\n" : "") + rangeLine + "\n" + sUse;
+                    }
                     return head + "\n" + sLayout + "\n" + rangeLine + "\n" + sUse + "\n" + hotbar;
                 }
                 return head + "\n" + modeLine + "\n" + rangeLine + "\n" + hotbar;
@@ -1017,6 +1063,12 @@ namespace StoreAndCraft
                     title += " (" + (_page + 1) + "/" + _pages + ")";
             }
 
+            if (HasOwnLayouts)
+            {
+                // Carved: no scale; Shift+RMB only when there is more than one own layout.
+                bool layouts = UsesSections() && DisplayLayouts.LayoutCount(LayoutId()) > 1;
+                return title + "\n" + (layouts ? layoutLine + "\n" : "") + rangeLine + "\n" + use;
+            }
             return title + "\n" + scaleLine + "\n" + layoutLine + "\n" + rangeLine + "\n" + use;
         }
 
@@ -1124,6 +1176,9 @@ namespace StoreAndCraft
             StorageDisplayBoard board = HoveredSmall();
             if (board == null)
                 return false;
+            // Carved Small with own layouts picks types via [E]; hotbar keys stay vanilla.
+            if (board.HasOwnLayouts && board.UsesSections())
+                return false;
             if (!PrivateArea.CheckAccess(board.transform.position, 0f, false, true))
             {
                 player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
@@ -1201,6 +1256,10 @@ namespace StoreAndCraft
             return DisplayFilters.ReadItemTokens(zdo);
         }
 
+        /// <summary>Carved Small board: [E] selection limited to 1 category or 4 items, no hotbar.</summary>
+        private bool IsSmallOwnLayouts => _kind == DisplayKind.Small && HasOwnLayouts;
+        private const int SmallCarvedMaxItems = 4;
+
         public void WriteFilters(List<int> ids)
         {
             WriteSelection(ids, ItemTokens());
@@ -1217,6 +1276,9 @@ namespace StoreAndCraft
             ZDO zdo = nv.GetZDO();
             zdo.Set(DisplayFilters.ZdoKeyMulti, DisplayFilters.EncodeIds(ids));
             zdo.Set(DisplayFilters.ZdoKeyItems, DisplayFilters.EncodeItemTokens(itemTokens));
+            // Carved Small has no hotbar assign any more — drop an old hotbar item on first [E] edit.
+            if (IsSmallOwnLayouts)
+                zdo.Set(ZdoItemKey, "");
             int legacy = 0;
             if (ids != null)
             {
@@ -1250,6 +1312,12 @@ namespace StoreAndCraft
             if (ids.Contains(id))
             {
                 ids.Remove(id);
+            }
+            else if (IsSmallOwnLayouts)
+            {
+                // Carved Small: one category at most — picking one replaces the selection.
+                ids = new List<int> { id };
+                items = new List<string>();
             }
             else
             {
@@ -1289,6 +1357,21 @@ namespace StoreAndCraft
             List<string> items = ItemTokens();
             if (items.Contains(shared))
                 items.Remove(shared);
+            else if (IsSmallOwnLayouts)
+            {
+                // Carved Small: either one category or up to 4 single items.
+                if (items.Count >= SmallCarvedMaxItems)
+                {
+                    Player player = Player.m_localPlayer;
+                    if (player != null)
+                        player.Message(MessageHud.MessageType.Center,
+                            Loc.T("You reached the maximum of 4 items", "Maximal 4 Items erreicht"),
+                            0, null, false);
+                    return;
+                }
+                ids = new List<int>();
+                items.Add(shared);
+            }
             else
             {
                 // Adding a token whose parent is not already represented counts as a new category.
@@ -1919,12 +2002,15 @@ namespace StoreAndCraft
 
             DisplayVisual.Ensure(this);
 
-            DisplayLayouts.LayoutDef layout = DisplayLayouts.GetLayout(CurrentVisualId(), LayoutVariant());
+            DisplayLayouts.LayoutDef layout = DisplayLayouts.GetLayout(LayoutId(), LayoutVariant());
             Transform model = transform.Find("SacModel");
+            // Vanilla-sign display: sections hang on an unscaled face anchor at the sign text.
+            if (model == null && !string.IsNullOrEmpty(SignLayout))
+                model = EnsureSignFace(template);
             if (layout == null || model == null)
             {
                 Plugin.Log.LogWarning("Display sections: " + (layout == null ? "no layout" : "SacModel missing")
-                    + " for " + CurrentVisualId());
+                    + " for " + LayoutId());
                 return;
             }
 
@@ -1976,7 +2062,7 @@ namespace StoreAndCraft
                 _buildingSections = false;
             }
 
-            Plugin.Log.LogInfo("Display sections UI id=" + CurrentVisualId()
+            Plugin.Log.LogInfo("Display sections UI id=" + LayoutId()
                 + " layout=" + layout.name + " sections=" + defs.Length + " cells=" + total
                 + " source=" + DisplayLayouts.SourceLabel);
         }
@@ -2007,10 +2093,13 @@ namespace StoreAndCraft
                 Color amountColor = ParseHtmlColor(def.amountColor, new Color(1f, 0.95f, 0.75f, 1f));
 
                 int start = idx;
+                // fill "bottom": slot order starts in the bottom row (columns fill upward).
+                bool fillUp = string.Equals(def.fill, "bottom", System.StringComparison.OrdinalIgnoreCase);
                 for (int r = 0; r < rows; r++)
                 {
-                    float y0 = 1f - (r + 1) / (float)rows;
-                    float y1 = 1f - r / (float)rows;
+                    int rr = fillUp ? rows - 1 - r : r;
+                    float y0 = 1f - (rr + 1) / (float)rows;
+                    float y1 = 1f - rr / (float)rows;
                     for (int c = 0; c < cols; c++)
                     {
                         CreateSlotCell(gridRt, template, font, 0.01f, 0.01f,
@@ -2025,6 +2114,52 @@ namespace StoreAndCraft
                     : null;
                 _sections[k] = new SectionUi { Def = def, Start = start, Count = idx - start, Label = label };
             }
+        }
+
+        /// <summary>
+        /// Section parent for vanilla-sign displays: at the sign text canvas centre, same rotation
+        /// and handedness, but 1 unit = 1 m (Medium/Large signs are scaled non-uniformly). Same
+        /// axes as a carved model: +X = player's left, +Y up, −Z towards the player.
+        /// </summary>
+        private Transform EnsureSignFace(TextMeshProUGUI template)
+        {
+            Canvas canvas = DisplayVisual.FindCanvas(template.transform);
+            if (canvas == null)
+                return null;
+            Transform face = transform.Find("SacSignFace");
+            if (face == null)
+            {
+                face = new GameObject("SacSignFace").transform;
+                face.SetParent(transform, false);
+            }
+
+            RectTransform crt = canvas.transform as RectTransform;
+            face.position = crt != null ? crt.TransformPoint(crt.rect.center) : canvas.transform.position;
+            face.rotation = canvas.transform.rotation;
+            // Section canvases mirror X (−uiScale); flip the face so they end up with the same
+            // handedness as the sign canvas (readable text).
+            float flip = canvas.transform.lossyScale.x < 0f ? 1f : -1f;
+            face.localScale = Vector3.one;
+            Vector3 ls = face.lossyScale;
+            if (Mathf.Abs(ls.x) > 0.0001f && Mathf.Abs(ls.y) > 0.0001f && Mathf.Abs(ls.z) > 0.0001f)
+                face.localScale = new Vector3(flip / ls.x, 1f / ls.y, 1f / ls.z);
+
+            if (crt != null)
+            {
+                Vector3 cs = canvas.transform.lossyScale;
+                LogFaceOnce("Display sign face id=" + SignLayout + " size="
+                    + (crt.rect.width * Mathf.Abs(cs.x)).ToString("0.00") + "x"
+                    + (crt.rect.height * Mathf.Abs(cs.y)).ToString("0.00") + " m");
+            }
+            return face;
+        }
+
+        private static readonly HashSet<string> FaceLogged = new HashSet<string>();
+
+        private static void LogFaceOnce(string msg)
+        {
+            if (FaceLogged.Add(msg))
+                Plugin.Log.LogInfo(msg);
         }
 
         private static void DestroyOldCanvas(Transform parent)
@@ -2107,8 +2242,11 @@ namespace StoreAndCraft
             text.enabled = true;
             if (template.font != null)
                 text.font = template.font;
-            text.enableAutoSizing = false;
             text.fontSize = def.fontSize / uiScale;
+            // Shrink only when the name is wider than the label (narrow column labels).
+            text.enableAutoSizing = true;
+            text.fontSizeMax = def.fontSize / uiScale;
+            text.fontSizeMin = def.fontSize / uiScale * 0.5f;
             text.textWrappingMode = TextWrappingModes.NoWrap;
             text.overflowMode = TextOverflowModes.Ellipsis;
             text.margin = Vector4.zero;
@@ -3165,6 +3303,54 @@ namespace StoreAndCraft
             }
             if (overflow)
                 SetAmount(sec.Start + capacity - 1, "+" + (items.Count - show), new Color(1f, 0.85f, 0.45f, 1f));
+            for (int i = 0; i < capacity; i++)
+                CenterSectionPair(sec.Start + i);
+        }
+
+        /// <summary>
+        /// v2 section cell: icon + amount as one centred group (wide cells left them hugging
+        /// the left edge). Measured per paint so short and long counts both stay centred.
+        /// </summary>
+        private void CenterSectionPair(int i)
+        {
+            if (_slots == null || i < 0 || i >= _slots.Length)
+                return;
+            SlotUi slot = _slots[i];
+            if (slot.HideAmount || slot.Icon == null || slot.Amount == null)
+                return; // icon-only cells already fill the cell centred
+            RectTransform iconRt = slot.Icon.rectTransform;
+            RectTransform textRt = slot.Amount.rectTransform;
+            RectTransform cellRt = iconRt.parent as RectTransform;
+            if (cellRt == null)
+                return;
+            float w = cellRt.rect.width;
+            float h = cellRt.rect.height;
+            if (w < 0.01f || h < 0.01f)
+                return;
+
+            bool hasIcon = slot.Icon.enabled && slot.Icon.sprite != null;
+            float iconBox = Mathf.Min(h * 0.84f, w * 0.55f);
+            float scale = Mathf.Abs(iconRt.localScale.x) > 0.01f ? Mathf.Abs(iconRt.localScale.x) : 1f;
+            float iconW = hasIcon ? iconBox * scale : 0f;
+            string text = slot.Amount.text ?? "";
+            float textW = string.IsNullOrEmpty(text) ? 0f : slot.Amount.GetPreferredValues(text).x;
+            float gap = hasIcon && textW > 0f ? Mathf.Max(0.01f, h * 0.06f) : 0f;
+            float left = Mathf.Max(0f, (w - (iconW + gap + textW)) * 0.5f);
+
+            // Icon rect keeps its unscaled box; centre it inside the scaled footprint.
+            float iconCenter = left + iconW * 0.5f;
+            iconRt.anchorMin = new Vector2(0f, 0.08f);
+            iconRt.anchorMax = new Vector2(0f, 0.92f);
+            iconRt.pivot = new Vector2(0.5f, 0.5f);
+            iconRt.offsetMin = new Vector2(iconCenter - iconBox * 0.5f, 0f);
+            iconRt.offsetMax = new Vector2(iconCenter + iconBox * 0.5f, 0f);
+
+            float textX = left + iconW + gap;
+            textRt.anchorMin = new Vector2(0f, 0.08f);
+            textRt.anchorMax = new Vector2(0f, 0.92f);
+            textRt.pivot = new Vector2(0f, 0.5f);
+            textRt.offsetMin = new Vector2(textX, 0f);
+            textRt.offsetMax = new Vector2(textX + textW + 1f, 0f);
         }
 
         private void ClearSectionLabels(string hint)

@@ -50,6 +50,8 @@ namespace StoreAndCraft
 
         private static void OnSettingChanged(object sender, SettingChangedEventArgs e)
         {
+            // Station capacities: re-apply once next frame (also for values synced from the server).
+            StationCaps.MarkDirty();
             if (ConfigSync.IsApplyingRemoteConfig)
                 return;
             if (!AdminUtil.IsServer())
@@ -60,6 +62,7 @@ namespace StoreAndCraft
         private void Update()
         {
             ConfigWatch.Tick();
+            StationCaps.Tick();
             TransferService.Tick();
             SmelterCatchUp.ServerTick(); // SAC-CATCHUP
 
@@ -74,6 +77,7 @@ namespace StoreAndCraft
 
             NearbyIndex.Tick();
             PendingChestDebit.Tick();
+            ReleaseNews.Tick();
             // Listen host: intake around every player, not only the host.
             // Clients still run local intake so they can RPC drops they own.
             if (ZNet.instance != null && ZNet.instance.IsServer())
@@ -103,6 +107,8 @@ namespace StoreAndCraft
                 return;
 
             Hotkeys.Tick();
+            // Only turns existing missing-labels to the camera (returns at once when none).
+            StationMissingLabel.Tick();
         }
 
         private void OnDestroy()

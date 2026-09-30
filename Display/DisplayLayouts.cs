@@ -22,6 +22,23 @@ namespace StoreAndCraft
         private static int _generation = 1;
         private static string _sourceLabel = "none";
 
+        /// <summary>
+        /// Resolved definition file per visual id (null path = none on disk) + its write time.
+        /// Find() runs several times per frame per carved display; the file system is only asked
+        /// again after PathRecheckSeconds. EditorPreview / EnsureFresh drop entries explicitly.
+        /// </summary>
+        private sealed class PathProbe
+        {
+            public string Path;
+            public DateTime WriteUtc;
+            public float CheckedAt;
+        }
+
+        private static readonly Dictionary<string, PathProbe> PathCache = new Dictionary<string, PathProbe>(StringComparer.OrdinalIgnoreCase);
+        private const float PathRecheckSeconds = 2f;
+        // Baked definitions are never mutated (only freshly parsed defs get prefabId) — build once.
+        private static readonly Dictionary<string, PrefabDef> BakedCache = new Dictionary<string, PrefabDef>(StringComparer.OrdinalIgnoreCase);
+
         public static int Generation => _generation;
         public static string SourceLabel => _sourceLabel ?? "none";
 
@@ -31,6 +48,7 @@ namespace StoreAndCraft
                 return;
             Cache.Clear();
             CacheWrite.Clear();
+            PathCache.Clear();
             _generation++;
             _sourceLabel = "reload";
             Plugin.Log.LogInfo("Display definitions changed on disk → reload gen=" + _generation);
@@ -73,10 +91,12 @@ namespace StoreAndCraft
             // Disk files may have been rewritten by SAVE in the same call — re-read them too.
             Cache.Remove(visualId);
             CacheWrite.Remove(visualId);
+            PathCache.Remove(visualId);
             _generation++;
             StorageDisplayBoard.RebuildVisual(visualId);
             // Hammer template + placement ghost too, so snaps / collider apply to new pieces.
             DisplayPrefab.RefreshTemplates(visualId);
+            FeedTroughPrefab.ApplyPreview(visualId);
             return true;
         }
 
@@ -97,6 +117,50 @@ namespace StoreAndCraft
             ApplySnaps(board.transform, model.transform, def.snapPoints);
             ApplyColliders(board.gameObject, def.colliders);
             return true;
+        }
+
+        /// <summary>
+        /// Other SAC pieces (feed trough): model scale, snaps and colliders from the definition,
+        /// same apply code as the displays. Only sections the definition actually has are applied
+        /// (an empty collider list must not strip the piece of its hit box).
+        /// </summary>
+        public static bool TryApplyPiece(GameObject root, string id, params Transform[] models)
+        {
+            if (root == null || string.IsNullOrEmpty(id))
+                return false;
+            PrefabDef def = Find(id);
+            if (def == null)
+                return false;
+
+            if (def.model != null && def.model.localScale != null && models != null)
+            {
+                for (int i = 0; i < models.Length; i++)
+                {
+                    if (models[i] != null)
+                        models[i].localScale = def.model.localScale.ToVector3();
+                }
+            }
+            if (def.snapPoints != null && def.snapPoints.Length > 0)
+                ApplySnaps(root.transform, null, def.snapPoints);
+            if (def.colliders != null && def.colliders.Length > 0)
+                ApplyColliders(root, def.colliders);
+            return true;
+        }
+
+        /// <summary>Enabled eat points (piece-local) or null when the definition has none.</summary>
+        public static List<Vector3> GetEatPoints(string id)
+        {
+            PrefabDef def = Find(id);
+            if (def == null || def.eatPoints == null || def.eatPoints.Length == 0)
+                return null;
+            var list = new List<Vector3>(def.eatPoints.Length);
+            for (int i = 0; i < def.eatPoints.Length; i++)
+            {
+                EatDef e = def.eatPoints[i];
+                if (e != null && e.enabled)
+                    list.Add(e.localPosition != null ? e.localPosition.ToVector3() : Vector3.zero);
+            }
+            return list.Count > 0 ? list : null;
         }
 
         public static bool HasColliderOverride(string visualId)
@@ -249,7 +313,8 @@ namespace StoreAndCraft
 
         private static PrefabDef TryLoadDisk(string visualId)
         {
-            string path = ResolvePathForId(visualId);
+            DateTime writeUtc;
+            string path = ResolvePathCached(visualId, out writeUtc);
             if (string.IsNullOrEmpty(path))
             {
                 Cache.Remove(visualId);
@@ -257,7 +322,6 @@ namespace StoreAndCraft
                 return null;
             }
 
-            DateTime writeUtc = File.GetLastWriteTimeUtc(path);
             PrefabDef cached;
             DateTime cachedWrite;
             if (Cache.TryGetValue(visualId, out cached)
@@ -296,11 +360,15 @@ namespace StoreAndCraft
         /// </summary>
         private static PrefabDef TryBaked(string visualId)
         {
+            PrefabDef baked;
+            if (BakedCache.TryGetValue(visualId, out baked))
+                return baked;
             if (string.Equals(visualId, "large_vertical", StringComparison.OrdinalIgnoreCase))
-                return LargeVerticalBaked();
-            if (string.Equals(visualId, "small_horizontal", StringComparison.OrdinalIgnoreCase))
-                return SmallHorizontalBaked();
-            return null;
+                baked = LargeVerticalBaked();
+            else if (string.Equals(visualId, "small_horizontal", StringComparison.OrdinalIgnoreCase))
+                baked = SmallHorizontalBaked();
+            BakedCache[visualId] = baked; // null cached too: no baked def for this id
+            return baked;
         }
 
         // Prefab Editor SAVE 2026-09-29 — large_vertical
@@ -411,7 +479,40 @@ namespace StoreAndCraft
             };
         }
 
+        /// <summary>
+        /// ResolvePathForId, but the file system is asked at most every PathRecheckSeconds per id.
+        /// Same file choice (newest of the three locations); only how often it is re-checked changes.
+        /// </summary>
+        private static string ResolvePathCached(string visualId, out DateTime writeUtc)
+        {
+            float now = Time.unscaledTime;
+            PathProbe probe;
+            if (PathCache.TryGetValue(visualId, out probe) && now - probe.CheckedAt < PathRecheckSeconds)
+            {
+                writeUtc = probe.WriteUtc;
+                return probe.Path;
+            }
+
+            string path = ResolvePathForId(visualId, out writeUtc);
+            if (probe == null)
+            {
+                probe = new PathProbe();
+                PathCache[visualId] = probe;
+            }
+            probe.Path = path;
+            probe.WriteUtc = writeUtc;
+            probe.CheckedAt = now;
+            return path;
+        }
+
+        /// <summary>Real file system check (FileChangedOnDisk / EnsureFresh rely on it).</summary>
         private static string ResolvePathForId(string visualId)
+        {
+            DateTime unused;
+            return ResolvePathForId(visualId, out unused);
+        }
+
+        private static string ResolvePathForId(string visualId, out DateTime bestWriteUtc)
         {
             string safe = Sanitize(visualId);
             string sacDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
@@ -436,6 +537,7 @@ namespace StoreAndCraft
                     bestTime = t;
                 }
             }
+            bestWriteUtc = bestTime;
             return best;
         }
 
@@ -691,6 +793,15 @@ namespace StoreAndCraft
             public Vec3 localEuler;
         }
 
+        /// <summary>Feed trough: where animals stand to eat (piece-local, meters).</summary>
+        [Serializable]
+        private class EatDef
+        {
+            public string id;
+            public bool enabled = true;
+            public Vec3 localPosition;
+        }
+
         // ---- Schema v2: several layouts, each with category sections (grid + label). ----
 
         /// <summary>One Shift+RMB layout variant of a visual.</summary>
@@ -712,6 +823,7 @@ namespace StoreAndCraft
             public float amountScale = 1f;
             public float iconScale = 1f;
             public string sort = "count"; // count | name
+            public string fill = "top"; // top | bottom (first item in the bottom row, filling upward)
             public string emptyText = "0";
             public string amountColor = "";
             public SectionGridDef grid = new SectionGridDef();
@@ -752,6 +864,7 @@ namespace StoreAndCraft
             public ColliderDef[] colliders;
             public SnapDef[] snapPoints;
             public LayoutDef[] layouts;
+            public EatDef[] eatPoints;
 
             /// <summary>Manual parse. JsonUtility drops nested arrays in this IL2CPP build.</summary>
             public static PrefabDef Parse(string json)
@@ -793,7 +906,28 @@ namespace StoreAndCraft
                 if (layoutsArr != null)
                     def.layouts = ParseLayouts(layoutsArr);
 
+                string eatArr = ExtractArray(json, "eatPoints");
+                if (eatArr != null)
+                    def.eatPoints = ParseEatPoints(eatArr);
+
                 return def;
+            }
+
+            private static EatDef[] ParseEatPoints(string arrayBody)
+            {
+                List<string> objects = SplitObjects(arrayBody);
+                var list = new List<EatDef>(objects.Count);
+                for (int i = 0; i < objects.Count; i++)
+                {
+                    string o = objects[i];
+                    list.Add(new EatDef
+                    {
+                        id = ReadString(o, "id", "EatPoint_" + i),
+                        enabled = ReadBool(o, "enabled", true),
+                        localPosition = ParseVec3(o, "localPosition") ?? new Vec3()
+                    });
+                }
+                return list.ToArray();
             }
 
             private static LayoutDef[] ParseLayouts(string arrayBody)
@@ -837,6 +971,7 @@ namespace StoreAndCraft
                         amountScale = Mathf.Clamp(ReadFloat(flat, "amountScale", 1f), 0.2f, 4f),
                         iconScale = Mathf.Clamp(ReadFloat(flat, "iconScale", 1f), 0.2f, 2f),
                         sort = ReadString(flat, "sort", "count"),
+                        fill = ReadString(flat, "fill", "top"),
                         emptyText = ReadString(flat, "emptyText", "0"),
                         amountColor = ReadString(flat, "amountColor", "")
                     };

@@ -3,18 +3,29 @@
 ## 1.3.45 (Beta)
 
 ### NEW FEATURES
-- Carved storage displays in the hammer (Storage tab): new wooden board models for small, medium and large displays
-- Large carved display shows each selected category in its own area with the category name above its items. **Shift+RMB** switches between layouts (Categories / Big / All), then Classic / Compact as before
-- Small carved display (upright) can show categories too: **E** picks categories, **Shift+RMB** switches layouts, hotbar **1-8** still adds a single item
+- Carved storage displays in the hammer (Storage tab): small, small wide, medium, medium wide, large and large wide wooden boards, each with its own hammer icon
+- Displays show each selected category in its own area with the category name above it. Every display (carved and the classic sign displays) has several layouts, **Shift+RMB** switches between them. Column layouts fill from the bottom up
+- Small displays: **E** picks one category or up to 4 single items
 - Search box in the Storage Display filter menu (**E**): type a name to find items from every category
+- Filter menus only list items you have already discovered (admins in no-cost mode still see everything)
+- Feed trough: **Alt+E** opens its own menu with a food filter (only food tame animals really eat), links l1-l9 and an auto-fill switch. With auto-fill on (**B**) an empty trough refills itself from (linked) chests
+- Fermenter: **Alt+E** mead-base filter and auto-fill switch. Batches: in the first 60 seconds you can add more of the same mead base (**E**), all of them finish in the time of one (up to 5 by default, `FermenterBatch`)
+- Station capacities in the F10 panel (admin): charcoal kiln, smelter, blast furnace, eitr refinery and beehive. Vanilla by default, up to 50, applied live to every station
+- Linked stations show in red above them what their chests ran out of (e.g. ~~Coal~~, ~~Ore~~)
+- Hugin visits once after an update and tells you what is new (`ShowReleaseNews` to turn it off)
+- Manual-fill chests: **Manual fill** switch in the chest settings (or `[M]` at the start of the name). Dump, ground pickup and auto-store no longer put items into it, stations and crafting can still take from it. Works with links, e.g. `[M] [l3] Wood`
 - Optional catch-up while away (`CatchUpWhileAway`, off by default): smelters, kilns etc. with auto-fill (B) and auto-store (N) finish the time their area was unloaded once you come back (max `CatchUpMaxHours`)
 - Torches can start with auto-fill on (`TorchAutoFillDefault`, off by default, checkbox in F10 or `/torchautofill on|off`). **B** on a torch still turns it off
-- Manual-fill chests: type `[M]` at the start of a chest name. Dump, ground pickup and auto-store no longer put items into it, stations and crafting can still take from it. Works with links, e.g. `[M] [l3] Wood`
 - **Sort** and **Stack** buttons on the inventory and chest panels (Stack merges partial stacks of the same item)
 
 ### UI IMPROVEMENTS
-- F10 settings panel rebuilt in the Valheim look (wood panel, vanilla buttons and checkboxes). Checked boxes show a clear yellow tick, and scrolling moves much further per wheel step
-- Optional Valheim look for the Storage Display filter menu: set `DisplayMenuStyle = Vanilla` in the config (vanilla panels and buttons, click the whole item tile to select it)
+- F10 settings panel in the Valheim look (wood panel, vanilla buttons and checkboxes). All on/off gameplay settings can be switched there, sliders use whole numbers where it matters
+- Optional Valheim look for all StoreAndCraft menus (display filter, station filter, chest settings): `DisplayMenuStyle = Vanilla`
+- Checkboxes show a centered yellow tick
+- Icon and amount sit centered in every display cell
+- Station filter link buttons match the chest settings buttons
+- All storage displays are in the hammer's Storage tab
+- New hammer icon for the feed trough
 - Sorting moved from the **R** key to the new **Sort** button (R is free again)
 - Activity log on/off is remembered
 
@@ -25,6 +36,8 @@
 - Carved display items sat at the wooden foot, were mirrored and counts were invisible — they now sit on the board, readable, with counts
 - Removed an error in the log (NullReferenceException in WearNTear.UpdateBiome) caused by storage displays
 - The character no longer walks around (and hotkeys no longer fire) while the Storage Display filter menu is open
+- Linked stations (**l1-l9**) put their output only into chests with the same link. If none has room it stays on the ground and is never stored in an untagged chest
+- **Alt+E** on a fermenter or fire no longer also does the normal **E** action
 
 **Beta:** needs the same version on server and all clients (network protocol changed).
 

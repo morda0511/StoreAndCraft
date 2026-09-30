@@ -540,6 +540,8 @@ namespace StoreAndCraft
         {
             Transform point = smelter.m_outputPoint != null ? smelter.m_outputPoint : smelter.transform;
             int maxStack = Mathf.Max(1, item.m_itemData.m_shared.m_maxStackSize);
+            // Linked smelter: the ground stack may only go into matching [lN] chests.
+            int linkId = StationLink.Get(smelter);
             while (amount > 0)
             {
                 int stack = Mathf.Min(amount, maxStack);
@@ -550,6 +552,8 @@ namespace StoreAndCraft
                     continue;
                 drop.m_itemData.m_stack = stack;
                 ItemDrop.OnCreateNew(drop);
+                if (linkId >= 1)
+                    StationOutput.SetIntakeLink(drop, linkId);
             }
         }
 
