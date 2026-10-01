@@ -133,9 +133,12 @@ namespace StoreAndCraft
                     return;
 
                 // Only force a re-read when the local view is empty but the ZDO still
-                // has items (stale empty after travel). Never zero revision over a full bag.
+                // has items (stale empty after travel). Never reset the revision over a full bag.
+                // uint.MaxValue = vanilla's "never loaded" value. Not 0: after a world load the ZDO
+                // DataRevision is 0, so 0 made Load() skip and vanilla CheckForChanges never loaded
+                // the chest until someone opened it.
                 if (force && localCount <= 0 && LastRevision != null)
-                    LastRevision.SetValue(container, (uint)0);
+                    LastRevision.SetValue(container, uint.MaxValue);
 
                 LoadInventory.Invoke(container, null);
 

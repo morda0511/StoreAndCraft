@@ -91,7 +91,7 @@ namespace StoreAndCraft
         private static TMP_InputField _searchField;
         private static string _search = "";
 
-        // ---- Look: Classic (SAC artwork, UiAssets) or Vanilla (Valheim sprites) via DisplayMenuStyle.
+        // ---- Look: Vanilla (Valheim sprites); SAC artwork (UiAssets) only as fallback.
         // Names verified against Jotunn GUIManager: woodpanel_settings, button, button_highlight,
         // button_small, checkbox, checkbox_marker, text_field. Missing sprite → Classic fallback.
         private static bool _vanillaStyle;
@@ -145,6 +145,7 @@ namespace StoreAndCraft
             img.type = sprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
             img.preserveAspect = false;
             img.color = Color.white;
+            UiStyle.Lit(img);
         }
 
         /// <summary>Classic: SAC pill toggle. Vanilla: Valheim checkbox with yellow tick.</summary>
@@ -220,9 +221,8 @@ namespace StoreAndCraft
             UiFonts.ThinNorse();
             ItemIds.PrefabFromToken("$item_wood");
 
-            // Read on every open (root is rebuilt), so a config change shows on the next E.
-            _vanillaStyle = Plugin.Settings != null
-                && string.Equals(Plugin.Settings.DisplayMenuStyle.Value, "Vanilla", System.StringComparison.OrdinalIgnoreCase);
+            // Valheim look is the only look now; SAC artwork stays as fallback for a missing sprite.
+            _vanillaStyle = true;
 
             EnsureRoot();
             if (_root == null)
@@ -1070,6 +1070,7 @@ namespace StoreAndCraft
                 img.sprite = sprite;
                 img.type = Image.Type.Sliced;
                 img.color = Color.white;
+                UiStyle.Lit(img);
             }
             else
             {

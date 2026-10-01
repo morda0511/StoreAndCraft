@@ -757,6 +757,7 @@ namespace StoreAndCraft
                 img.sprite = sprite;
                 img.type = sprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
                 img.color = Color.white;
+                UiStyle.Lit(img);
             }
             else
             {

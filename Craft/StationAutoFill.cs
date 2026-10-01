@@ -388,8 +388,11 @@ namespace StoreAndCraft
             Container trough = smelter == null && oven == null && fermenter == null && fire == null
                 && turret == null && tray == null ? StationPullFilter.HoveredTrough() : null;
 
+            Scarecrow scarecrow = smelter == null && oven == null && fermenter == null && fire == null
+                && turret == null && tray == null && trough == null ? StationPullFilter.HoveredScarecrow() : null;
+
             Component station = (Component)smelter ?? oven ?? (Component)fermenter ?? fire
-                ?? (Component)turret ?? (Component)tray ?? trough;
+                ?? (Component)turret ?? (Component)tray ?? (Component)trough ?? scarecrow;
             ZNetView nv = station != null ? station.GetComponent<ZNetView>() : null;
             if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
                 return false;
@@ -413,6 +416,8 @@ namespace StoreAndCraft
             ClearQuiet(turret);
             ClearQuiet(tray);
             ClearQuiet(trough);
+            if (scarecrow != null)
+                scarecrow.MarkDirty();
 
             player.Message(
                 MessageHud.MessageType.Center,
@@ -1813,6 +1818,8 @@ namespace StoreAndCraft
                 return slot == "ammo" && Mathf.RoundToInt(ReadNumber(TurretGetAmmo, t)) <= 0;
             if (station is Container trough)
                 return slot == "feed" && TroughEmpty(trough);
+            if (station is Scarecrow sc)
+                return slot == "seed" && sc.MissingSeeds;
             return false;
         }
 

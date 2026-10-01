@@ -30,8 +30,8 @@
           "fill": "top",
           "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 4, "rows": 2, "spacingX": 0.34, "spacingY": 0.24, "offsetX": 0, "offsetY": 0.3, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.69, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.28, "height": 0.2, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 4, "rows": 2, "spacingX": 0.34, "spacingY": 0.24, "offsetX": 0, "offsetY": 0.3, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.69, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.28, "height": 0.2, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     },
@@ -48,8 +48,8 @@
           "fill": "top",
           "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 2, "rows": 2, "spacingX": 0.66, "spacingY": 0.26, "offsetX": 0, "offsetY": 0.3, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.67, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.18, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.66, "spacingY": 0.26, "offsetX": 0, "offsetY": 0.3, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.67, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.18, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     },
@@ -66,8 +66,8 @@
           "fill": "top",
           "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 1, "rows": 1, "spacingX": 1.32, "spacingY": 0.52, "offsetX": 0, "offsetY": 0.3, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.67, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.18, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 1, "rows": 1, "spacingX": 1.32, "spacingY": 0.52, "offsetX": 0, "offsetY": 0.3, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 0.67, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.18, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     },
@@ -84,8 +84,8 @@
           "fill": "top",
           "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 2, "rows": 2, "spacingX": 0.66, "spacingY": 0.36, "offsetX": 0, "offsetY": 0.4, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": false, "text": "", "offsetX": 0, "offsetY": 0.76, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.1, "fontSize": 0.01, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.66, "spacingY": 0.36, "offsetX": 0, "offsetY": 0.4, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": false, "text": "", "offsetX": 0, "offsetY": 0.76, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.1, "fontSize": 0.01, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     },
@@ -102,8 +102,8 @@
           "fill": "top",
           "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 1, "rows": 1, "spacingX": 1.32, "spacingY": 0.61, "offsetX": 0, "offsetY": 0.38, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": false, "text": "", "offsetX": 0, "offsetY": 0.67, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.18, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 1, "rows": 1, "spacingX": 1.32, "spacingY": 0.61, "offsetX": 0, "offsetY": 0.38, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": false, "text": "", "offsetX": 0, "offsetY": 0.67, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 1.32, "height": 0.18, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     }

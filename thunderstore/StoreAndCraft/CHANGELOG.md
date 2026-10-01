@@ -17,11 +17,14 @@
 - Optional catch-up while away (`CatchUpWhileAway`, off by default): smelters, kilns etc. with auto-fill (B) and auto-store (N) finish the time their area was unloaded once you come back (max `CatchUpMaxHours`)
 - Torches can start with auto-fill on (`TorchAutoFillDefault`, off by default, checkbox in F10 or `/torchautofill on|off`). **B** on a torch still turns it off
 - **Sort** and **Stack** buttons on the inventory and chest panels (Stack merges partial stacks of the same item)
+- Scarecrow (hammer, Storage tab): plants one crop on a grid around itself (width / length up to 21, adjustable spacing) and replants right away. When the whole field is ripe it harvests everything, the crops go to (linked) chests via auto-store. Seeds come from (linked) chests. **Alt+E**: crop, grid size, spacing, harvest / plant switches and links, **B** on/off. Needs cultivated ground
 
 ### UI IMPROVEMENTS
 - F10 settings panel in the Valheim look (wood panel, vanilla buttons and checkboxes). All on/off gameplay settings can be switched there, sliders use whole numbers where it matters
-- Optional Valheim look for all StoreAndCraft menus (display filter, station filter, chest settings): `DisplayMenuStyle = Vanilla`
+- All StoreAndCraft menus (display filter, station filter, chest settings) now use the Valheim look (wood panels, vanilla buttons and checkboxes)
 - Checkboxes show a centered yellow tick
+- New models for the carved storage displays (chains, nails and Valheim textures)
+- StoreAndCraft menus get darker at night like Valheim's own panels
 - Icon and amount sit centered in every display cell
 - Station filter link buttons match the chest settings buttons
 - All storage displays are in the hammer's Storage tab
@@ -38,6 +41,10 @@
 - The character no longer walks around (and hotkeys no longer fire) while the Storage Display filter menu is open
 - Linked stations (**l1-l9**) put their output only into chests with the same link. If none has room it stays on the ground and is never stored in an untagged chest
 - **Alt+E** on a fermenter or fire no longer also does the normal **E** action
+- F10 station capacities (kiln, smelter, blast furnace, eitr refinery, beehive) and fermenter batch were not saved
+- Sort / Stack / Take all buttons on the chest panel could sit in the wrong place when the inventory was opened first
+- Items on carved storage displays no longer flicker into the board
+- After logging in, a chest or feed trough could look empty (trough without food, displays without its items) until it was opened once
 
 **Beta:** needs the same version on server and all clients (network protocol changed).
 

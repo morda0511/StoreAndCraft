@@ -34,6 +34,12 @@ namespace StoreAndCraft
             return HoveredComponent<Fireplace>();
         }
 
+        /// <summary>SAC scarecrow under the crosshair, or null.</summary>
+        public static Scarecrow HoveredScarecrow()
+        {
+            return HoveredComponent<Scarecrow>();
+        }
+
         /// <summary>SAC feed trough under the crosshair (its Container), or null.</summary>
         public static Container HoveredTrough()
         {
@@ -272,6 +278,19 @@ namespace StoreAndCraft
                     return true;
                 }
                 StationFilterMenu.Open(fermenter);
+                return true;
+            }
+
+            // Scarecrow: crop, grid, link, harvest / plant switches.
+            Scarecrow scarecrow = HoveredScarecrow();
+            if (scarecrow != null)
+            {
+                if (!PrivateArea.CheckAccess(scarecrow.transform.position, 0f, false, true))
+                {
+                    player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                    return true;
+                }
+                StationFilterMenu.Open(scarecrow);
                 return true;
             }
 

@@ -23,6 +23,7 @@ namespace StoreAndCraft
         private static Vector2 _takeSize0;
         private static Vector3 _takeLocal0;
         private static float _takeWidth0;
+        private static bool _takeMeasured;
         private static RectTransform _chestSort;
         private static RectTransform _chestStack;
         private static RectTransform _bagStack;
@@ -39,9 +40,9 @@ namespace StoreAndCraft
             _builtFor = gui;
 
             _take = (RectTransform)template.transform;
-            _takeSize0 = _take.sizeDelta;
-            _takeLocal0 = _take.localPosition;
-            _takeWidth0 = _take.rect.width;
+            // Take all is measured later, the first time the chest panel is really visible
+            // (opening the bag first left it unlaid-out: 0 width → whole button row shifted).
+            _takeMeasured = false;
 
             _chestSort = Make(template, _take.parent, "SAC_ChestSort", Loc.T("Sort", "Sortieren"), InventorySort.SortChest);
             _chestStack = Make(template, _take.parent, "SAC_ChestStack", Loc.T("Stack", "Stapeln"), InventorySort.StackChest);
@@ -66,6 +67,17 @@ namespace StoreAndCraft
             RectTransform parent = _take.parent as RectTransform;
             if (parent == null || _chestSort == null || _chestStack == null)
                 return;
+
+            if (!_takeMeasured)
+            {
+                // Only once Take all is active and laid out (real width), before we ever resize it.
+                if (!_take.gameObject.activeInHierarchy || _take.rect.width < 1f)
+                    return;
+                _takeSize0 = _take.sizeDelta;
+                _takeLocal0 = _take.localPosition;
+                _takeWidth0 = _take.rect.width;
+                _takeMeasured = true;
+            }
 
             _take.sizeDelta = _takeSize0;
             _take.localPosition = _takeLocal0;

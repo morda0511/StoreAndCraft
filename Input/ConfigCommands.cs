@@ -474,7 +474,8 @@ namespace StoreAndCraft
             if (cmd == "storerange" || cmd == "dumprange" || cmd == "craftrange" || cmd == "storagerange" || cmd == "autofillrange"
                 || cmd == "autofillchestrange" || cmd == "displayrange" || cmd == "feedtroughrange"
                 || cmd == "catchup" || cmd == "catchuphours" || cmd == "torchautofill"
-                || BoolEntryFor(cmd) != null)
+                || BoolEntryFor(cmd) != null
+                || IsStationCapKey(cmd)) // F10 station capacities + fermenter batch
             {
                 if (parts.Length < 2)
                     return false;

@@ -60,6 +60,7 @@ namespace StoreAndCraft
                 img.sprite = box;
                 img.type = Image.Type.Simple;
                 img.preserveAspect = true;
+                UiStyle.Lit(img);
                 img.color = interactable ? Color.white : new Color(1f, 1f, 1f, 0.45f);
                 Image mark = EnsureMarker(img);
                 if (mark != null)

@@ -30,8 +30,8 @@
           "fill": "top",
           "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 2, "rows": 2, "spacingX": 0.45, "spacingY": 0.48, "offsetX": 0.06, "offsetY": 0.51, "offsetZ": -0.02, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.08, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.81, "height": 0.2, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.45, "spacingY": 0.48, "offsetX": 0.06, "offsetY": 0.51, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.08, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.81, "height": 0.2, "fontSize": 0.13, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     },
@@ -48,7 +48,7 @@
           "fill": "top",
           "emptyText": "0",
           "amountColor": "",
-          "grid": { "columns": 1, "rows": 1, "spacingX": 0.87, "spacingY": 1.07, "offsetX": 0.05, "offsetY": 0.62, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "grid": { "columns": 1, "rows": 1, "spacingX": 0.87, "spacingY": 1.07, "offsetX": 0.05, "offsetY": 0.62, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
           "label": { "enabled": true, "text": "", "offsetX": 0, "offsetY": 4.75, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 2.87, "height": 0.28, "fontSize": 0.17, "align": "left", "color": "#FFD966", "uppercase": true }
         }
       ]
@@ -66,8 +66,8 @@
           "fill": "top",
           "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 1, "rows": 1, "spacingX": 0.88, "spacingY": 0.86, "offsetX": 0.06, "offsetY": 0.47, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.02, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.88, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 1, "rows": 1, "spacingX": 0.88, "spacingY": 0.86, "offsetX": 0.06, "offsetY": 0.47, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.02, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.88, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     },
@@ -84,8 +84,8 @@
           "fill": "top",
           "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 2, "rows": 2, "spacingX": 0.44, "spacingY": 0.43, "offsetX": 0.06, "offsetY": 0.47, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.02, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.88, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 2, "rows": 2, "spacingX": 0.44, "spacingY": 0.43, "offsetX": 0.06, "offsetY": 0.47, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.02, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.88, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     },
@@ -102,8 +102,8 @@
           "fill": "bottom",
           "emptyText": "",
           "amountColor": "",
-          "grid": { "columns": 1, "rows": 4, "spacingX": 0.88, "spacingY": 0.22, "offsetX": 0.06, "offsetY": 0.47, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 } },
-          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.02, "offsetZ": -0.03, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.88, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
+          "grid": { "columns": 1, "rows": 4, "spacingX": 0.88, "spacingY": 0.22, "offsetX": 0.06, "offsetY": 0.47, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 } },
+          "label": { "enabled": true, "text": "", "offsetX": 0.06, "offsetY": 1.02, "offsetZ": 0, "euler": { "x": 0, "y": 0, "z": 0 }, "width": 0.88, "height": 0.2, "fontSize": 0.14, "align": "center", "color": "#FFD966", "uppercase": true }
         }
       ]
     }
