@@ -14,9 +14,8 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade and build stra
 
 ### Store
 - **Auto-store:** ground items go into matching chests (one player in range is enough)
-- Chest takes an item only if the type is already inside (switch in F10)
+- Chest takes an item only if the type is already inside (switch in the Morda Mod Manager)
 - Carts and ships count as chests. Player-built chests only. Ward rules apply
-- `/store disable` / `/store enable` turns ground pickup off / on
 - **Dump** (**.**): inventory into matching chests, hotbar and favorites stay
 - **Middle mouse** (inventory open): store the hovered item
 - **Ctrl + middle mouse**: fill the hovered stack from chests
@@ -28,7 +27,7 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade and build stra
 - Recipes, upgrades and hammer pieces use chest contents
 - Missing materials are taken from chests directly
 - Yellow requirement text = part comes from a chest
-- 1 item stays in each chest (switch in F10)
+- 1 item stays in each chest (switch in the Morda Mod Manager)
 - **C + place**: grab a piece's materials from chests, nothing is placed
 - Epic Loot: craft, enchanting table, Forge of Potential use chest stock
 
@@ -39,8 +38,8 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade and build stra
 - Works on kiln, smelter, blast furnace, cooking stations, oven, fermenter, turrets, fires, torches; **N** also on beehive and sap extractor
 - **Alt+E** settings: allowed items, link **l1-l9**
 - **Links:** station fills from, and outputs to, chests with the same link
-- **Torches** (F10): auto-fill for new torches, World Override for all torches
-- **Station capacities** (F10, admin): kiln, smelter, blast furnace, eitr refinery, beehive
+- **Torches:** auto-fill for new torches, World Override for all torches
+- **Station capacities** (admin): kiln, smelter, blast furnace, eitr refinery, beehive
 - **Fermenter:** mead filter, add the same base in the first 60 s (batch up to 5)
 - Red label above a linked station when its chests ran out
 - **Catch-up while away** (off by default): stations finish the time their area was unloaded
@@ -68,7 +67,6 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade and build stra
 - **E** swaps your armor with the stand's
 - **Alt+E**: pick a preset item from your bag per weapon / shield / tool slot. **E** swaps it with the stand's piece, back and forth
 - Without a preset, **E** puts the stand's weapon into your bag
-- Switch in F10
 
 ### Chest settings (**Alt+E**)
 - **Ignore:** skipped by everything
@@ -78,67 +76,10 @@ Loot finds its chest. One key clears your pockets. Craft, upgrade and build stra
 - **l1-l9:** link for stations
 - Settings are saved on the chest, not in its name
 
-### F10 mod manager
-- **F10** opens the list of all your mods. Click one to change its settings (switches, sliders, numbers, lists, hotkeys), **Save**, back arrow = list
-- StoreAndCraft opens its own panel (below)
-- Activity log, all ranges, all on/off switches, station capacities
-- Hotkey of each feature next to its slider: click, press new key (Esc cancel, Backspace unbind)
-- Servers: only admins from adminlist.txt can save
-
----
-
-## Keys (defaults, change in F10)
-
-| Key | Action |
-|---|---|
-| **.** | Dump |
-| **Middle mouse** | Store hovered item |
-| **Ctrl + middle mouse** | Fill hovered stack |
-| **F** | Favorite |
-| **Y** | Find item in chests |
-| **B** | Auto-fill on the station you look at |
-| **N** | Auto-store on the station you look at |
-| **Alt + E** | Settings: chest, station, display, trough |
-| **Alt + R** | Display range |
-| **C + place** | Grab materials |
-| **F10** | Panel |
-| **Shift + wheel / Ctrl + wheel** | Scarecrow width / length |
-
----
-
-## Commands
-
-Chat (`/...`) or F5 console. Ranges: host / server admin only.
-
-| Command | What |
-|---|---|
-| `/help store` | Help |
-| `/store enable` / `disable` / `status` | Ground auto-store |
-| `/sac status` | Current ranges |
-| `/dumprange` `/storerange` `/storagerange` `/craftrange` `/autofillrange` `/autofillchestrange` `<m>` | Set a range (0-1000) |
-| `/torchautofill` `/torchautofilloverride` `on` / `off` | Torch auto-fill |
-
-Same things in F10, no restart needed.
-
----
-
-## Config
-
-`BepInEx/config/com.morda.storeandcraft.cfg` (server owns gameplay values when `LockConfig` is on)
-
-| Setting | Meaning |
-|---|---|
-| `LockConfig` | Server values replace client values |
-| `ModEnabled` / `StoreEnabled` / `CraftEnabled` | Feature switches |
-| `AutoIntakeEnabled` / `MustHaveExisting` / `LeaveOneItem` / `IgnoreHotbar` / `AutoStackEnabled` | Store behavior |
-| `PlayerDumpRange` / `StoreRange` / `StorageRange` / `CraftRange` | Ranges (m) |
-| `AutoFillRange` / `AutoFillChestRange` | Station ranges (m) |
-| `TorchAutoFillDefault` / `TorchAutoFillOverride` | Torches |
-| `ArmorStandSwap` | Armor stand swap |
-| `CatchUpWhileAway` | Catch-up |
-| `FermenterBatch` and station capacities | Station sizes |
-| `ShowReleaseNews` | Hugin news |
-| Hotkeys | Local only |
+### Morda Mod Manager
+- **F10** opens the list of all your mods. Click one to change its settings (switches, sliders, numbers, lists, hotkeys), then **Save**. The back arrow returns to the list
+- StoreAndCraft: all ranges, all switches, station capacities and **every hotkey** (click it, press the new key)
+- Servers: only admins from adminlist.txt can save the server values
 
 ---
 
