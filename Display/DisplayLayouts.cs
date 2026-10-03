@@ -97,6 +97,7 @@ namespace StoreAndCraft
             // Hammer template + placement ghost too, so snaps / collider apply to new pieces.
             DisplayPrefab.RefreshTemplates(visualId);
             FeedTroughPrefab.ApplyPreview(visualId);
+            ScarecrowPrefab.ApplyPreview(visualId);
             return true;
         }
 

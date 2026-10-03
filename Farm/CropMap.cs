@@ -33,9 +33,20 @@ namespace StoreAndCraft
             if (ZNetScene.instance == null || ZNetScene.instance.m_prefabs == null)
                 return _all;
 
+            // Only saplings the Cultivator really offers: a Carrot cannot be planted, its seeds can.
+            if (ObjectDB.instance == null)
+                return _all;
+            HashSet<GameObject> placeable = CultivatorPieces();
+
             foreach (GameObject go in ZNetScene.instance.m_prefabs)
             {
                 if (go == null)
+                    continue;
+                if (placeable != null && !placeable.Contains(go))
+                    continue;
+                // Saplings only (sapling_carrot), not the vegetable-to-seed ones (sapling_seedcarrot).
+                if (!go.name.StartsWith("sapling", System.StringComparison.OrdinalIgnoreCase)
+                    || go.name.StartsWith("sapling_seed", System.StringComparison.OrdinalIgnoreCase))
                     continue;
                 Plant plant = go.GetComponent<Plant>();
                 Piece piece = go.GetComponent<Piece>();
@@ -72,6 +83,25 @@ namespace StoreAndCraft
                 System.StringComparison.CurrentCultureIgnoreCase));
             Plugin.Log.LogInfo("Scarecrow crops: " + _all.Count);
             return _all;
+        }
+
+        /// <summary>The Cultivator's build pieces, or null when it cannot be read (then nothing is filtered).</summary>
+        private static HashSet<GameObject> CultivatorPieces()
+        {
+            GameObject item = ObjectDB.instance != null ? ObjectDB.instance.GetItemPrefab("Cultivator") : null;
+            ItemDrop drop = item != null ? item.GetComponent<ItemDrop>() : null;
+            PieceTable table = drop != null && drop.m_itemData != null && drop.m_itemData.m_shared != null
+                ? drop.m_itemData.m_shared.m_buildPieces : null;
+            if (table == null || table.m_pieces == null || table.m_pieces.Count == 0)
+                return null;
+            var set = new HashSet<GameObject>();
+            foreach (GameObject p in table.m_pieces)
+            {
+                Piece piece = p != null ? p.GetComponent<Piece>() : null;
+                if (p != null && piece != null && piece.m_enabled)
+                    set.Add(p);
+            }
+            return set.Count > 0 ? set : null;
         }
 
         public static Crop ForSeed(string seed)

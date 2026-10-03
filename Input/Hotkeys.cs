@@ -8,6 +8,8 @@ namespace StoreAndCraft
         {
             if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
                 return;
+            if (SettingsPanel.CapturingKey)
+                return; // a hotkey is being rebound: the pressed key must not fire anything
             if (Console.IsVisible() || (Chat.instance != null && Chat.instance.HasFocus()) || TextInput.IsVisible()
                 || DisplayTypeMenu.IsOpen || StationFilterMenu.IsOpen || DisplayRangeMenu.IsOpen
                 || DisplaySmallOptions.IsOpen)
@@ -39,7 +41,7 @@ namespace StoreAndCraft
             }
             else if (KeyUtil.Down(Plugin.Settings.ActivityLogKey.Value))
             {
-                SettingsPanel.Toggle();
+                ModManagerPanel.Toggle();
             }
             else if (KeyUtil.Down(Plugin.Settings.DisplayRangeKey.Value))
             {

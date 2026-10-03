@@ -65,6 +65,11 @@ namespace StoreAndCraft
             return smelter != null && IsOn(smelter.GetComponent<ZNetView>());
         }
 
+        public static bool IsOn(SapCollector sap)
+        {
+            return sap != null && IsOn(sap.GetComponent<ZNetView>());
+        }
+
         public static bool IsOn(Fermenter fermenter)
         {
             return fermenter != null && IsOn(fermenter.GetComponent<ZNetView>());
@@ -89,6 +94,13 @@ namespace StoreAndCraft
             if (hive == null)
                 return;
             AppendHoverLine(ref text, hive.GetComponent<ZNetView>());
+        }
+
+        public static void AppendHover(ref string text, SapCollector sap)
+        {
+            if (sap == null)
+                return;
+            AppendHoverLine(ref text, sap.GetComponent<ZNetView>());
         }
 
         public static void AppendHover(ref string text, Smelter smelter)
@@ -129,10 +141,13 @@ namespace StoreAndCraft
             Smelter smelter = station == null && hive == null ? StationPullFilter.HoveredSmelter() : null;
             Fermenter fermenter = station == null && hive == null && smelter == null
                 ? StationPullFilter.HoveredFermenter() : null;
+            SapCollector sap = station == null && hive == null && smelter == null && fermenter == null
+                ? HoveredSap() : null;
             Component target = station != null ? station
                 : hive != null ? (Component)hive
                 : smelter != null ? (Component)smelter
-                : fermenter;
+                : fermenter != null ? (Component)fermenter
+                : sap;
             ZNetView nv = target != null ? target.GetComponent<ZNetView>() : null;
             if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
                 return false;
@@ -273,6 +288,33 @@ namespace StoreAndCraft
             StationOutput.QueueIntakeLinkTag(hivePos, StationLink.Get(hive), honeyPrefab);
         }
 
+        /// <summary>
+        /// Sap extractor: the collected sap goes into a chest. No chest → it stays in the extractor (nothing is
+        /// dropped on the ground). The extractor has no input, so there is no auto-fill for it.
+        /// </summary>
+        public static void TryExtractSap(SapCollector sap)
+        {
+            if (sap == null || !IsOn(sap))
+                return;
+
+            ZNetView nv = sap.GetComponent<ZNetView>();
+            if (nv == null || !nv.IsValid() || !nv.IsOwner() || nv.GetZDO() == null)
+                return;
+
+            int level = nv.GetZDO().GetInt(ZDOVars.s_level, 0);
+            if (level <= 0)
+                return;
+
+            string prefab = sap.m_spawnItem != null ? sap.m_spawnItem.gameObject.name : "Sap";
+            string label;
+            if (!StationOutput.TryDepositNear(sap, prefab, level, out label))
+                return;
+
+            nv.GetZDO().Set(ZDOVars.s_level, 0);
+            nv.InvokeRPC(ZNetView.Everybody, "RPC_UpdateEffects");
+            ActivityLog.ToChest(StationOutput.StationLabel(sap), level, label);
+        }
+
         /// <summary>Ready barrel: put the mead into a chest; no chest → vanilla tap to the ground.</summary>
         public static void TryTapFermenter(Fermenter fermenter)
         {
@@ -357,6 +399,17 @@ namespace StoreAndCraft
             return hover.GetComponentInParent<CookingStation>();
         }
 
+        private static SapCollector HoveredSap()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return null;
+            GameObject hover = player.GetHoverObject();
+            if (hover == null)
+                return null;
+            return hover.GetComponentInParent<SapCollector>();
+        }
+
         private static Beehive HoveredBeehive()
         {
             Player player = Player.m_localPlayer;
@@ -406,6 +459,26 @@ namespace StoreAndCraft
             if (__instance == null || !CookingAutoDrop.IsOn(__instance))
                 return;
             CookingAutoDrop.TryExtractHoney(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(SapCollector), "UpdateTick")]
+    internal static class SapCollectorAutoDropUpdatePatch
+    {
+        private static void Postfix(SapCollector __instance)
+        {
+            if (__instance == null || !CookingAutoDrop.IsOn(__instance))
+                return;
+            CookingAutoDrop.TryExtractSap(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(SapCollector), nameof(SapCollector.GetHoverText))]
+    internal static class SapCollectorAutoDropHoverPatch
+    {
+        private static void Postfix(SapCollector __instance, ref string __result)
+        {
+            CookingAutoDrop.AppendHover(ref __result, __instance);
         }
     }
 

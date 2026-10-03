@@ -31,3 +31,7 @@ thunderstore/icons/
 thunderstore/*/plugins/
 Unity/
 Content/UI/_backup_link_old/
+
+# Local build helpers, never published.
+build-log.txt
+build-sac.cmd

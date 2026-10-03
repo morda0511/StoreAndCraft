@@ -19,15 +19,18 @@ namespace StoreAndCraft
     {
         private const float RefW = 1920f;
         private const float RefH = 1080f;
-        private const float PanelW = 760f;
+        private const float PanelW = 1040f;
+        /// <summary>Right-hand strip of every range row reserved for its hotkey buttons.</summary>
+        private const float HotkeyBlock = 192f;
+        private const float HotkeyBtnW = 86f;
         private const float PanelH = 960f;
         private const float SliderMax = 200f;
 
-        private static readonly Color Gold = new Color(1f, 0.79f, 0.34f, 1f);
-        private static readonly Color TextColor = new Color(0.93f, 0.9f, 0.84f, 1f);
-        private static readonly Color Muted = new Color(0.78f, 0.74f, 0.66f, 1f);
-        private static readonly Color Warn = new Color(1f, 0.64f, 0.35f, 1f);
-        private static readonly Color CheckYellow = new Color(1f, 0.86f, 0.1f, 1f);
+        internal static readonly Color Gold = new Color(1f, 0.79f, 0.34f, 1f);
+        internal static readonly Color TextColor = new Color(0.93f, 0.9f, 0.84f, 1f);
+        internal static readonly Color Muted = new Color(0.78f, 0.74f, 0.66f, 1f);
+        internal static readonly Color Warn = new Color(1f, 0.64f, 0.35f, 1f);
+        internal static readonly Color CheckYellow = new Color(1f, 0.86f, 0.1f, 1f);
 
         private sealed class Row
         {
@@ -45,6 +48,8 @@ namespace StoreAndCraft
             public bool Whole;
             /// <summary>Capacity row: config 0 = this vanilla amount (shown as the real number). -1 = none.</summary>
             public float Vanilla = -1f;
+            /// <summary>Station capacity row: the help lists all of them as one entry.</summary>
+            public bool Cap;
             public Slider Slider;
             public TMP_InputField Input;
             public bool Syncing;
@@ -53,6 +58,7 @@ namespace StoreAndCraft
         // SAC-CATCHUP
         private static bool _catchUp;
         private static bool _torchAutoFill;
+        private static bool _torchOverride;
 
         /// <summary>Synced on/off setting (admin, sent on Save via ConfigCommands.BoolEntryFor key).</summary>
         private sealed class BoolRow
@@ -66,6 +72,26 @@ namespace StoreAndCraft
         private static readonly List<BoolRow> BoolRows = new List<BoolRow>();
 
         public static bool IsOpen { get; private set; }
+
+        // ---- hotkeys (live rebind, saved in the BepInEx config right away)
+        private sealed class HotkeyBtn
+        {
+            public ConfigEntry<KeyboardShortcut> Entry;
+            public string Name;
+            public TextMeshProUGUI Text;
+        }
+
+        private static readonly List<HotkeyBtn> HotkeyBtns = new List<HotkeyBtn>();
+        private static HotkeyBtn _capturing;
+        private static float _captureStarted;
+        private static int _captureEndFrame = -10;
+        private static KeyCode[] _captureKeys;
+
+        /// <summary>True while a hotkey is being rebound (and one frame after): other hotkeys stay quiet.</summary>
+        internal static bool CapturingKey
+        {
+            get { return _capturing != null || Time.frameCount <= _captureEndFrame || ModManagerPanel.Capturing; }
+        }
 
         private static bool _canEdit;
         private static int _closeAtFrame = -1;
@@ -90,6 +116,8 @@ namespace StoreAndCraft
             if (Plugin.Settings == null || Player.m_localPlayer == null)
                 return;
             _canEdit = ConfigCommands.CanEditRanges();
+            // Ask the server again: its answer follows the current adminlist.txt, the one from joining may be old.
+            ConfigSync.RequestConfigFromServer();
             LoadRows();
             _closeAtFrame = -1;
             UiFonts.ThinNorse();
@@ -104,6 +132,20 @@ namespace StoreAndCraft
                 return;
             }
             IsOpen = true;
+        }
+
+        /// <summary>The mod manager opens the StoreAndCraft page (this panel) from its list.</summary>
+        internal static void OpenFromManager()
+        {
+            if (!IsOpen)
+                Open();
+        }
+
+        /// <summary>Back arrow: close this panel, the mod manager shows its list again.</summary>
+        internal static void BackToManager()
+        {
+            ModManagerPanel.RequestListAfterSac();
+            RequestClose();
         }
 
         private static void RequestClose()
@@ -127,6 +169,8 @@ namespace StoreAndCraft
                 Rows[i].Slider = null;
                 Rows[i].Input = null;
             }
+            HotkeyBtns.Clear();
+            _capturing = null;
             _content = null;
             _infoBody = null;
             _infoHeader = null;
@@ -140,7 +184,7 @@ namespace StoreAndCraft
 
         internal static bool BlocksInput
         {
-            get { return IsOpen && Player.m_localPlayer != null; }
+            get { return (IsOpen || ModManagerPanel.IsOpen) && Player.m_localPlayer != null; }
         }
 
         internal static void Tick()
@@ -160,8 +204,238 @@ namespace StoreAndCraft
                 return;
             }
 
+            // The server's answer to the request in Open() can change the edit permission: rebuild once.
+            bool canEditNow = ConfigCommands.CanEditRanges();
+            if (canEditNow != _canEdit && _capturing == null)
+            {
+                _canEdit = canEditNow;
+                LoadRows();
+                try
+                {
+                    Build();
+                }
+                catch (System.Exception ex)
+                {
+                    Plugin.Log.LogWarning("F10 panel rebuild failed: " + ex);
+                    Close();
+                }
+                return;
+            }
+
+            if (_capturing != null)
+            {
+                HandleCapture();
+                return;
+            }
+
             if (ZInput.GetKeyDown(KeyCode.Escape, true) || KeyUtil.Down(Plugin.Settings.ActivityLogKey.Value))
                 RequestClose();
+        }
+
+        // ---------------------------------------------------------------- hotkeys
+
+        private static List<KeyValuePair<string, ConfigEntry<KeyboardShortcut>>> HotkeysFor(string rowKey)
+        {
+            ModConfig c = Plugin.Settings;
+            var l = new List<KeyValuePair<string, ConfigEntry<KeyboardShortcut>>>();
+            switch (rowKey)
+            {
+                case "dumprange":
+                    l.Add(Pair(Loc.T("Dump", "Einlagern"), c.DumpKey));
+                    l.Add(Pair(Loc.T("Click", "Klick"), c.HoverStoreKey));
+                    break;
+                case "storagerange":
+                    l.Add(Pair(Loc.T("Take stack", "Stack holen"), c.TakeStackKey));
+                    l.Add(Pair(Loc.T("Search", "Suche"), c.SearchKey));
+                    break;
+                case "craftrange":
+                    l.Add(Pair(Loc.T("Grab mats", "Material holen"), c.BuildGrabKey));
+                    break;
+                case "autofillrange":
+                    l.Add(Pair(Loc.T("Auto-fill", "Auto-Fill"), c.AutoFillKey));
+                    break;
+                case "autofillchestrange":
+                    l.Add(Pair(Loc.T("Auto-store", "Auto-Lagern"), c.AutoDropKey));
+                    break;
+                case "displayrange":
+                    l.Add(Pair(Loc.T("Range", "Reichweite"), c.DisplayRangeKey));
+                    break;
+            }
+            return l;
+        }
+
+        private static KeyValuePair<string, ConfigEntry<KeyboardShortcut>> Pair(string name, ConfigEntry<KeyboardShortcut> entry)
+        {
+            return new KeyValuePair<string, ConfigEntry<KeyboardShortcut>>(name, entry);
+        }
+
+        /// <summary>Every SAC hotkey with a readable name (conflict check).</summary>
+        private static List<KeyValuePair<string, ConfigEntry<KeyboardShortcut>>> AllHotkeys()
+        {
+            ModConfig c = Plugin.Settings;
+            return new List<KeyValuePair<string, ConfigEntry<KeyboardShortcut>>>
+            {
+                Pair(Loc.T("Dump", "Einlagern"), c.DumpKey),
+                Pair(Loc.T("Click store", "Klick-Einlagern"), c.HoverStoreKey),
+                Pair(Loc.T("Search", "Suche"), c.SearchKey),
+                Pair(Loc.T("Settings", "Einstellungen"), c.RenameKey),
+                Pair(Loc.T("Take stack", "Stack holen"), c.TakeStackKey),
+                Pair(Loc.T("Favorite", "Favorit"), c.FavoriteKey),
+                Pair(Loc.T("Auto-fill", "Auto-Fill"), c.AutoFillKey),
+                Pair(Loc.T("Auto-store", "Auto-Lagern"), c.AutoDropKey),
+                Pair(Loc.T("This panel", "Dieses Fenster"), c.ActivityLogKey),
+                Pair(Loc.T("Display range", "Display-Reichweite"), c.DisplayRangeKey),
+                Pair(Loc.T("Grab mats", "Material holen"), c.BuildGrabKey),
+            };
+        }
+
+        private static string KeyText(ConfigEntry<KeyboardShortcut> entry)
+        {
+            string t = entry != null ? KeyUtil.Format(entry.Value) : "";
+            return string.IsNullOrEmpty(t) ? "-" : t;
+        }
+
+        /// <summary>Key buttons in the right strip of a range row (bottom line, captions above).</summary>
+        private static void AddHotkeyButtons(RectTransform row, List<KeyValuePair<string, ConfigEntry<KeyboardShortcut>>> keys, bool captions = true)
+        {
+            for (int i = 0; i < keys.Count; i++)
+            {
+                // First entry is the left button.
+                float right = 6f + (keys.Count - 1 - i) * (HotkeyBtnW + 6f);
+                if (captions)
+                {
+                    TextMeshProUGUI cap = Label(row, "KeyCaption", 13f, false);
+                    cap.text = keys[i].Key;
+                    cap.color = Muted;
+                    cap.alignment = TextAlignmentOptions.MidlineRight;
+                    Place(cap.rectTransform, 1f, 0f, 1f, 0f, -(right + HotkeyBtnW), 38f, -right, 58f);
+                }
+                MakeKeyButton(row, keys[i], Place1(1f, 0f, -(right + HotkeyBtnW), 4f, -right, 36f), HotkeyBtnW);
+            }
+        }
+
+        private static Vector4 Place1(float ax, float ay, float x0, float y0, float x1, float y1)
+        {
+            return new Vector4(x0, y0, x1, y1);
+        }
+
+        private static void MakeKeyButton(RectTransform parent, KeyValuePair<string, ConfigEntry<KeyboardShortcut>> key, Vector4 box, float width)
+        {
+            var hk = new HotkeyBtn { Entry = key.Value, Name = key.Key };
+            Button btn = MakeButton(parent, "Key_" + key.Value.Definition.Key, KeyText(key.Value), () => StartCapture(hk));
+            Place(btn.transform as RectTransform, 1f, 0f, 1f, 0f, box.x, box.y, box.z, box.w);
+            TextMeshProUGUI t = btn.GetComponentInChildren<TextMeshProUGUI>(true);
+            t.enableAutoSizing = true;
+            t.fontSizeMin = 10f;
+            t.fontSizeMax = 16f;
+            t.textWrappingMode = TextWrappingModes.NoWrap;
+            hk.Text = t;
+            HotkeyBtns.Add(hk);
+        }
+
+        private static void StartCapture(HotkeyBtn hk)
+        {
+            if (_capturing != null && _capturing.Text != null)
+                _capturing.Text.text = KeyText(_capturing.Entry);
+            _capturing = hk;
+            _captureStarted = Time.unscaledTime;
+            if (hk.Text != null)
+                hk.Text.text = Loc.T("press key...", "Taste...");
+            SetStatus(hk.Name + ": " + Loc.T("press the new key (Esc = cancel, Backspace = unbind).",
+                "neue Taste drücken (Esc = abbrechen, Rücktaste = entfernen)."));
+        }
+
+        private static void EndCapture()
+        {
+            if (_capturing != null && _capturing.Text != null)
+                _capturing.Text.text = KeyText(_capturing.Entry);
+            _capturing = null;
+            _captureEndFrame = Time.frameCount;
+        }
+
+        private static void SetStatus(string text)
+        {
+            if (_status != null)
+                _status.text = text;
+        }
+
+        internal static KeyCode[] CaptureKeys()
+        {
+            if (_captureKeys != null)
+                return _captureKeys;
+            var list = new List<KeyCode>();
+            foreach (KeyCode k in System.Enum.GetValues(typeof(KeyCode)))
+            {
+                string n = k.ToString();
+                if (k == KeyCode.None || k == KeyCode.Escape || k == KeyCode.Backspace
+                    || k == KeyCode.Mouse0 || k == KeyCode.Mouse1
+                    || n.StartsWith("Joystick") || n.Contains("Shift") || n.Contains("Control")
+                    || n.Contains("Alt") || n.Contains("Command") || n.Contains("Windows") || n.Contains("Apple"))
+                    continue;
+                list.Add(k);
+            }
+            _captureKeys = list.ToArray();
+            return _captureKeys;
+        }
+
+        private static void HandleCapture()
+        {
+            if (Time.unscaledTime - _captureStarted < 0.15f)
+                return; // the click that started the capture
+            HotkeyBtn hk = _capturing;
+
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                EndCapture();
+                SetStatus("");
+                return;
+            }
+            if (Input.GetKeyDown(KeyCode.Backspace))
+            {
+                // The key that opens this panel must stay: it is the way back in.
+                if (hk.Entry == Plugin.Settings.ActivityLogKey)
+                {
+                    SetStatus(Loc.T("This key opens this panel and cannot be unbound.", "Diese Taste öffnet dieses Fenster und kann nicht entfernt werden."));
+                    EndCapture();
+                    return;
+                }
+                hk.Entry.Value = new KeyboardShortcut(KeyCode.None);
+                SetStatus(hk.Name + ": " + Loc.T("unbound.", "entfernt."));
+                EndCapture();
+                return;
+            }
+
+            KeyCode[] keys = CaptureKeys();
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (!Input.GetKeyDown(keys[i]))
+                    continue;
+
+                var mods = new List<KeyCode>();
+                if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                    mods.Add(KeyCode.LeftShift);
+                if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                    mods.Add(KeyCode.LeftControl);
+                if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
+                    mods.Add(KeyCode.LeftAlt);
+                var next = new KeyboardShortcut(keys[i], mods.ToArray());
+
+                List<KeyValuePair<string, ConfigEntry<KeyboardShortcut>>> all = AllHotkeys();
+                for (int k = 0; k < all.Count; k++)
+                {
+                    if (all[k].Value != hk.Entry && all[k].Value.Value.Equals(next))
+                    {
+                        SetStatus(KeyUtil.Format(next) + " " + Loc.T("is already used by", "wird schon benutzt von") + " " + all[k].Key + ".");
+                        EndCapture();
+                        return;
+                    }
+                }
+
+                hk.Entry.Value = next;
+                SetStatus(hk.Name + ": " + KeyUtil.Format(next));
+                EndCapture();
+                return;
+            }
         }
 
         // ---------------------------------------------------------------- data
@@ -197,6 +471,7 @@ namespace StoreAndCraft
             // SAC-CATCHUP
             _catchUp = Plugin.Settings.CatchUpEnabled.Value;
             _torchAutoFill = Plugin.Settings.TorchAutoFillDefault.Value;
+            _torchOverride = Plugin.Settings.TorchAutoFillOverride.Value;
             AddRow("catchuphours", "Catch up while away: max hours", "Nachholen: maximale Stunden",
                 "Most game time one smelter catches up after its zone was unloaded (only with the checkbox on).",
                 "So viel Spielzeit holt eine Schmelze höchstens nach, wenn ihre Zone entladen war (nur mit Häkchen).");
@@ -225,6 +500,7 @@ namespace StoreAndCraft
             AddBool("craftenabled", "Craft / build / stations use chest items", "Craften / Bauen / Stationen nutzen Kisten-Items");
             AddBool("leaveone", "Leave 1 item in chests when taking", "Beim Entnehmen 1 Item in der Kiste lassen");
             AddBool("feedtroughenabled", "Feed trough in the hammer (after restart)", "Futtertrog im Hammer (nach Neustart)");
+            AddBool("armorstandswap", "Armor stand: E swaps the armor you wear", "Rüstungsständer: E tauscht die getragene Rüstung");
         }
 
         private static void AddBool(string key, string en, string de)
@@ -243,6 +519,7 @@ namespace StoreAndCraft
             if (Rows.Count == 0 || Rows[Rows.Count - 1].Key != key)
                 return;
             Row row = Rows[Rows.Count - 1];
+            row.Cap = true;
             row.Unit = "";
             row.Whole = true;
             row.SliderMax = ModConfig.MaxStationCap;
@@ -304,6 +581,8 @@ namespace StoreAndCraft
                 changes.Add(new KeyValuePair<string, float>("catchup", _catchUp ? 1f : 0f));
             if (_torchAutoFill != Plugin.Settings.TorchAutoFillDefault.Value)
                 changes.Add(new KeyValuePair<string, float>("torchautofill", _torchAutoFill ? 1f : 0f));
+            if (_torchOverride != Plugin.Settings.TorchAutoFillOverride.Value)
+                changes.Add(new KeyValuePair<string, float>("torchautofilloverride", _torchOverride ? 1f : 0f));
             for (int i = 0; i < BoolRows.Count; i++)
             {
                 ConfigEntry<bool> entry = ConfigCommands.BoolEntryFor(BoolRows[i].Key);
@@ -404,6 +683,10 @@ namespace StoreAndCraft
             Button close = MakeButton(panel, "Close", Loc.T("Close", "Schließen"), RequestClose);
             Place(close.transform as RectTransform, 0.5f, 0f, 0.5f, 0f, 20f, 78f, 230f, 124f);
 
+            // Back to the list of all mods (F10 mod manager).
+            Button back = MakeButton(panel, "Back", "<", BackToManager);
+            Place(back.transform as RectTransform, 0f, 1f, 0f, 1f, 40f, -86f, 100f, -30f);
+
             _status = Label(panel, "Status", 17f, false);
             _status.color = Warn;
             _status.alignment = TextAlignmentOptions.Center;
@@ -416,8 +699,11 @@ namespace StoreAndCraft
 
         private static void BuildContent()
         {
-            AddToggle(Loc.T("Show activity log", "Aktivitäts-Log anzeigen"), ActivityLog.Visible, true,
+            RectTransform logRow = AddToggle(Loc.T("Show activity log", "Aktivitäts-Log anzeigen"), ActivityLog.Visible, true,
                 on => ActivityLog.SetVisible(on));
+            var panelKey = new List<KeyValuePair<string, ConfigEntry<KeyboardShortcut>>>
+                { Pair(Loc.T("This panel", "Dieses Fenster"), Plugin.Settings.ActivityLogKey) };
+            AddHotkeyButtons(logRow, panelKey, false);
 
             AddHeader(Loc.T("Ranges (meters, 0-1000)", "Reichweiten (Meter, 0-1000)"));
             if (!_canEdit)
@@ -436,9 +722,13 @@ namespace StoreAndCraft
                     "Nachholen während niemand da ist (Schmelzen mit B + N)"),
                 _catchUp, _canEdit, on => _catchUp = on);
             AddToggle(Loc.T(
-                    "Torches start with auto-fill on (B still turns one off)",
-                    "Fackeln haben Auto-Fill von Anfang an (B schaltet einzeln aus)"),
+                    "New torches start with auto-fill on",
+                    "Neue Fackeln haben Auto-Fill von Anfang an"),
                 _torchAutoFill, _canEdit, on => _torchAutoFill = on);
+            AddToggle(Loc.T(
+                    "World Override: auto-fill on all torches",
+                    "Welt-Override: Auto-Fill auf allen Fackeln"),
+                _torchOverride, _canEdit, on => _torchOverride = on);
 
             // Other synced on/off settings — admin, applied on Save like the ranges.
             AddHeader(Loc.T("Store / craft (on / off)", "Lagern / Craften (an / aus)"));
@@ -453,6 +743,13 @@ namespace StoreAndCraft
             AddLocalToggle(Loc.T("Dump skips the hotbar", "Einlagern lässt die Hotbar aus"), Plugin.Settings.IgnoreHotbar);
             AddLocalToggle(Loc.T("Chest flashes when something is stored", "Kiste blinkt beim Einlagern"), Plugin.Settings.HighlightOnStore);
             AddLocalToggle(Loc.T("Map ping on the chest after storing", "Karten-Ping an der Kiste nach dem Einlagern"), Plugin.Settings.PingOnStore);
+
+            // Hotkeys without a range slider (the others sit next to their feature above).
+            AddHeader(Loc.T("More hotkeys (only for me, change by clicking)", "Weitere Hotkeys (nur für mich, zum Ändern anklicken)"));
+            AddHotkeyRow(Loc.T("Chest / station / display settings", "Kisten- / Stations- / Display-Einstellungen"),
+                Plugin.Settings.RenameKey, Loc.T("Settings", "Einstellungen"));
+            AddHotkeyRow(Loc.T("Favorite an item (inventory)", "Item favorisieren (Inventar)"),
+                Plugin.Settings.FavoriteKey, Loc.T("Favorite", "Favorit"));
 
             // Collapsible help.
             Button infoBtn = MakeButton(_content, "InfoToggle", "", ToggleInfo);
@@ -492,10 +789,28 @@ namespace StoreAndCraft
             v.childForceExpandWidth = true;
             v.childForceExpandHeight = false;
 
+            bool anyCap = false;
             for (int i = 0; i < Rows.Count; i++)
             {
-                AddText(body, "• " + Loc.T(Rows[i].En, Rows[i].De), TextColor, 17f);
-                AddText(body, Loc.T(Rows[i].HelpEn, Rows[i].HelpDe), Muted, 16f);
+                if (Rows[i].Cap)
+                {
+                    anyCap = true;
+                    continue;
+                }
+                AddInfoTitle(body, "• " + Loc.T(Rows[i].En, Rows[i].De));
+                AddText(body, Loc.T(Rows[i].HelpEn, Rows[i].HelpDe), InfoYellow, 16f);
+            }
+
+            // All station capacities share one explanation (only the station differs).
+            if (anyCap)
+            {
+                AddInfoTitle(body, "• " + Loc.T("Station capacities", "Stations-Kapazitäten"));
+                AddText(body, Loc.T(
+                    "Changes how much fits into a station: charcoal kiln, smelter, blast furnace, eitr refinery, beehive and the fermenter batch. "
+                    + "0 keeps the vanilla amount. Applies to every station of that type at once.",
+                    "Ändert, wie viel in eine Station passt: Köhler, Schmelze, Hochofen, Eitr-Raffinerie, Bienenstock und die Fermenter-Charge. "
+                    + "0 lässt den Vanilla-Wert. Gilt sofort für alle Stationen dieser Art."),
+                    InfoYellow, 16f);
             }
 
             AddText(body, Loc.T(
@@ -505,7 +820,7 @@ namespace StoreAndCraft
                 + "Größere Werte bewirken darüber hinaus nichts. Tipp: Auto-Fill 80-120, Station zur Kiste 10-15, alles andere 10-30."),
                 Warn, 16f);
 
-            AddText(body, "• " + Loc.T("Catch up while away", "Nachholen während niemand da ist"), TextColor, 17f); // SAC-CATCHUP
+            AddInfoTitle(body, "• " + Loc.T("Catch up while away", "Nachholen während niemand da ist")); // SAC-CATCHUP
             AddText(body, Loc.T(
                 "Off by default. When nobody is near a base, Valheim unloads it and smelters stop once they are empty. "
                 + "With this on, a kiln / smelter / blast furnace / windmill / spinning wheel / eitr refinery with auto-fill (B) "
@@ -519,15 +834,22 @@ namespace StoreAndCraft
                 + "aus ihren Kisten und legt die fertigen Items in eine Kiste, einen Stapel nach dem anderen, als hätte sie weitergearbeitet. "
                 + "Sie stoppt, wenn die Kisten leer sind oder die Ausgabe-Kiste voll ist. Passt das Ergebnis nicht, wird nichts entnommen. "
                 + "Es zählt nur Zeit nach dem Einschalten, begrenzt durch die maximalen Stunden. Jedes Paket steht im Aktivitäts-Log."),
-                Muted, 16f);
+                InfoYellow, 16f);
 
-            AddText(body, "• " + Loc.T("Torches start with auto-fill on", "Fackeln mit Auto-Fill von Anfang an"), TextColor, 17f);
+            AddInfoTitle(body, "• " + Loc.T("New torches start with auto-fill on", "Neue Fackeln mit Auto-Fill von Anfang an"));
             AddText(body, Loc.T(
-                "Off by default. When on, every torch (standing, wall, green / blue / mist) that nobody has toggled yet "
-                + "refills itself with fuel from nearby chests. Press B on a single torch to switch it off; that choice is kept.",
-                "Standardmäßig aus. Mit Häkchen füllt sich jede Fackel (Stand-, Wand-, grüne / blaue / Nebel-Fackel), die noch "
-                + "niemand umgeschaltet hat, selbst mit Brennstoff aus nahen Kisten nach. B auf einer Fackel schaltet sie einzeln aus; das bleibt so."),
-                Muted, 16f);
+                "Off by default. When on, every torch (standing, wall, green / blue / mist) you place from now on refills itself "
+                + "with fuel from nearby chests. Torches that are already placed keep their own setting. B on a torch switches that torch.",
+                "Standardmäßig aus. Mit Häkchen füllt sich jede Fackel (Stand-, Wand-, grüne / blaue / Nebel-Fackel), die du ab jetzt "
+                + "platzierst, selbst mit Brennstoff aus nahen Kisten nach. Schon stehende Fackeln behalten ihre Einstellung. B auf einer Fackel schaltet diese Fackel."),
+                InfoYellow, 16f);
+            AddInfoTitle(body, "• " + Loc.T("World Override: auto-fill on all torches", "Welt-Override: Auto-Fill auf allen Fackeln"));
+            AddText(body, Loc.T(
+                "Off by default. While on, every torch, placed ones too, refills itself whatever its own setting says. "
+                + "The torches' own settings are not changed: switch it off and each torch is back to what it was.",
+                "Standardmäßig aus. Solange das Häkchen gesetzt ist, füllt sich jede Fackel, auch schon stehende, selbst nach, egal was "
+                + "ihre eigene Einstellung sagt. Die Einstellung der Fackeln bleibt unverändert: Häkchen weg, und jede Fackel ist wieder wie vorher."),
+                InfoYellow, 16f);
             return body.gameObject;
         }
 
@@ -539,6 +861,19 @@ namespace StoreAndCraft
             tmp.color = Gold;
             tmp.textWrappingMode = TextWrappingModes.NoWrap;
             AddLayout(go.gameObject, 40f);
+        }
+
+        private static readonly Color InfoYellow = new Color(1f, 0.9f, 0.3f, 1f);
+
+        /// <summary>Feature name in the help: bold.</summary>
+        private static void AddInfoTitle(RectTransform parent, string text)
+        {
+            var go = NewUi("Title", parent);
+            TextMeshProUGUI tmp = UiFonts.CreateBoldLabel(go.gameObject, 19f);
+            tmp.text = text;
+            tmp.color = TextColor;
+            tmp.textWrappingMode = TextWrappingModes.Normal;
+            tmp.overflowMode = TextOverflowModes.Overflow;
         }
 
         private static void AddText(string text, Color color, float size)
@@ -564,11 +899,11 @@ namespace StoreAndCraft
             TextMeshProUGUI label = Label(go, "Label", 18f, false);
             label.text = Loc.T(row.En, row.De);
             label.color = TextColor;
-            Place(label.rectTransform, 0f, 1f, 1f, 1f, 0f, -28f, 0f, 0f);
+            Place(label.rectTransform, 0f, 1f, 1f, 1f, 0f, -28f, -HotkeyBlock, 0f);
 
             // Slider (vanilla text_field track, amber fill, button_small knob).
             var sliderRt = NewUi("Slider", go, typeof(Slider));
-            Place(sliderRt, 0f, 0f, 1f, 0f, 4f, 10f, -126f, 30f);
+            Place(sliderRt, 0f, 0f, 1f, 0f, 4f, 10f, -126f - HotkeyBlock, 30f);
             var bg = NewUi("Background", sliderRt, typeof(Image));
             Stretch(bg);
             SetSprite(bg.GetComponent<Image>(), Vanilla("text_field"), new Color(0f, 0f, 0f, 0.55f));
@@ -605,7 +940,7 @@ namespace StoreAndCraft
 
             // Number field (vanilla text_field).
             var fieldRt = NewUi("Field", go, typeof(Image), typeof(TMP_InputField));
-            Place(fieldRt, 1f, 0f, 1f, 0f, -110f, 4f, -30f, 36f);
+            Place(fieldRt, 1f, 0f, 1f, 0f, -110f - HotkeyBlock, 4f, -30f - HotkeyBlock, 36f);
             SetSprite(fieldRt.GetComponent<Image>(), Vanilla("text_field"), new Color(0f, 0f, 0f, 0.6f));
 
             var area = NewUi("Text Area", fieldRt, typeof(RectMask2D));
@@ -630,7 +965,11 @@ namespace StoreAndCraft
             TextMeshProUGUI unit = Label(go, "Unit", 18f, false);
             unit.text = row.Unit;
             unit.color = Muted;
-            Place(unit.rectTransform, 1f, 0f, 1f, 0f, -24f, 4f, 0f, 36f);
+            Place(unit.rectTransform, 1f, 0f, 1f, 0f, -24f - HotkeyBlock, 4f, -HotkeyBlock, 36f);
+
+            List<KeyValuePair<string, ConfigEntry<KeyboardShortcut>>> rowKeys = HotkeysFor(row.Key);
+            if (rowKeys.Count > 0)
+                AddHotkeyButtons(go, rowKeys);
 
             slider.onValueChanged.AddListener(v =>
             {
@@ -667,9 +1006,14 @@ namespace StoreAndCraft
             AddToggle(text, entry.Value, true, on => entry.Value = on);
         }
 
-        private static void AddToggle(string text, bool value, bool interactable, System.Action<bool> changed)
+        private static RectTransform AddToggle(string text, bool value, bool interactable, System.Action<bool> changed)
         {
-            var go = NewUi("Toggle", _content, typeof(Toggle));
+            return AddToggle(_content, text, value, interactable, changed);
+        }
+
+        internal static RectTransform AddToggle(RectTransform parent, string text, bool value, bool interactable, System.Action<bool> changed)
+        {
+            var go = NewUi("Toggle", parent, typeof(Toggle));
             AddLayout(go.gameObject, 38f);
 
             var box = NewUi("Background", go, typeof(Image));
@@ -701,9 +1045,22 @@ namespace StoreAndCraft
             toggle.SetIsOnWithoutNotify(value);
             toggle.interactable = interactable;
             toggle.onValueChanged.AddListener(on => changed(on));
+            return go;
         }
 
-        private static Button MakeButton(RectTransform parent, string name, string text, UnityEngine.Events.UnityAction onClick)
+        /// <summary>Label on the left, one key button on the right (local hotkeys, saved right away).</summary>
+        private static void AddHotkeyRow(string text, ConfigEntry<KeyboardShortcut> entry, string name)
+        {
+            var go = NewUi("Hotkey_" + entry.Definition.Key, _content);
+            AddLayout(go.gameObject, 40f);
+            TextMeshProUGUI label = Label(go, "Label", 18f, false);
+            label.text = text;
+            label.color = TextColor;
+            Place(label.rectTransform, 0f, 0f, 1f, 1f, 4f, 0f, -150f, 0f);
+            MakeKeyButton(go, Pair(name, entry), new Vector4(-146f, 4f, -6f, 36f), 140f);
+        }
+
+        internal static Button MakeButton(RectTransform parent, string name, string text, UnityEngine.Events.UnityAction onClick)
         {
             var rt = NewUi(name, parent, typeof(Image), typeof(Button));
             SetSprite(rt.GetComponent<Image>(), Vanilla("button") ?? UiAssets.BtnApply, new Color(0.35f, 0.24f, 0.13f, 1f));
@@ -748,7 +1105,7 @@ namespace StoreAndCraft
             return null;
         }
 
-        private static void SetSprite(Image img, Sprite sprite, Color fallback)
+        internal static void SetSprite(Image img, Sprite sprite, Color fallback)
         {
             if (img == null)
                 return;
@@ -770,7 +1127,7 @@ namespace StoreAndCraft
         /// Parent first, components after: under the inactive root no Awake / OnEnable runs
         /// before Slider / Toggle / TMP_InputField are wired up.
         /// </summary>
-        private static RectTransform NewUi(string name, Transform parent, params System.Type[] components)
+        internal static RectTransform NewUi(string name, Transform parent, params System.Type[] components)
         {
             var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(parent, false);
@@ -787,7 +1144,7 @@ namespace StoreAndCraft
             return go.transform as RectTransform;
         }
 
-        private static TextMeshProUGUI Label(RectTransform parent, string name, float size, bool bold)
+        internal static TextMeshProUGUI Label(RectTransform parent, string name, float size, bool bold)
         {
             var rt = NewUi(name, parent);
             TextMeshProUGUI tmp = bold
@@ -799,7 +1156,7 @@ namespace StoreAndCraft
             return tmp;
         }
 
-        private static void AddLayout(GameObject go, float height)
+        internal static void AddLayout(GameObject go, float height)
         {
             LayoutElement le = go.GetComponent<LayoutElement>();
             if (le == null)
@@ -808,7 +1165,7 @@ namespace StoreAndCraft
             le.preferredHeight = height;
         }
 
-        private static void Stretch(RectTransform rt)
+        internal static void Stretch(RectTransform rt)
         {
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
@@ -818,7 +1175,7 @@ namespace StoreAndCraft
         }
 
         /// <summary>Anchors (min / max) plus offsets (left, bottom, right, top).</summary>
-        private static void Place(RectTransform rt, float minX, float minY, float maxX, float maxY,
+        internal static void Place(RectTransform rt, float minX, float minY, float maxX, float maxY,
             float left, float bottom, float right, float top)
         {
             rt.anchorMin = new Vector2(minX, minY);

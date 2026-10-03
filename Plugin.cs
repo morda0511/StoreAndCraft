@@ -13,7 +13,7 @@ namespace StoreAndCraft
     {
         public const string ModGuid = "com.morda.storeandcraft";
         public const string ModName = "StoreAndCraft";
-        public const string ModVersion = "1.3.45";
+        public const string ModVersion = "1.4.0";
         public const string ModAuthor = "Morda";
 
         internal static Plugin Instance { get; private set; }
@@ -88,11 +88,13 @@ namespace StoreAndCraft
             SearchPing.Tick();
             // Mouse-down edge for display scale/mode — must not wait for LateUpdate.
             StorageDisplayBoard.TickCycleInput();
+            StorageDisplayBoard.TickLocateInput();
             DisplayTypeMenu.Tick();
             DisplayRangeMenu.Tick();
             DisplaySmallOptions.Tick();
             StationFilterMenu.Tick();
             SettingsPanel.Tick();
+            ModManagerPanel.Tick();
             StationAutoFill.Tick();
         }
 

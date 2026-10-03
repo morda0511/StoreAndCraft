@@ -1,52 +1,57 @@
 # Changelog
 
-## 1.3.45 (Beta)
+## 1.4.0
 
 ### NEW FEATURES
-- Carved storage displays in the hammer (Storage tab): small, small wide, medium, medium wide, large and large wide wooden boards, each with its own hammer icon
-- Displays show each selected category in its own area with the category name above it. Every display (carved and the classic sign displays) has several layouts, **Shift+RMB** switches between them. Column layouts fill from the bottom up
-- Small displays: **E** picks one category or up to 4 single items
-- Search box in the Storage Display filter menu (**E**): type a name to find items from every category
-- Filter menus only list items you have already discovered (admins in no-cost mode still see everything)
-- Feed trough: **Alt+E** opens its own menu with a food filter (only food tame animals really eat), links l1-l9 and an auto-fill switch. With auto-fill on (**B**) an empty trough refills itself from (linked) chests
-- Fermenter: **Alt+E** mead-base filter and auto-fill switch. Batches: in the first 60 seconds you can add more of the same mead base (**E**), all of them finish in the time of one (up to 5 by default, `FermenterBatch`)
-- Station capacities in the F10 panel (admin): charcoal kiln, smelter, blast furnace, eitr refinery and beehive. Vanilla by default, up to 50, applied live to every station
-- Linked stations show in red above them what their chests ran out of (e.g. ~~Coal~~, ~~Ore~~)
-- Hugin visits once after an update and tells you what is new (`ShowReleaseNews` to turn it off)
-- Manual-fill chests: **Manual fill** switch in the chest settings (or `[M]` at the start of the name). Dump, ground pickup and auto-store no longer put items into it, stations and crafting can still take from it. Works with links, e.g. `[M] [l3] Wood`
-- Optional catch-up while away (`CatchUpWhileAway`, off by default): smelters, kilns etc. with auto-fill (B) and auto-store (N) finish the time their area was unloaded once you come back (max `CatchUpMaxHours`)
-- Torches can start with auto-fill on (`TorchAutoFillDefault`, off by default, checkbox in F10 or `/torchautofill on|off`). **B** on a torch still turns it off
-- **Sort** and **Stack** buttons on the inventory and chest panels (Stack merges partial stacks of the same item)
-- Scarecrow (hammer, Storage tab): plants one crop on a grid around itself (width / length up to 21, adjustable spacing) and replants right away. When the whole field is ripe it harvests everything, the crops go to (linked) chests via auto-store. Seeds come from (linked) chests. **Alt+E**: crop, grid size, spacing, harvest / plant switches and links, **B** on/off. Needs cultivated ground
+- **Scarecrow** (hammer, Storage tab): plants a crop grid, harvests when all is ripe, replants
+  - **Shift / Ctrl + mouse wheel**: width / length (up to 21)
+  - **E**: panel with crop, harvest / plant, auto-fill, links
+  - Panel buttons **Level ground** (to the scarecrow's height, click twice) and **Cultivate** (like the Cultivator), only on a press
+  - Seeds from chests, crops into chests (links l1-l9 work)
+  - Needs cultivated ground. Unlocks with the Cultivator recipe. Costs Scythe, Cultivator, 5 leather scraps, 3 wood
+- **Carved storage displays** (hammer, Storage tab): small, medium, large, each upright and wide, own icon and recipe
+  - Each category in its own area, **Shift+RMB** switches layouts (sign displays too)
+  - Small: one category or up to 4 items
+  - Search box in the filter menu, filters list only items you have discovered
+  - **Right click** an item on a display (or in its filter menu): the camera flies to the chest that holds it and the chest blinks (click again for the next one)
+- **Feed trough**: **Alt+E** food filter, links, auto-fill (refills when empty)
+- **Fermenter**: **Alt+E** mead filter, auto-fill. Add the same mead base in the first 60 s (batch up to 5)
+- **Armor stand**: **E** swaps the armor you wear with the stand's. **Alt+E**: preset per weapon / shield / tool slot, **E** swaps it with the stand's piece. F10 switch
+- **Chest settings**: switches Ignore, Show on display, Manual fill, **Only stations**
+  - Only stations: no dump, no ground pickup, stations and links still fill it
+  - No more `[I]` / `[H]` / `[M]` in the chest name, old names convert on confirm
+- **Torches**: F10 option auto-fill for new torches, World Override for all torches
+- **Station capacities** in F10 (admin): kiln, smelter, blast furnace, eitr refinery, beehive
+- **Sap extractor**: **N** auto-store puts the sap into chests
+- Linked stations show in red what their chests ran out of
+- **Catch-up while away** (off by default): stations finish the time their area was unloaded
+- **Mod manager** (F10): list of all mods, change the settings of other mods in the game (Save writes their config file), back arrow to the list
+- **Sort** and **Stack** buttons on inventory and chests
+- **Hugin** tells what is new once per update (stays until you press Esc or walk away)
 
 ### UI IMPROVEMENTS
-- F10 settings panel in the Valheim look (wood panel, vanilla buttons and checkboxes). All on/off gameplay settings can be switched there, sliders use whole numbers where it matters
-- All StoreAndCraft menus (display filter, station filter, chest settings) now use the Valheim look (wood panels, vanilla buttons and checkboxes)
-- Checkboxes show a centered yellow tick
-- New models for the carved storage displays (chains, nails and Valheim textures)
-- StoreAndCraft menus get darker at night like Valheim's own panels
-- Icon and amount sit centered in every display cell
-- Station filter link buttons match the chest settings buttons
-- All storage displays are in the hammer's Storage tab
-- New hammer icon for the feed trough
-- Sorting moved from the **R** key to the new **Sort** button (R is free again)
-- Activity log on/off is remembered
+- F10 panel: Valheim look, wider, hotkey of each feature next to its slider (click, press new key, Esc cancels, Backspace unbinds)
+- All menus in Valheim look, darker at night like vanilla
+- New models for the carved displays, new hammer icons (displays, trough, scarecrow)
+- Sorting moved from **R** to the Sort button
+- Inventory: **Stack** and **Sort** sit at the top right above the inventory (the old spot was where trash can mods put theirs)
+- Small things: yellow checkbox tick, centered icons and amounts, activity log state remembered, matching link buttons
 
 ### FIX
-- Much less multiplayer lag around many stations: auto-fill only wakes up when a station in range actually needs something, and fills fuel / ore in one go instead of one item at a time
-- Storage displays without chests in range no longer rescan several times per second
-- Epic Loot items are no longer sent into another player's chest (their magic data could be lost)
-- Carved display items sat at the wooden foot, were mirrored and counts were invisible — they now sit on the board, readable, with counts
-- Removed an error in the log (NullReferenceException in WearNTear.UpdateBiome) caused by storage displays
-- The character no longer walks around (and hotkeys no longer fire) while the Storage Display filter menu is open
-- Linked stations (**l1-l9**) put their output only into chests with the same link. If none has room it stays on the ground and is never stored in an untagged chest
-- **Alt+E** on a fermenter or fire no longer also does the normal **E** action
-- F10 station capacities (kiln, smelter, blast furnace, eitr refinery, beehive) and fermenter batch were not saved
-- Sort / Stack / Take all buttons on the chest panel could sit in the wrong place when the inventory was opened first
-- Items on carved storage displays no longer flicker into the board
-- After logging in, a chest or feed trough could look empty (trough without food, displays without its items) until it was opened once
+- Scarecrow harvest goes straight into chests (also when you are further away), not onto the ground
+- Scarecrow crop list shows only what can be planted (seeds, not the vegetable)
+- Chests and feed trough looked empty after login until opened
+- F10: capacities were not saved, admins on servers could not edit
+- Less multiplayer lag around many stations, displays no longer rescan constantly
+- Epic Loot items no longer go into other players' chests
+- Display items: wrong position, mirrored, missing counts, flicker
+- Linked stations only fill chests with the same link
+- **Alt+E** on fermenter / fire no longer also does **E**
+- Sort / Stack / Take all buttons could sit in the wrong place
+- Character no longer walks while the display filter is open
+- Log error (WearNTear.UpdateBiome) from displays
 
-**Beta:** needs the same version on server and all clients (network protocol changed).
+**Note:** needs the same version on server and all clients (network protocol changed).
 
 ## 1.3.44
 

@@ -13,8 +13,10 @@ namespace StoreAndCraft
     /// </summary>
     internal static class ScarecrowPrefab
     {
-        internal const string ModelPrefab = "SM_Scarecrow";
+        internal const string ModelPrefab = "Scarecrow";
         internal const string ModelName = "SacScarecrowModel";
+        /// <summary>Definition id (displays/definitions/scarecrow.json, PrefabStudio F8).</summary>
+        internal const string DefinitionId = "scarecrow";
         private const string CarrierPrefab = "wood_pole2";
 
         private static GameObject _prefab;
@@ -89,8 +91,8 @@ namespace StoreAndCraft
 
             piece.m_name = Loc.T("Scarecrow", "Vogelscheuche");
             piece.m_description = Loc.T(
-                "Stands in the middle of its field grid, plants it with seeds from nearby chests and harvests the whole field once everything is ripe. Alt+E: crop, grid size, link. B: on/off.",
-                "Steht in der Mitte ihres Feld-Rasters, bepflanzt es mit Samen aus Kisten in der Nähe und erntet das ganze Feld, sobald alles reif ist. Alt+E: Pflanze, Rastergröße, Link. B: an/aus.");
+                "Stands in the middle of its field grid, plants it with seeds from nearby chests and harvests the whole field once everything is ripe. E: crop, harvest / plant, link. Shift / Ctrl + mouse wheel: width / length. B: on/off.",
+                "Steht in der Mitte ihres Feld-Rasters, bepflanzt es mit Samen aus Kisten in der Nähe und erntet das ganze Feld, sobald alles reif ist. E: Pflanze, Ernten / Pflanzen, Link. Umschalt / Strg + Mausrad: Breite / Länge. B: an/aus.");
             Piece chestPiece = woodChest != null ? woodChest.GetComponent<Piece>() : null;
             if (chestPiece != null)
             {
@@ -118,7 +120,7 @@ namespace StoreAndCraft
         /// <summary>Unity model when the bundle has it: pole renderers/colliders off, model box as hit.</summary>
         private static bool TryAttachModel(GameObject clone)
         {
-            GameObject prefab = DisplayVisual.LoadPrefab(ModelPrefab);
+            GameObject prefab = DisplayVisual.LoadPrefab(ModelPrefab) ?? DisplayVisual.LoadPrefab("ScarecrowLow") ?? DisplayVisual.LoadPrefab("SM_Scarecrow"); // old bundle name
             if (prefab == null)
                 return false;
             foreach (Renderer r in clone.GetComponentsInChildren<Renderer>(true))
@@ -136,24 +138,56 @@ namespace StoreAndCraft
             BoxCollider box = hit.AddComponent<BoxCollider>();
             box.center = new Vector3(0f, 1.1f, 0f);
             box.size = new Vector3(0.5f, 2.2f, 0.4f);
+            ApplyDefinition(clone);
             return true;
+        }
+
+        /// <summary>Collider / snap points / model scale from scarecrow.json (PrefabStudio), if there is one.</summary>
+        private static void ApplyDefinition(GameObject scarecrow)
+        {
+            Transform model = scarecrow.transform.Find(ModelName);
+            DisplayLayouts.TryApplyPiece(scarecrow, DefinitionId, model);
+        }
+
+        /// <summary>
+        /// PrefabStudio preview (DisplayLayouts.EditorPreview): re-apply on the hammer template and every
+        /// placed scarecrow, refresh the placement ghost.
+        /// </summary>
+        internal static void ApplyPreview(string id)
+        {
+            if (!string.Equals(id, DefinitionId, System.StringComparison.OrdinalIgnoreCase))
+                return;
+            if (_prefab != null && _prefab.transform.Find(ModelName) != null)
+                ApplyDefinition(_prefab);
+            for (int i = 0; i < Scarecrow.Live.Count; i++)
+            {
+                Scarecrow s = Scarecrow.Live[i];
+                if (s != null && s.transform.Find(ModelName) != null)
+                    ApplyDefinition(s.gameObject);
+            }
+            DisplayPrefab.RefreshPlacementGhost();
         }
 
         private static Piece.Requirement[] Recipe()
         {
             var list = new List<Piece.Requirement>();
-            AddReq(list, "Wood", 6);
-            AddReq(list, "LeatherScraps", 2);
-            AddReq(list, "Resin", 2);
+            // Tools count like any item: Valheim only checks the item name and amount, not durability.
+            AddReq(list, "Scythe", 1);
+            AddReq(list, "Cultivator", 1);
+            AddReq(list, "LeatherScraps", 5);
+            AddReq(list, "Wood", 3);
             return list.ToArray();
         }
 
-        private static void AddReq(List<Piece.Requirement> list, string item, int amount)
+        internal static void AddReq(List<Piece.Requirement> list, string item, int amount)
         {
             GameObject go = ObjectDB.instance != null ? ObjectDB.instance.GetItemPrefab(item) : null;
             ItemDrop drop = go != null ? go.GetComponent<ItemDrop>() : null;
             if (drop == null)
+            {
+                Plugin.Log.LogWarning("StoreAndCraft scarecrow recipe: item '" + item + "' not found, requirement skipped.");
                 return;
+            }
             list.Add(new Piece.Requirement { m_resItem = drop, m_amount = amount, m_amountPerLevel = 0, m_recover = true });
         }
 
@@ -217,6 +251,33 @@ namespace StoreAndCraft
             if (ZNetScene.instance != null)
                 ScarecrowPrefab.RegisterForScene(ZNetScene.instance);
             ScarecrowPrefab.TryRegisterHammer();
+        }
+    }
+
+    /// <summary>
+    /// The scarecrow shows up in the hammer as soon as the Cultivator recipe is unlocked (the moment the
+    /// player can craft it), not only when every ingredient is known: the Scythe may come much later and
+    /// should not gate it. Valheim builds its list of known pieces with HaveRequirements(piece, IsKnown)
+    /// right after it added newly unlocked recipes (Player.UpdateKnownRecipesList).
+    /// </summary>
+    [HarmonyPatch(typeof(Player), nameof(Player.HaveRequirements), typeof(Piece), typeof(Player.RequirementMode))]
+    internal static class ScarecrowUnlockPatch
+    {
+        private static string _cultivator;
+
+        private static void Postfix(Player __instance, Piece piece, Player.RequirementMode mode, ref bool __result)
+        {
+            if (mode != Player.RequirementMode.IsKnown || piece == null || piece.GetComponent<Scarecrow>() == null)
+                return;
+            if (_cultivator == null && ObjectDB.instance != null)
+            {
+                GameObject go = ObjectDB.instance.GetItemPrefab("Cultivator");
+                ItemDrop drop = go != null ? go.GetComponent<ItemDrop>() : null;
+                _cultivator = drop != null && drop.m_itemData != null && drop.m_itemData.m_shared != null
+                    ? drop.m_itemData.m_shared.m_name : null;
+            }
+            if (!string.IsNullOrEmpty(_cultivator))
+                __result = __instance.IsRecipeKnown(_cultivator);
         }
     }
 }

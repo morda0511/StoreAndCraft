@@ -346,12 +346,49 @@ namespace StoreAndCraft
                 return true;
             try
             {
-                return znet.LocalPlayerIsAdminOrHost();
+                return znet.LocalPlayerIsAdminOrHost() || LocalIsInAdminList(znet);
             }
             catch
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Valheim's client check compares "Steam_<id>" with the list, so an adminlist.txt entry that is just the
+        /// plain id (what the server accepts) is not found. Look for both spellings in the list the server sent.
+        /// PlatformUserID lives in Splatform.dll (not referenced here) → reflection.
+        /// </summary>
+        private static bool LocalIsInAdminList(ZNet znet)
+        {
+            try
+            {
+                System.Collections.Generic.List<string> list = znet.GetAdminList();
+                if (list == null || list.Count == 0)
+                    return false;
+                System.Reflection.MethodInfo getUser = typeof(UserInfo).GetMethod("GetLocalUser");
+                object user = getUser != null ? getUser.Invoke(null, null) : null;
+                System.Reflection.FieldInfo idField = user != null ? user.GetType().GetField("UserId") : null;
+                object id = idField != null ? idField.GetValue(user) : null;
+                if (id == null)
+                    return false;
+                string full = id.ToString();
+                System.Reflection.FieldInfo rawField = id.GetType().GetField("m_userID");
+                string raw = rawField != null ? rawField.GetValue(id) as string : null;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    string e = (list[i] ?? "").Trim();
+                    if (e.Length == 0)
+                        continue;
+                    if (string.Equals(e, full, System.StringComparison.OrdinalIgnoreCase)
+                        || (!string.IsNullOrEmpty(raw) && string.Equals(e, raw, System.StringComparison.OrdinalIgnoreCase)))
+                        return true;
+                }
+            }
+            catch
+            {
+            }
+            return false;
         }
 
         private static bool TryApply(string[] parts, out string message)
@@ -372,7 +409,7 @@ namespace StoreAndCraft
             }
 
             // SAC-CATCHUP: on/off switch rides the same admin path as the ranges.
-            if (key == "catchup" || key == "torchautofill" || BoolEntryFor(key) != null)
+            if (key == "catchup" || key == "torchautofill" || key == "torchautofilloverride" || BoolEntryFor(key) != null)
             {
                 string t = valueToken.ToLowerInvariant();
                 if (t == "on" || t == "true" || t == "enable")
@@ -407,6 +444,15 @@ namespace StoreAndCraft
                 bool on = value >= 0.5f;
                 Plugin.Settings.TorchAutoFillDefault.Value = on;
                 message = "TorchAutoFillDefault = " + (on ? "on" : "off") + " (saved + synced)";
+                ActivityLog.Note(Loc.T("Config", "Config"), message);
+                return true;
+            }
+
+            if (key == "torchautofilloverride")
+            {
+                bool on = value >= 0.5f;
+                Plugin.Settings.TorchAutoFillOverride.Value = on;
+                message = "TorchAutoFillOverride = " + (on ? "on" : "off") + " (saved + synced)";
                 ActivityLog.Note(Loc.T("Config", "Config"), message);
                 return true;
             }
@@ -473,7 +519,7 @@ namespace StoreAndCraft
 
             if (cmd == "storerange" || cmd == "dumprange" || cmd == "craftrange" || cmd == "storagerange" || cmd == "autofillrange"
                 || cmd == "autofillchestrange" || cmd == "displayrange" || cmd == "feedtroughrange"
-                || cmd == "catchup" || cmd == "catchuphours" || cmd == "torchautofill"
+                || cmd == "catchup" || cmd == "catchuphours" || cmd == "torchautofill" || cmd == "torchautofilloverride"
                 || BoolEntryFor(cmd) != null
                 || IsStationCapKey(cmd)) // F10 station capacities + fermenter batch
             {
@@ -505,7 +551,7 @@ namespace StoreAndCraft
                     key = "displayrange";
                 else if (sub == "feedtrough" || sub == "feedtroughrange")
                     key = "feedtroughrange";
-                else if (sub == "catchup" || sub == "catchuphours" || sub == "torchautofill")
+                else if (sub == "catchup" || sub == "catchuphours" || sub == "torchautofill" || sub == "torchautofilloverride")
                     key = sub;
                 else
                     return false;
@@ -534,6 +580,7 @@ namespace StoreAndCraft
                 case "craftenabled": return Plugin.Settings.CraftEnabled;
                 case "leaveone": return Plugin.Settings.LeaveOneItem;
                 case "feedtroughenabled": return Plugin.Settings.FeedTroughEnabled;
+                case "armorstandswap": return Plugin.Settings.ArmorStandSwap;
                 default: return null;
             }
         }
@@ -662,7 +709,8 @@ namespace StoreAndCraft
                 "  /sac dump|store|storage|craft|autofill|autofillchest|display|feedtrough <m>",
                 "  /catchup on|off             - smelters catch up time while nobody was near (B + N)",
                 "  /catchuphours <h>           - most hours one station catches up (0.5-48)",
-                "  /torchautofill on|off       - torches start with auto-fill on (B still turns one off)",
+                "  /torchautofill on|off       - torches placed from now on start with auto-fill on",
+                "  /torchautofilloverride on|off - World Override: auto-fill on every torch, placed ones too",
                 "F10: panel with activity log checkbox + range sliders (Save).",
                 "Console (F5), same ideas:",
                 "  help store   |  sac help  |  sac status",

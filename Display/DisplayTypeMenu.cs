@@ -3,6 +3,7 @@ using HarmonyLib;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace StoreAndCraft
@@ -631,6 +632,7 @@ namespace StoreAndCraft
                         On = selectedSet.Contains(parent) || selectedItemSet.Contains(shared)
                             || (catId == DisplayFilters.EpicLootGroupId && elAll),
                         Icon = ItemIcon(shared),
+                        Shared = captured,
                         Click = () => PickItem(captured, capturedParent)
                     }));
                 }
@@ -792,6 +794,7 @@ namespace StoreAndCraft
                                 || selectedSet.Contains(parent)
                                 || selectedItemSet.Contains(shared),
                             Icon = ItemIcon(shared),
+                            Shared = captured,
                             Click = () => PickItem(captured, capturedParent)
                         });
                     }
@@ -815,6 +818,7 @@ namespace StoreAndCraft
                             Label = DisplayFilters.ItemLabel(shared),
                             On = categoryOn || selectedItemSet.Contains(shared),
                             Icon = ItemIcon(shared),
+                            Shared = captured,
                             Click = () => PickItem(captured, parent)
                         });
                     }
@@ -832,6 +836,29 @@ namespace StoreAndCraft
             public bool On;
             public Sprite Icon;
             public UnityAction Click;
+            public string Shared; // item token: right click flies the camera to a chest that holds it
+        }
+
+        /// <summary>Right click on an item tile.</summary>
+        private sealed class ItemCellRightClick : MonoBehaviour, IPointerClickHandler
+        {
+            public string Shared;
+
+            public void OnPointerClick(PointerEventData eventData)
+            {
+                if (eventData.button == PointerEventData.InputButton.Right && _board != null)
+                    SearchPing.LocateForBoard(_board, Shared);
+            }
+        }
+
+        /// <summary>Hides / shows the menu while the camera flies to a chest (the menu stays "open").</summary>
+        internal static void SetHidden(bool hidden)
+        {
+            if (_root == null)
+                return;
+            Canvas canvas = _root.GetComponent<Canvas>();
+            if (canvas != null)
+                canvas.enabled = !hidden;
         }
 
         private static void AddCategoryRow(
@@ -942,6 +969,8 @@ namespace StoreAndCraft
             rt.anchoredPosition = new Vector2(
                 ItemContentPadL + col * (ItemCellW + ItemGapX),
                 -(ItemContentPadT + row * (ItemCellH + ItemGapY)));
+            if (!string.IsNullOrEmpty(data.Shared))
+                go.AddComponent<ItemCellRightClick>().Shared = data.Shared;
             Sprite vCell = V(data.On ? "button_highlight" : "button_small");
             Image cellImg = go.GetComponent<Image>();
             bool wholeCellClick = vCell != null;

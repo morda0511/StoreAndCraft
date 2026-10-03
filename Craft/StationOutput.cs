@@ -229,6 +229,8 @@ namespace StoreAndCraft
                             Fermenter fermenter = station as Fermenter;
                             if (fermenter != null)
                                 name = fermenter.m_name;
+                            else if (station is SapCollector sapCollector)
+                                name = sapCollector.m_name;
                         }
                     }
                 }

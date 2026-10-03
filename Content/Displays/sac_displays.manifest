@@ -1,16 +1,16 @@
 ManifestFileVersion: 0
 UnityVersion: 6000.0.75f1
-CRC: 2700220301
+CRC: 1060271756
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: c020aa4e636dc621ede545b5a8f7d85a
+    Hash: 0143db7209af0cc5bebffb99d54337a3
   TypeTreeHash:
     serializedVersion: 2
     Hash: 3219c50854ff2a782d7e36576b5dbf5b
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: 4aca3873dea5d7d63e684b99e6f217b0
+    Hash: e9ea0729c5665c08f73ea0de710446ae
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -31,11 +31,14 @@ ClassTypes:
   Script: {instanceID: 0}
 SerializeReferenceClassIdentifiers: []
 Assets:
-- Assets/Prefabs/SM_Scarecrow.prefab
+- Assets/Prefabs/Scarecrow.prefab
+- Assets/Prefabs/Barley.prefab
 - Assets/Prefabs/medium_horizontal.prefab
 - Assets/Prefabs/large_horizontal.prefab
 - Assets/Prefabs/SM_FeedTroughFull.prefab
+- Assets/Prefabs/ScarecrowLow.prefab
 - Assets/Prefabs/SM_FeedTrough.prefab
+- Assets/Prefabs/FishTrap.prefab
 - Assets/Prefabs/large_vertical.prefab
 - Assets/Prefabs/small_horizontal.prefab
 - Assets/Prefabs/small_vertical.prefab

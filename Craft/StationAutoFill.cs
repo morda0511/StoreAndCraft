@@ -235,11 +235,36 @@ namespace StoreAndCraft
         {
             if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
                 return false;
-            // -1 = never toggled. With TorchAutoFillDefault on, torches start ON; B stores 0 / 1.
-            int value = nv.GetZDO().GetInt(ZdoKey, -1);
-            if (value >= 0)
-                return value != 0;
-            return Plugin.Settings != null && Plugin.Settings.TorchAutoFillDefault.Value && IsTorch(nv);
+            // World Override (torches only) sits on top of the stored flag and never writes it.
+            if (OverrideActive(nv))
+                return true;
+            return StoredOn(nv);
+        }
+
+        /// <summary>The station's own flag (B / settings switch / torch default at placement). -1 = off.</summary>
+        internal static bool StoredOn(ZNetView nv)
+        {
+            if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
+                return false;
+            return nv.GetZDO().GetInt(ZdoKey, -1) > 0;
+        }
+
+        /// <summary>World Override: auto-fill is forced on for this torch whatever its own flag says.</summary>
+        internal static bool OverrideActive(ZNetView nv)
+        {
+            return Plugin.Settings != null && Plugin.Settings.TorchAutoFillOverride.Value
+                && nv != null && IsTorch(nv);
+        }
+
+        /// <summary>New torch: store the TorchAutoFillDefault once (existing torches keep their flag).</summary>
+        internal static void ApplyTorchDefault(Piece piece)
+        {
+            ZNetView nv = piece != null ? piece.GetComponent<ZNetView>() : null;
+            if (nv == null || !nv.IsValid() || nv.GetZDO() == null || !nv.IsOwner())
+                return;
+            if (Plugin.Settings == null || !IsTorch(nv) || nv.GetZDO().GetInt(ZdoKey, -1) >= 0)
+                return;
+            nv.GetZDO().Set(ZdoKey, Plugin.Settings.TorchAutoFillDefault.Value ? 1 : 0);
         }
 
         private static readonly Dictionary<int, bool> TorchCache = new Dictionary<int, bool>();
@@ -332,6 +357,13 @@ namespace StoreAndCraft
             if (string.IsNullOrEmpty(key))
                 key = "B";
 
+            // World Override: forced on, B does nothing, so no key prompt.
+            if (OverrideActive(nv))
+            {
+                text += "\n" + Loc.T("Auto-fill", "Auto-Fill") + " (" + Loc.T("World Override", "Welt-Override") + ")";
+                return;
+            }
+
             text += "\n[<color=yellow><b>" + key + "</b></color>] "
                 + Loc.T("Auto-fill", "Auto-Fill")
                 + " (" + (IsOn(nv) ? Loc.T("on", "an") : Loc.T("off", "aus")) + ")";
@@ -404,10 +436,19 @@ namespace StoreAndCraft
                 return true;
             }
 
+            // World Override forces auto-fill on: B must not change the torch.
+            if (OverrideActive(nv))
+            {
+                player.Message(MessageHud.MessageType.Center,
+                    Loc.T("World Override is on: auto-fill is forced on", "Welt-Override ist an: Auto-Fill ist erzwungen"),
+                    0, null, false);
+                return true;
+            }
+
             if (!nv.IsOwner())
                 nv.ClaimOwnership();
 
-            bool next = !IsOn(nv);
+            bool next = !StoredOn(nv);
             nv.GetZDO().Set(ZdoKey, next ? 1 : 0);
             ClearQuiet(smelter);
             ClearQuiet(oven);
@@ -2396,6 +2437,17 @@ namespace StoreAndCraft
         {
             if (__result)
                 StationAutoFill.WakeNearChest(__instance);
+        }
+    }
+
+    // Piece.SetCreator is called once, by Player.PlacePiece, on the freshly placed piece (verified in
+    // the game code): the only moment a torch counts as "new" for TorchAutoFillDefault.
+    [HarmonyPatch(typeof(Piece), nameof(Piece.SetCreator))]
+    internal static class TorchPlacedDefaultPatch
+    {
+        private static void Postfix(Piece __instance)
+        {
+            StationAutoFill.ApplyTorchDefault(__instance);
         }
     }
 

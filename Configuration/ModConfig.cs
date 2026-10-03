@@ -8,7 +8,8 @@ namespace StoreAndCraft
         // Bump when package layout or shared station behavior changes. v18 = SAC-CATCHUP settings synced.
         // v19 = TorchAutoFillDefault synced.
         // v20 = station capacities (6 - Stations) + fermenter batch synced.
-        public const int ProtocolVersion = 20;
+        // v21 = TorchAutoFillOverride synced (World Override for torches); chest flags (SAC_chestFlags) in the chest ZDO.
+        public const int ProtocolVersion = 21;
         /// <summary>Highest station capacity the F10 panel / config accepts.</summary>
         public const float MaxStationCap = 50f;
         public const float MaxRange = 1000f;
@@ -52,6 +53,8 @@ namespace StoreAndCraft
         public ConfigEntry<float> CatchUpMaxHours { get; }
         public ConfigEntry<double> CatchUpSince { get; }
         public ConfigEntry<bool> TorchAutoFillDefault { get; }
+        public ConfigEntry<bool> TorchAutoFillOverride { get; }
+        public ConfigEntry<bool> ArmorStandSwap { get; }
         // Station capacities: 0 = vanilla, else 1–50 (StationCaps applies them live).
         public ConfigEntry<float> KilnMaxWood { get; }
         public ConfigEntry<float> SmelterMaxOre { get; }
@@ -149,10 +152,14 @@ namespace StoreAndCraft
             CatchUpSince = file.Bind("3 - Craft", "CatchUpSince", 0d,
                 "Set automatically: world time (seconds) when CatchUpWhileAway was switched on. Time before this is never caught up. Do not edit.");
             TorchAutoFillDefault = file.Bind("3 - Craft", "TorchAutoFillDefault", false,
-                "If on, torches of every kind (standing, wall, green / blue / mist, modded *torch*) have auto-fill ON until someone presses B on them. Torches switched off with B stay off. Off = old behavior (B needed). Synced from server when LockConfig is on.");
+                "Auto-fill state of torches (standing, wall, green / blue / mist, modded *torch*) that are placed from now on. On = new torches start with auto-fill ON, off = B needed. Placed torches are never changed by this. B on a torch still switches it. Synced from server when LockConfig is on.");
+            TorchAutoFillOverride = file.Bind("3 - Craft", "TorchAutoFillOverride", false,
+                "World Override: while on, auto-fill is active on EVERY torch, including already placed ones, whatever their own B setting says. The torches' own setting is not changed, so switching this off brings it back. Synced from server when LockConfig is on.");
 
             ShowReleaseNews = file.Bind("1 - General", "ShowReleaseNews", true,
                 "After an update, Hugin (the raven) visits once and tells you what is new in StoreAndCraft. Local only, not synced.");
+            ArmorStandSwap = file.Bind("1 - General", "ArmorStandSwap", true,
+                "Armor stand: [E] swaps the armor on the stand with the armor you wear (helmet, chest, legs, cape) instead of dropping it on the ground. Off = vanilla. Synced from server when LockConfig is on.");
             ReleaseNewsSeen = file.Bind("1 - General", "ReleaseNewsSeen", "",
                 "Set automatically: the StoreAndCraft version whose news Hugin already told you. Do not edit.");
 
@@ -244,6 +251,9 @@ namespace StoreAndCraft
             pkg.Write(EitrRefineryMaxSap.Value);
             pkg.Write(BeehiveMaxHoney.Value);
             pkg.Write(FermenterBatch.Value);
+            // v21
+            pkg.Write(TorchAutoFillOverride.Value);
+            pkg.Write(ArmorStandSwap.Value);
         }
 
         public void ReadFromPackage(ZPackage pkg)
@@ -281,6 +291,9 @@ namespace StoreAndCraft
             EitrRefineryMaxSap.Value = pkg.ReadSingle();
             BeehiveMaxHoney.Value = pkg.ReadSingle();
             FermenterBatch.Value = pkg.ReadSingle();
+            // v21
+            TorchAutoFillOverride.Value = pkg.ReadBool();
+            ArmorStandSwap.Value = pkg.ReadBool();
         }
     }
 }

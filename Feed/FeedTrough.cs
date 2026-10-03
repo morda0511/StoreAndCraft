@@ -81,35 +81,7 @@ namespace StoreAndCraft
             if (_container != null && _container.GetInventory() == null)
                 NearbyIndex.EnsureInventory(_container);
             HookInventory();
-            _diagUntil = Time.time + 20f; // SAC-DIAG (temporary)
             RefreshOfferings();
-        }
-
-        // SAC-DIAG (temporary): trough shows empty after re-entering the area until opened.
-        private static readonly FieldInfo DiagLastRevision = AccessTools.Field(typeof(Container), "m_lastRevision");
-        private float _diagUntil;
-        private string _diagLast;
-
-        private void Diag(string where, Inventory inv, bool any)
-        {
-            if (Time.time > _diagUntil)
-                return;
-            ZDO zdo = _view != null && _view.IsValid() ? _view.GetZDO() : null;
-            object last = DiagLastRevision != null && _container != null ? DiagLastRevision.GetValue(_container) : null;
-            string line = "inv=" + (inv != null ? inv.NrOfItems().ToString() : "null")
-                + " live=" + (_container != null && _container.GetInventory() != null ? _container.GetInventory().NrOfItems().ToString() : "null")
-                + " zdoPayload=" + ContainerFilter.ZdoHasItemPayload(zdo)
-                + " rev=" + (zdo != null ? zdo.DataRevision.ToString() : "-") + " lastRev=" + last
-                + " owner=" + (_view != null && _view.IsValid() && _view.IsOwner())
-                + " inUse=" + (_container != null && _container.IsInUse())
-                + " any=" + any + " modelState=" + _modelState
-                + " models=" + (_modelEmpty != null) + "/" + (_modelFull != null)
-                + " fullActive=" + (_modelFull != null && _modelFull.activeSelf)
-                + " hooked=" + _invHooked;
-            if (line == _diagLast)
-                return;
-            _diagLast = line;
-            Plugin.Log.LogInfo("SAC-DIAG trough " + GetInstanceID() + " t=" + Time.time.ToString("0.0") + " " + where + ": " + line);
         }
 
         private void Update()
@@ -361,7 +333,6 @@ namespace StoreAndCraft
             List<ItemDrop.ItemData> items = inv != null ? inv.GetAllItems() : null;
             bool any = items != null && CountFood(items) > 0;
             SetHasFood(any);
-            Diag("refresh", inv, any);
 
             if (!any)
             {

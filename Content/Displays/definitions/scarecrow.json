@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "prefabId": "scarecrow",
+  "model": {
+    "localScale": { "x": 1, "y": 1, "z": 1 }
+  },
+  "itemGrid": {
+    "enabled": false,
+    "columns": 3,
+    "rows": 3,
+    "spacingX": 0.42,
+    "spacingY": 0.42,
+    "offsetX": 0,
+    "offsetY": 0,
+    "offsetZ": 0,
+    "cellSize": 0.35,
+    "euler": { "x": 0, "y": 0, "z": 0 }
+  },
+  "colliders": [
+    {
+      "id": "BoxCollider_0",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0, "y": 1.1, "z": 0.04 },
+      "size": { "x": 1, "y": 2.2, "z": 0.54 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    },
+    {
+      "id": "BoxCollider_1",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0, "y": 2.19, "z": 0 },
+      "size": { "x": 1.79, "y": 0.23, "z": 0.45 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    },
+    {
+      "id": "BoxCollider_2",
+      "kind": "Box",
+      "enabled": true,
+      "isTrigger": false,
+      "center": { "x": 0, "y": 2.63, "z": 0.07 },
+      "size": { "x": 0.47, "y": 0.61, "z": 0.47 },
+      "radius": 0.5,
+      "height": 1,
+      "direction": 0
+    }
+  ],
+  "snapPoints": [
+
+  ]
+}

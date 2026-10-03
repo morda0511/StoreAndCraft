@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
@@ -17,7 +18,6 @@ namespace StoreAndCraft
         internal const string PrefabName = "sac_scarecrow";
         private const string KeyCols = "SAC_farmCols";
         private const string KeyRows = "SAC_farmRows";
-        private const string KeySpacing = "SAC_farmSpacing";
         private const string KeyCrop = "SAC_farmCrop";
         private const string KeyHarvest = "SAC_farmHarvest";
         private const string KeyPlant = "SAC_farmPlant";
@@ -30,6 +30,8 @@ namespace StoreAndCraft
         private ZNetView _nv;
         private bool _dirty = true;
         private float _nextCheck;
+        private float _notBefore;      // no planting before this time (wheel edits settle first)
+        private int _hoverFrame = -10; // last frame the crosshair was on this scarecrow
         private bool _missingSeeds;
         private GameObject _preview;
         private int _previewHash;
@@ -52,16 +54,13 @@ namespace StoreAndCraft
         internal bool Harvest => Zdo == null || Zdo.GetBool(KeyHarvest, true);
         internal bool PlantOn => Zdo == null || Zdo.GetBool(KeyPlant, true);
 
-        /// <summary>Spacing: stored value, never below what the crop needs (else it would not grow).</summary>
+        /// <summary>Fixed spacing (1.1 m), more only when the crop needs it (else it would not grow).</summary>
         internal float Spacing
         {
-            get
-            {
-                float min = MinSpacing();
-                float v = Zdo != null ? Zdo.GetFloat(KeySpacing, 0f) : 0f;
-                return v <= 0f ? min : Mathf.Max(min, v);
-            }
+            get { return Mathf.Max(DefaultSpacing, MinSpacing()); }
         }
+
+        private const float DefaultSpacing = 1.1f;
 
         internal float MinSpacing()
         {
@@ -73,7 +72,6 @@ namespace StoreAndCraft
         internal void SetInt(string key, int v) => Write(z => z.Set(key, v));
         internal void SetCols(int v) => SetInt(KeyCols, Odd(v));
         internal void SetRows(int v) => SetInt(KeyRows, Odd(v));
-        internal void SetSpacing(float v) => Write(z => z.Set(KeySpacing, Mathf.Clamp(v, MinSpacing(), 3f)));
         internal void SetCrop(string seed) => Write(z => z.Set(KeyCrop, seed ?? ""));
         internal void SetHarvest(bool on) => Write(z => z.Set(KeyHarvest, on));
         internal void SetPlant(bool on) => Write(z => z.Set(KeyPlant, on));
@@ -123,8 +121,13 @@ namespace StoreAndCraft
         private void Update()
         {
             bool ghost = _nv == null || _nv.GetZDO() == null;
-            UpdatePreview(ghost || StationFilterMenu.IsEditing(this));
+            bool hovered = Time.frameCount - _hoverFrame <= 2;
+            UpdatePreview(ghost || hovered || StationFilterMenu.IsEditing(this));
             if (ghost)
+                return;
+            if (hovered)
+                HandleWheel();
+            if (Time.time < _notBefore)
                 return;
             if (!_dirty && Time.time < _nextCheck)
                 return;
@@ -137,6 +140,53 @@ namespace StoreAndCraft
             _nextCheck = float.MaxValue;
             Work();
         }
+
+        /// <summary>
+        /// Looking at the scarecrow: Shift + wheel = width, Ctrl + wheel = length.
+        /// The wheel is taken from the camera zoom while one of those keys is held (see ScarecrowWheelPatch).
+        /// </summary>
+        private void HandleWheel()
+        {
+            bool shift = ZInput.GetKey(KeyCode.LeftShift, true) || ZInput.GetKey(KeyCode.RightShift, true);
+            bool ctrl = ZInput.GetKey(KeyCode.LeftControl, true) || ZInput.GetKey(KeyCode.RightControl, true);
+            if (!shift && !ctrl)
+                return;
+            if (InventoryGui.IsVisible() || StationFilterMenu.IsOpen || Player.m_localPlayer == null)
+                return;
+            if (_nv == null || !_nv.IsValid() || !PrivateArea.CheckAccess(transform.position, 0f, false, false))
+                return;
+
+            WheelGrabFrame = Time.frameCount;
+            ZInput.GetMouseScrollWheel(); // lets the patch record the raw wheel value this frame
+            float w = WheelRaw;
+            if (Mathf.Abs(w) < 0.01f)
+                return;
+            int dir = w > 0f ? 1 : -1;
+            if (shift)
+                SetCols(Cols + 2 * dir);
+            else
+                SetRows(Rows + 2 * dir);
+            _notBefore = Time.time + 1.5f; // plant only once the size has settled
+        }
+
+        // Harvest in progress: drops of pickables inside the grid until this time are put into chests.
+        internal float HarvestUntil;
+
+        /// <summary>The scarecrow that is harvesting right now and whose grid holds this position, or null.</summary>
+        internal static Scarecrow HarvestingAt(Vector3 pos)
+        {
+            for (int i = 0; i < Live.Count; i++)
+            {
+                Scarecrow s = Live[i];
+                if (s != null && Time.time <= s.HarvestUntil && s.Contains(pos))
+                    return s;
+            }
+            return null;
+        }
+
+        // Mouse wheel hand-over (written by ScarecrowWheelPatch).
+        internal static float WheelRaw;
+        internal static int WheelGrabFrame = -10;
 
         private bool CanWork()
         {
@@ -222,6 +272,8 @@ namespace StoreAndCraft
             // Whole field ripe → harvest everything at once.
             if (Harvest && ripeCount > 0 && growing == 0)
             {
+                // The drops of these pickables go straight into chests (see ScarecrowHarvestDropPatch).
+                HarvestUntil = Time.time + 3f;
                 for (int i = 0; i < ripe.Length; i++)
                 {
                     if (ripe[i] == null)
@@ -233,8 +285,6 @@ namespace StoreAndCraft
                         pnv.ClaimOwnership();
                     Vector3 at = ripe[i].transform.position;
                     pnv.InvokeRPC("RPC_Pick", 0);
-                    if (link > 0)
-                        StationOutput.QueueIntakeLinkTag(at, link, null);
                     state[i] = Spot.Empty;
                 }
                 ActivityLog.Note(Label(), Loc.T("Harvested ", "Geerntet: ") + ripeCount + " " + DisplayFilters.ItemLabel(crop.Seed));
@@ -404,6 +454,95 @@ namespace StoreAndCraft
             return best;
         }
 
+        // ---- terrain (buttons in the settings panel, never automatic)
+
+        internal bool TerrainBusy { get; private set; }
+
+        /// <summary>
+        /// Level the grid to the ground height at the scarecrow, or cultivate it like the Cultivator does.
+        /// Uses SacTerrainOps (own TerrainOps, registered on every client) so every client applies the same
+        /// operation. One pass per button press, spread over some frames.
+        /// </summary>
+        internal void StartTerrain(bool level)
+        {
+            if (TerrainBusy)
+                return;
+            Player player = Player.m_localPlayer;
+            if (player == null || _nv == null || !_nv.IsValid())
+                return;
+            float half = Mathf.Max(Cols, Rows) * Spacing * 0.75f;
+            if (!PrivateArea.CheckAccess(transform.position, half, true, true))
+            {
+                player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                return;
+            }
+            StartCoroutine(TerrainRoutine(level));
+        }
+
+        private IEnumerator TerrainRoutine(bool level)
+        {
+            TerrainBusy = true;
+            Player player = Player.m_localPlayer;
+            GameObject prefab = level ? SacTerrainOps.LevelPrefab : SacTerrainOps.CultivatePrefab;
+            SacTerrainOps.Register(ObjectDB.instance); // normally done by the UpdateRegisters patch
+            if (prefab == null || ZoneSystem.instance == null)
+            {
+                Plugin.Log.LogWarning("StoreAndCraft scarecrow: terrain operation not available.");
+                TerrainBusy = false;
+                yield break;
+            }
+
+            // The terrain is a grid of height points 1 m apart. Both operations reach 1 point (level) / 2 m (paint)
+            // around their centre, so centres 2 m apart on a world-aligned lattice cover everything without holes.
+            // Level: every point inside is set exactly to the scarecrow's base height = perfectly flat.
+            const float step = 2f;
+            float hw = Cols * Spacing * 0.5f + (level ? 1.5f : 1f);
+            float hl = Rows * Spacing * 0.5f + (level ? 1.5f : 1f);
+            Vector3 c0 = transform.position;
+            Vector3 fwd = Flat(transform.forward);
+            Vector3 right = Vector3.Cross(Vector3.up, fwd);
+            float cx = Mathf.Round(c0.x);
+            float cz = Mathf.Round(c0.z);
+            int n = Mathf.CeilToInt((hw + hl) / step) + 1;
+
+            if (player != null)
+                player.Message(MessageHud.MessageType.TopLeft,
+                    level ? Loc.T("Levelling the field...", "Feld wird eingeebnet...")
+                          : Loc.T("Cultivating the field...", "Feld wird bestellt..."), 0, null, false);
+
+            int done = 0;
+            for (int ix = -n; ix <= n; ix++)
+            {
+                for (int iz = -n; iz <= n; iz++)
+                {
+                    Vector3 p = new Vector3(cx + ix * step, c0.y, cz + iz * step); // c0.y: the scarecrow's base
+                    Vector3 d = new Vector3(p.x - c0.x, 0f, p.z - c0.z);
+                    if (Mathf.Abs(Vector3.Dot(d, right)) > hw || Mathf.Abs(Vector3.Dot(d, fwd)) > hl)
+                        continue;
+                    if (!PrivateArea.CheckAccess(p, 0f, false, false))
+                        continue;
+                    PlaceTerrainOp(prefab, p);
+                    if (++done % 8 == 0)
+                        yield return null;
+                }
+            }
+
+            ActivityLog.Note(Label(), level ? Loc.T("Field levelled", "Feld eingeebnet") : Loc.T("Field cultivated", "Feld bestellt"));
+            if (player != null)
+                player.Message(MessageHud.MessageType.TopLeft,
+                    level ? Loc.T("Field levelled", "Feld eingeebnet") : Loc.T("Field cultivated", "Feld bestellt"), 0, null, false);
+            TerrainBusy = false;
+            MarkDirty(); // cultivated now: plant right away
+        }
+
+        /// <summary>One terrain operation: the clone of the inactive template runs its Awake on SetActive and destroys itself.</summary>
+        private static void PlaceTerrainOp(GameObject prefab, Vector3 pos)
+        {
+            GameObject go = Instantiate(prefab, pos, Quaternion.identity);
+            go.hideFlags = HideFlags.None;
+            go.SetActive(true);
+        }
+
         private static Vector3 Flat(Vector3 v)
         {
             v.y = 0f;
@@ -531,16 +670,37 @@ namespace StoreAndCraft
             string crop = string.IsNullOrEmpty(CropSeed)
                 ? Loc.T("no crop selected", "keine Pflanze gewählt")
                 : DisplayFilters.ItemLabel(CropSeed);
+            _hoverFrame = Time.frameCount; // shows the grid while the crosshair is on it
             string text = Label() + " (" + crop + ", " + Cols + " × " + Rows + ")";
-            text += "\n[<color=yellow><b>" + ChestRename.PromptLabel() + "</b></color>] " + Loc.T("Settings", "Einstellungen");
-            StationAutoFill.AppendHover(ref text, _nv, includeManualFill: false);
+            string use = Localization.instance != null ? Localization.instance.Localize("$KEY_Use") : "E";
+            text += "\n[<color=yellow><b>" + use + "</b></color>] " + Loc.T("Settings", "Einstellungen");
+            text += "\n[<color=yellow><b>" + Loc.T("Shift", "Umschalt") + "</b></color> / <color=yellow><b>"
+                + Loc.T("Ctrl", "Strg") + "</b></color> + "
+                + Loc.T("Wheel", "Mausrad") + "] " + Loc.T("Width / Length", "Breite / Länge");
+            // Status only (no key prompt): auto-fill, harvest and plant are switched in the settings panel.
+            text += "\n" + Loc.T("Auto-fill", "Auto-Fill") + ": " + StateText(StationAutoFill.IsOn(_nv));
+            text += "\n" + Loc.T("Harvest", "Ernten") + ": " + StateText(Harvest)
+                + "   " + Loc.T("Plant", "Pflanzen") + ": " + StateText(PlantOn);
             StationLink.PrependHover(ref text, StationLink.Get(this), chest: false);
             return text;
         }
 
+        private static string StateText(bool on)
+        {
+            return on
+                ? "<color=#5fd36b>" + Loc.T("on", "an") + "</color>"
+                : "<color=#e74c3c>" + Loc.T("off", "aus") + "</color>";
+        }
+
         public bool Interact(Humanoid user, bool hold, bool alt)
         {
-            return false;
+            // Plain E opens the settings. Alt+E keeps its own path (StationPullFilter.TryOpen), so skip it here.
+            if (hold || alt)
+                return false;
+            if (!PrivateArea.CheckAccess(transform.position, 0f, true, true))
+                return true;
+            StationFilterMenu.Open(this);
+            return true;
         }
 
         public bool UseItem(Humanoid user, ItemDrop.ItemData item)
@@ -564,6 +724,54 @@ namespace StoreAndCraft
                 if (s != null && s.Contains(pos))
                     s.MarkDirty();
             }
+        }
+    }
+
+    /// <summary>
+    /// While the crosshair is on a scarecrow and Shift / Ctrl is held, the mouse wheel edits the grid.
+    /// The raw value is recorded for it and the camera (and anything else reading the wheel) gets 0.
+    /// </summary>
+    [HarmonyPatch(typeof(ZInput), nameof(ZInput.GetMouseScrollWheel))]
+    internal static class ScarecrowWheelPatch
+    {
+        private static void Postfix(ref float __result)
+        {
+            Scarecrow.WheelRaw = __result;
+            if (Scarecrow.WheelGrabFrame >= Time.frameCount - 1)
+                __result = 0f;
+        }
+    }
+
+    /// <summary>
+    /// Scarecrow harvest: every crop / seed a pickable drops goes straight into a chest next to the scarecrow
+    /// (same chest rules and range as station auto-store: link match, AutoFillChestRange), instead of lying on
+    /// the ground and waiting for ground auto-store. That one needs a player within StoreRange of the pile,
+    /// the scarecrow works from further away. No chest takes it: normal ground drop, tagged with the link.
+    /// </summary>
+    [HarmonyPatch(typeof(Pickable), "Drop")]
+    internal static class ScarecrowHarvestDropPatch
+    {
+        private static bool Prefix(Pickable __instance, GameObject prefab, int stack, out bool __state)
+        {
+            __state = false;
+            Scarecrow s = prefab != null ? Scarecrow.HarvestingAt(__instance.transform.position) : null;
+            if (s == null)
+                return true;
+            string label;
+            if (StationOutput.TryDepositNear(s, prefab.name, stack, out label))
+                return false;
+            __state = true; // stays on the ground: Postfix tags it with the link
+            return true;
+        }
+
+        private static void Postfix(Pickable __instance, GameObject prefab, bool __state)
+        {
+            if (!__state)
+                return;
+            Scarecrow s = Scarecrow.HarvestingAt(__instance.transform.position);
+            int link = s != null ? StationLink.Get(s) : 0;
+            if (link > 0)
+                StationOutput.TagNearbyDrops(__instance.transform.position, prefab.name, link);
         }
     }
 }

@@ -40,6 +40,12 @@ namespace StoreAndCraft
             return HoveredComponent<Scarecrow>();
         }
 
+        /// <summary>Armor stand under the crosshair, or null.</summary>
+        public static ArmorStand HoveredArmorStand()
+        {
+            return HoveredComponent<ArmorStand>();
+        }
+
         /// <summary>SAC feed trough under the crosshair (its Container), or null.</summary>
         public static Container HoveredTrough()
         {
@@ -291,6 +297,19 @@ namespace StoreAndCraft
                     return true;
                 }
                 StationFilterMenu.Open(scarecrow);
+                return true;
+            }
+
+            // Armor stand: presets for the weapon / shield / tool slots (only while the swap is on).
+            ArmorStand stand = ArmorStandSwap.Enabled ? HoveredArmorStand() : null;
+            if (stand != null)
+            {
+                if (!PrivateArea.CheckAccess(stand.transform.position, 0f, false, true))
+                {
+                    player.Message(MessageHud.MessageType.Center, "$msg_privatezone", 0, null, false);
+                    return true;
+                }
+                StationFilterMenu.Open(stand);
                 return true;
             }
 

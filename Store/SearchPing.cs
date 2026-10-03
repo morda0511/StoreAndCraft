@@ -92,11 +92,64 @@ namespace StoreAndCraft
                 label + ": " + total + " in " + holding.Count + " Truhe(n)."));
         }
 
-        private static void StartBlink(Container chest, int times)
+        private static void StartBlink(Container chest, int times, float delay = 0f)
         {
             _blinkChest = chest;
             _blinkLeft = Mathf.Max(1, times);
-            _nextBlinkAt = 0f;
+            _nextBlinkAt = Time.time + delay;
+        }
+
+        // ---- display menu: right click on an item → camera flies to a chest of this display that holds it
+
+        private static string _locateShared;
+        private static int _locateIndex;
+        private static float _locateAt;
+
+        /// <summary>
+        /// Chests this display counts (same filters as the display itself) that hold the item. The camera flies to
+        /// the nearest one and it blinks; clicking the same item again goes on to the next chest.
+        /// </summary>
+        public static void LocateForBoard(StorageDisplayBoard board, string token)
+        {
+            Player player = Player.m_localPlayer;
+            if (board == null || player == null || string.IsNullOrEmpty(token) || LocateCamera.Active)
+                return;
+
+            string shared = ItemIds.SharedFromToken(token);
+            Vector3 origin = board.transform.position;
+            NearbyIndex.Tick();
+            var near = new List<Container>();
+            NearbyIndex.CollectNear(origin, board.EffectiveDisplayRange(), near);
+
+            var holding = new List<Container>();
+            foreach (Container chest in near)
+            {
+                if (chest == null || !ContainerFilter.IsPlayerBuiltStorage(chest)
+                    || !ContainerFilter.PlayerMayUse(chest, origin) || ChestNames.IsFullyIgnored(chest))
+                    continue;
+                NearbyIndex.EnsureInventory(chest);
+                if (ChestPicker.CountShared(chest.GetInventory(), shared) > 0)
+                    holding.Add(chest);
+            }
+
+            if (holding.Count == 0)
+            {
+                Tell(Loc.T("No chest in range of this display has that item.", "Keine Truhe in Reichweite dieser Anzeige hat dieses Item."));
+                return;
+            }
+
+            holding.Sort((a, b) => ContainerFilter.Distance(origin, a.transform.position)
+                .CompareTo(ContainerFilter.Distance(origin, b.transform.position)));
+
+            bool again = shared == _locateShared && Time.unscaledTime - _locateAt < 60f;
+            _locateIndex = again ? (_locateIndex + 1) % holding.Count : 0;
+            _locateShared = shared;
+            _locateAt = Time.unscaledTime;
+
+            Container target = holding[_locateIndex];
+            LocateCamera.Fly(target.transform.position);
+            StartBlink(target, 5, LocateCamera.ArriveDelay);
+            Tell(Loc.T("Chest ", "Truhe ") + (_locateIndex + 1) + " / " + holding.Count);
         }
 
         private static void Tell(string msg)

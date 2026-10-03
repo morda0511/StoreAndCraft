@@ -134,6 +134,10 @@ namespace StoreAndCraft
             Vector3 pos = drop.transform.position;
             int intakeLink = StationOutput.GetIntakeLink(drop);
 
+            // "No dump" chests skip plain ground pickup; station output (link tag) still reaches them.
+            if (intakeLink < 0)
+                ChestScratch.RemoveAll(ChestNames.IsNoDump);
+
             // Linked station output: matching [lN] only (same as StationOutput.TryDepositNear).
             // No linked chest takes it → it stays on the ground, never an untagged chest.
             if (intakeLink >= 1)

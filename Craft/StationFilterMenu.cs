@@ -61,8 +61,10 @@ namespace StoreAndCraft
         private static Fireplace _fire;
         // SAC feed trough (Container): animal-food filter + link + auto-fill.
         private static Container _trough;
-        // Scarecrow: crop pick + grid size + harvest / plant switches.
+        // Scarecrow: compact panel (Farm/ScarecrowPanel.cs), this menu only hosts it (open / close / Esc).
         private static Scarecrow _scarecrow;
+        // Armor stand: presets panel (Craft/ArmorStandPanel.cs), hosted the same way.
+        private static ArmorStand _armorStand;
 
         /// <summary>Menu open for this scarecrow (it shows its grid preview meanwhile).</summary>
         internal static bool IsEditing(Scarecrow s)
@@ -114,15 +116,22 @@ namespace StoreAndCraft
             OpenInternal(null, null, null, null, null, scarecrow);
         }
 
+        public static void Open(ArmorStand armorStand)
+        {
+            OpenInternal(null, null, null, null, null, null, armorStand);
+        }
+
         private static void OpenInternal(
             Smelter smelter,
             CookingStation cook,
             Fermenter fermenter,
             Fireplace fire,
             Container trough,
-            Scarecrow scarecrow = null)
+            Scarecrow scarecrow = null,
+            ArmorStand armorStand = null)
         {
-            if ((smelter == null && cook == null && fermenter == null && fire == null && trough == null && scarecrow == null)
+            if ((smelter == null && cook == null && fermenter == null && fire == null && trough == null && scarecrow == null
+                && armorStand == null)
                 || Player.m_localPlayer == null)
                 return;
 
@@ -144,6 +153,7 @@ namespace StoreAndCraft
             _fire = fire;
             _trough = trough;
             _scarecrow = scarecrow;
+            _armorStand = armorStand;
             _openedAt = Time.unscaledTime;
 
             UiFonts.ThinNorse();
@@ -169,6 +179,7 @@ namespace StoreAndCraft
                 _fire = null;
                 _trough = null;
                 _scarecrow = null;
+                _armorStand = null;
                 _suppressMenuFrame = Time.frameCount;
                 DestroyRoot();
             }
@@ -211,7 +222,8 @@ namespace StoreAndCraft
         {
             if (!IsOpen)
                 return;
-            if ((_smelter == null && _cook == null && _fermenter == null && _fire == null && _trough == null && _scarecrow == null)
+            if ((_smelter == null && _cook == null && _fermenter == null && _fire == null && _trough == null && _scarecrow == null
+                && _armorStand == null)
                 || Player.m_localPlayer == null)
             {
                 Close();
@@ -228,13 +240,6 @@ namespace StoreAndCraft
         {
             if (string.IsNullOrEmpty(shared))
                 return;
-            // Scarecrow: one crop per field, clicking picks it.
-            if (_scarecrow != null)
-            {
-                _scarecrow.SetCrop(shared);
-                RebuildRows(preserveScroll: true);
-                return;
-            }
             bool denied;
             if (_smelter != null)
             {
@@ -279,48 +284,12 @@ namespace StoreAndCraft
 
         private static Component ActiveStation()
         {
-            return (Component)_smelter ?? _cook ?? (Component)_fermenter ?? (Component)_fire ?? (Component)_trough ?? _scarecrow;
-        }
-
-        /// <summary>Scarecrow switches and grid steppers; returns the height used.</summary>
-        private static float AddScarecrowRows(float y)
-        {
-            Scarecrow s = _scarecrow;
-            float h = 0f;
-            float step = ActionRowH + 8f;
-            AddActionRow(y + h, Loc.T("Harvest: ", "Ernten: ") + OnOff(s.Harvest), () => { s.SetHarvest(!s.Harvest); RebuildRows(true); });
-            h += step;
-            AddActionRow(y + h, Loc.T("Plant: ", "Pflanzen: ") + OnOff(s.PlantOn), () => { s.SetPlant(!s.PlantOn); RebuildRows(true); });
-            h += step;
-            AddStepperRow(y + h, Loc.T("Width", "Breite") + ": " + s.Cols,
-                () => { s.SetCols(s.Cols - 2); RebuildRows(true); }, () => { s.SetCols(s.Cols + 2); RebuildRows(true); });
-            h += step;
-            AddStepperRow(y + h, Loc.T("Length", "Länge") + ": " + s.Rows,
-                () => { s.SetRows(s.Rows - 2); RebuildRows(true); }, () => { s.SetRows(s.Rows + 2); RebuildRows(true); });
-            h += step;
-            AddStepperRow(y + h, Loc.T("Spacing", "Abstand") + ": " + s.Spacing.ToString("0.0") + " m",
-                () => { s.SetSpacing(s.Spacing - 0.1f); RebuildRows(true); }, () => { s.SetSpacing(s.Spacing + 0.1f); RebuildRows(true); });
-            h += step;
-            return h;
-        }
-
-        private static string OnOff(bool on)
-        {
-            return on ? Loc.T("on", "an") : Loc.T("off", "aus");
-        }
-
-        /// <summary>[ - ]  label  [ + ] with the same button art as the action rows.</summary>
-        private static void AddStepperRow(float yFromTop, string label, UnityAction minus, UnityAction plus)
-        {
-            const float btn = 56f;
-            AddActionRow(yFromTop, "-", minus, ItemPadL, btn);
-            AddActionRow(yFromTop, label, () => { }, ItemPadL + btn + 6f, ActionRowW - 2f * (btn + 6f));
-            AddActionRow(yFromTop, "+", plus, ItemPadL + ActionRowW - btn, btn);
+            return (Component)_smelter ?? _cook ?? (Component)_fermenter ?? (Component)_fire ?? (Component)_trough;
         }
 
         private static void ToggleAutoFill()
         {
-            Component host = _trough != null ? (Component)_trough : _fermenter != null ? (Component)_fermenter : _scarecrow;
+            Component host = _trough != null ? (Component)_trough : (Component)_fermenter;
             if (host == null)
                 return;
             StationAutoFill.SetOn(host, !StationAutoFill.IsOn(host.GetComponent<ZNetView>()));
@@ -359,6 +328,18 @@ namespace StoreAndCraft
             scaler.referenceResolution = new Vector2(RefW, RefH);
             scaler.matchWidthOrHeight = 0.5f;
 
+            // Scarecrow: small panel under the hotbar, no dimming (the field stays visible).
+            if (_scarecrow != null)
+            {
+                ScarecrowPanel.Create(_root.transform as RectTransform, _scarecrow, Close);
+                return;
+            }
+            if (_armorStand != null)
+            {
+                ArmorStandPanel.Create(_root.transform as RectTransform, _armorStand, Close);
+                return;
+            }
+
             var dim = new GameObject("Dim", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
             dim.transform.SetParent(_root.transform, false);
             Stretch(dim.transform as RectTransform);
@@ -381,6 +362,8 @@ namespace StoreAndCraft
 
         private static void DestroyRoot()
         {
+            ScarecrowPanel.Dispose();
+            ArmorStandPanel.Dispose();
             _listContent = null;
             _listScroll = null;
             _linkGrid = null;
@@ -506,6 +489,16 @@ namespace StoreAndCraft
         private static void RebuildRows(bool preserveScroll = false)
         {
             EnsureRoot();
+            if (_scarecrow != null)
+            {
+                ScarecrowPanel.Rebuild();
+                return;
+            }
+            if (_armorStand != null)
+            {
+                ArmorStandPanel.Rebuild();
+                return;
+            }
             if (_listContent == null)
                 return;
 
@@ -517,21 +510,18 @@ namespace StoreAndCraft
                 : _smelter != null ? StationPullFilter.OreChoices(_smelter)
                 : _trough != null ? StationPullFilter.TroughFoodChoices()
                 : _fermenter != null ? StationPullFilter.MeadChoices(_fermenter)
-                : _scarecrow != null ? CropMap.SeedChoices()
                 : new List<string>();
             // Only discovered items (a blocked undiscovered one stays visible so it can be allowed again).
             var shown = new List<string>(choices.Count);
             for (int i = 0; i < choices.Count; i++)
             {
                 string c = choices[i];
-                bool allowedNow = _scarecrow != null ? _scarecrow.CropSeed == c
-                    : _cook != null ? StationPullFilter.IsAllowed(_cook, c)
+                bool allowedNow = _cook != null ? StationPullFilter.IsAllowed(_cook, c)
                     : _trough != null ? StationPullFilter.IsAllowed(_trough, c)
                     : _fermenter != null ? StationPullFilter.IsAllowed(_fermenter, c)
                     : StationPullFilter.IsAllowed(_smelter, c);
-                // Scarecrow: the picked crop always stays visible; filters: a blocked one does.
-                bool keep = _scarecrow != null ? allowedNow : !allowedNow;
-                if (DisplayFilters.IsKnownToPlayer(c) || keep)
+                // A blocked one stays visible so it can be allowed again.
+                if (DisplayFilters.IsKnownToPlayer(c) || !allowedNow)
                     shown.Add(c);
             }
             choices = shown;
@@ -541,8 +531,7 @@ namespace StoreAndCraft
             for (int i = 0; i < n; i++)
             {
                 string shared = choices[i];
-                bool allowed = _scarecrow != null ? _scarecrow.CropSeed == shared
-                    : _cook != null ? StationPullFilter.IsAllowed(_cook, shared)
+                bool allowed = _cook != null ? StationPullFilter.IsAllowed(_cook, shared)
                     : _trough != null ? StationPullFilter.IsAllowed(_trough, shared)
                     : _fermenter != null ? StationPullFilter.IsAllowed(_fermenter, shared)
                     : StationPullFilter.IsAllowed(_smelter, shared);
@@ -563,8 +552,8 @@ namespace StoreAndCraft
                 AddActionRow(gridH, Loc.T("Allow all inputs", "Allow all inputs"), AllowAll);
 
             float actionH = filterStation ? ActionRowH + 8f : 0f;
-            // Trough / fermenter / scarecrow: auto-fill switch as an action row (same as [B]).
-            Component autoFillHost = _trough != null ? (Component)_trough : _fermenter != null ? (Component)_fermenter : _scarecrow;
+            // Trough / fermenter: auto-fill switch as an action row (same as [B]).
+            Component autoFillHost = _trough != null ? (Component)_trough : (Component)_fermenter;
             if (autoFillHost != null)
             {
                 bool on = StationAutoFill.IsOn(autoFillHost.GetComponent<ZNetView>());
@@ -573,8 +562,6 @@ namespace StoreAndCraft
                     ToggleAutoFill);
                 actionH += ActionRowH + 8f;
             }
-            if (_scarecrow != null)
-                actionH += AddScarecrowRows(gridH + actionH);
             _listContent.sizeDelta = new Vector2(0f, gridH + actionH + 4f);
             if (_listScroll != null)
                 _listScroll.verticalNormalizedPosition = preserveScroll ? scrollPos : 1f;
@@ -693,7 +680,7 @@ namespace StoreAndCraft
             togRt.SetAsLastSibling();
         }
 
-        private static Sprite ItemIcon(string shared)
+        internal static Sprite ItemIcon(string shared)
         {
             if (string.IsNullOrEmpty(shared))
                 return null;

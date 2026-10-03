@@ -18,7 +18,7 @@ namespace StoreAndCraft
 
             foreach (Container chest in NearbyIndex.Current)
             {
-                if (chest == null)
+                if (chest == null || ChestNames.IsNoDump(chest))
                     continue;
 
                 float d = ContainerFilter.Distance(origin, chest.transform.position);

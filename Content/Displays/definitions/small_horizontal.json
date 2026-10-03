@@ -114,8 +114,8 @@
       "kind": "Box",
       "enabled": true,
       "isTrigger": false,
-      "center": { "x": 0, "y": 0.42, "z": -0.1 },
-      "size": { "x": 1.7, "y": 1.02, "z": 0.25 },
+      "center": { "x": 0, "y": 0.48, "z": -0.08 },
+      "size": { "x": 1.44, "y": 0.88, "z": 0.18 },
       "radius": 0.5,
       "height": 1,
       "direction": 0
@@ -125,8 +125,8 @@
       "kind": "Box",
       "enabled": true,
       "isTrigger": false,
-      "center": { "x": 0, "y": 1.19, "z": 0 },
-      "size": { "x": 1.11, "y": 0.6, "z": 0.12 },
+      "center": { "x": 0, "y": 1.19, "z": -0.11 },
+      "size": { "x": 1.11, "y": 0.52, "z": 0.12 },
       "radius": 0.5,
       "height": 1,
       "direction": 0
@@ -136,13 +136,13 @@
     {
       "id": "SnapPoint_0",
       "enabled": true,
-      "localPosition": { "x": -0.55, "y": 1.42, "z": -0.04 },
+      "localPosition": { "x": -0.53, "y": 1.42, "z": -0.13 },
       "localEuler": { "x": 0, "y": 0, "z": 0 }
     },
     {
       "id": "SnapPoint_1",
       "enabled": true,
-      "localPosition": { "x": 0.5, "y": 1.37, "z": -0.14 },
+      "localPosition": { "x": 0.54, "y": 1.42, "z": -0.14 },
       "localEuler": { "x": 0, "y": 0, "z": 0 }
     }
   ]

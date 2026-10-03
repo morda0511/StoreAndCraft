@@ -89,7 +89,7 @@ namespace StoreAndCraft
                 StationLink.PrependHover(ref __result, link, chest: true);
 
             // Status line only (do not tint the whole hover red/orange).
-            ChestNames.PrependStatusHover(ref __result, custom);
+            ChestNames.PrependStatusHover(ref __result, ChestNames.FlagsOf(__instance));
         }
 
         /// <summary>

@@ -9,7 +9,7 @@ namespace StoreAndCraft
     /// <summary>
     /// Sort + Stack buttons cloned from vanilla "Take all" (look, hover, click sound match Valheim).
     /// Chest: narrow, next to Take all in the header row (Take all shrinks only if the title needs it).
-    /// Bag: between armor and weight, sibling-first so they sit under the inventory panel like a Photoshop layer.
+    /// Bag: top right, on the upper edge of the inventory (the trash can mods sit beside the armor), sibling-first so they sit under the inventory panel like a Photoshop layer.
     /// The clones lose UIGamePad and Localize so vanilla cannot fire or rename them.
     /// Laid out every frame from the live vanilla rects, so chest names / resolutions do not matter.
     /// </summary>
@@ -17,6 +17,9 @@ namespace StoreAndCraft
     {
         private const float Gap = 4f;
         private const float ChestButtonAspect = 1.6f;
+        /// <summary>How far the bag buttons reach down behind the inventory's upper edge, and their distance from its right edge.</summary>
+        private const float BagOverlap = 6f;
+        private const float BagRightMargin = 24f;
 
         private static InventoryGui _builtFor;
         private static RectTransform _take;
@@ -24,6 +27,10 @@ namespace StoreAndCraft
         private static Vector3 _takeLocal0;
         private static float _takeWidth0;
         private static bool _takeMeasured;
+        // What we left Take all at last frame. If it differs now, vanilla or another mod (bigger
+        // inventories / chests) moved or resized it, and that new spot becomes the base layout.
+        private static Vector2 _takeSizeSeen;
+        private static Vector3 _takeLocalSeen;
         private static RectTransform _chestSort;
         private static RectTransform _chestStack;
         private static RectTransform _bagStack;
@@ -68,9 +75,13 @@ namespace StoreAndCraft
             if (parent == null || _chestSort == null || _chestStack == null)
                 return;
 
-            if (!_takeMeasured)
+            // Measure when Take all is active and laid out (real width), before we ever resize it,
+            // and again whenever something else moved / resized it since we last set it.
+            bool moved = _takeMeasured
+                && ((_take.sizeDelta - _takeSizeSeen).sqrMagnitude > 0.0001f
+                    || (_take.localPosition - _takeLocalSeen).sqrMagnitude > 0.0001f);
+            if (!_takeMeasured || moved)
             {
-                // Only once Take all is active and laid out (real width), before we ever resize it.
                 if (!_take.gameObject.activeInHierarchy || _take.rect.width < 1f)
                     return;
                 _takeSize0 = _take.sizeDelta;
@@ -104,45 +115,31 @@ namespace StoreAndCraft
             float x = takeLeft + takeWidth + Gap + w * 0.5f;
             Set(_chestSort, new Vector2(x, centerY), new Vector2(w, h));
             Set(_chestStack, new Vector2(x + w + Gap, centerY), new Vector2(w, h));
+
+            _takeSizeSeen = _take.sizeDelta;
+            _takeLocalSeen = _take.localPosition;
         }
 
         private static void LayoutBag(InventoryGui gui)
         {
-            if (_bagStack == null || _bagSort == null || gui.m_weight == null || gui.m_armor == null)
+            if (_bagStack == null || _bagSort == null || gui.m_player == null)
                 return;
 
             // Drawn under the inventory wood (Photoshop-layer style). Chest buttons are untouched.
             _bagSort.SetAsFirstSibling();
             _bagStack.SetAsFirstSibling();
 
-            RectTransform weight = (RectTransform)gui.m_weight.transform;
-            RectTransform armor = (RectTransform)gui.m_armor.transform;
-            Vector3[] c = Corners;
+            // Top right, sitting on the upper edge of the inventory: the right side under the armor is where
+            // trash can mods put theirs. Laid out from the live panel rect, so other inventory sizes work too.
+            Rect panel = gui.m_player.rect;
+            float h = _take.rect.height;
+            float w = h * ChestButtonAspect;
+            float cy = panel.yMax + h * 0.5f - BagOverlap;
+            float sortX = panel.xMax - BagRightMargin - w * 0.5f;
+            float stackX = sortX - w - Gap;
 
-            weight.GetWorldCorners(c);
-            Vector3 wBl = gui.m_player.InverseTransformPoint(c[0]);
-            Vector3 wBr = gui.m_player.InverseTransformPoint(c[3]);
-            Vector3 wTl = gui.m_player.InverseTransformPoint(c[1]);
-
-            armor.GetWorldCorners(c);
-            Vector3 aBl = gui.m_player.InverseTransformPoint(c[0]);
-            Vector3 aTl = gui.m_player.InverseTransformPoint(c[1]);
-
-            float width = Mathf.Abs(wBr.x - wBl.x);
-            if (width < 1f)
-                width = _take.rect.width;
-            float x = (wBl.x + wBr.x) * 0.5f;
-            float h = Mathf.Min(_take.rect.height, width);
-
-            // Armor sits above weight: nest Stack then Sort between those two centers.
-            float armorCy = (aBl.y + aTl.y) * 0.5f;
-            float weightCy = (wBl.y + wTl.y) * 0.5f;
-            float mid = (armorCy + weightCy) * 0.5f;
-            float stackY = mid + (h + Gap) * 0.5f;
-            float sortY = mid - (h + Gap) * 0.5f;
-
-            Set(_bagStack, new Vector2(x, stackY), new Vector2(width, h));
-            Set(_bagSort, new Vector2(x, sortY), new Vector2(width, h));
+            Set(_bagStack, new Vector2(stackX, cy), new Vector2(w, h));
+            Set(_bagSort, new Vector2(sortX, cy), new Vector2(w, h));
         }
 
         private static float TitleLeft(TMP_Text title, RectTransform parent, float fallback)

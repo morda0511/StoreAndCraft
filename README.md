@@ -1,228 +1,149 @@
 # StoreAndCraft
 
-**Your base runs with you.**  
-Loot finds its chest. One key clears your pockets. Craft, upgrade, and build straight from storage. Feed kilns and smelters with **[E]**, or toggle **auto-fill with B**. Finished bars / food / honey can **auto-store with N** into matching chests. Tell each station which wood or ore it is allowed to take. **F10** opens a small panel for the activity log and ranges. **Small / Medium / Large Storage Displays** with **Shift + left click** scale and **Shift + right click** Classic/Compact layout. Build a **Feed Trough** so tames eat when hungry. Mark favorites with **F**, fill a stack with **Ctrl + Middle mouse**, find a stack with **Y**, sort with **R**. **Alt+E** opens Settings for chests and stations. Carts and ships count too.
+**Your base runs with you.**
+Loot finds its chest. One key clears your pockets. Craft, upgrade and build straight from storage. Stations refill themselves from chests and put their output back. Storage displays, feed trough, scarecrow and more.
 
-**Required on the dedicated / hosted server and every PC client** (same version). Valheim 1.0 · BepInExPack 5.4.2350+. Console players via crossplay cannot load the mod.
+**Required on the server and on every client (same version).** Valheim 1.0 · BepInExPack 5.4.2350+. Console players cannot load the mod.
 
-**Bug reports:** https://github.com/morda0511/StoreAndCraft/issues/1  
-
+**Bug reports:** https://github.com/morda0511/StoreAndCraft/issues/1
 **Discord:** https://discord.gg/aVKVVmyzj
 
 ---
 
 ## Features
 
-### Auto-store
-- Ground items are pulled into nearby chests automatically if **any one player** is in range of the pile. You can walk off; a buddy standing there is enough.
-- Toggle ground vacuum with chat **`/store disable`** / **`/store enable`**. Dump and middle-click keep working either way.
-- Default: a chest only accepts an item if that type is **already inside**.
-- Carts and **ships** count as containers too.
-- **Player-built chests only** for dump / auto-store (crypts, house spawns, and other world chests are skipped).
-- Ward / private area rules still apply.
+### Store
+- **Auto-store:** ground items go into matching chests (one player in range is enough)
+- Chest takes an item only if the type is already inside (switch in F10)
+- Carts and ships count as chests. Player-built chests only. Ward rules apply
+- `/store disable` / `/store enable` turns ground pickup off / on
+- **Dump** (**.**): inventory into matching chests, hotbar and favorites stay
+- **Middle mouse** (inventory open): store the hovered item
+- **Ctrl + middle mouse**: fill the hovered stack from chests
+- **Sort** and **Stack** buttons on inventory and chest panels
+- **Favorites** (**F**): never dumped or stored
+- **Search** (**Y**): nearest chest with the item blinks, map ping
 
-### Dump & quick store
-- **`.`**: dump allowed inventory stacks into matching nearby **player-built** chests. If the chest cannot take the whole stack, it fills what fits and leaves the rest.
-- **Middle mouse** (inventory open): store only the hovered item.
-- **Ctrl + Middle mouse** (inventory open): **Pull Stack**: fill the hovered stack from matching items in nearby chests.
-- Hotbar can be skipped. Extra inventory rows and quick slots are never dumped or sorted.
-- Favorites are never dumped / hover-stored.
+### Craft and build from chests
+- Recipes, upgrades and hammer pieces use chest contents
+- Missing materials are taken from chests directly
+- Yellow requirement text = part comes from a chest
+- 1 item stays in each chest (switch in F10)
+- **C + place**: grab a piece's materials from chests, nothing is placed
+- Epic Loot: craft, enchanting table, Forge of Potential use chest stock
 
-### Craft & build from chests
-- Recipes and hammer pieces count nearby chest contents.
-- When you craft / upgrade / build, missing mats are **taken from chests directly**.
-- Craft / upgrade button enables when mats are in **inventory or chests**.
-- Yellow tint on requirement text when part of the count comes from a chest.
-- One item stays in each chest by default so auto-store can keep refilling. That leftover cannot be spent.
-- **Forge of Potential**: upgrades count and spend idols in nearby chests. A single idol in a chest is enough.
-- **C + place (hammer):** hold **C** while confirming a hammer build to **grab** that piece's materials from nearby chests into your inventory (nothing is placed).
+### Stations
+- **[E]** refill: fuel, ore, food from chests (inventory first)
+- **B** auto-fill: refills when empty, never from your bag
+- **N** auto-store: finished bars, food, honey, mead go into chests
+- Works on kiln, smelter, blast furnace, cooking stations, oven, fermenter, turrets, fires, torches; **N** also on beehive and sap extractor
+- **Alt+E** settings: allowed items, link **l1-l9**
+- **Links:** station fills from, and outputs to, chests with the same link
+- **Torches** (F10): auto-fill for new torches, World Override for all torches
+- **Station capacities** (F10, admin): kiln, smelter, blast furnace, eitr refinery, beehive
+- **Fermenter:** mead filter, add the same base in the first 60 s (batch up to 5)
+- Red label above a linked station when its chests ran out
+- **Catch-up while away** (off by default): stations finish the time their area was unloaded
 
-### Epic Loot
-- **Supports Epic Loot**: chest craft/build pull, Storage Displays (Dust / Essence / Reagent / Shard / Runestone), and the Enchanting Table use nearby chest stock.
-- Enchanting Table: a single Runestone in a chest still counts.
+### Storage displays (hammer, Storage tab)
+- Carved boards: small, medium, large, upright and wide. Vanilla sign displays too
+- **E:** pick categories (small: one category or up to 4 items), search box
+- **Right click** an item on the display (or in that menu): camera flies to the chest that holds it, the chest blinks (again = next chest)
+- **Shift + right click:** switch layout
+- **Shift + left click:** display scale
+- **Alt+E** on small: name / amount. **Alt+R:** scan range per display
+- Displays with the same selection next to each other share pages
+- Chests set to Ignore are not counted
 
-### Station refill `[E]`
-Works on smelters, charcoal kilns, cooking stations, fires / torches, fermenters, turrets, etc.:
-- Pulls fuel / ore / food from nearby chests when you don't have it.
-- **Inventory first** on manual **[E]**: if you already hold a valid item, that is used before chest contents.
+### Feed trough (hammer)
+- Food filter, links, auto-fill (**Alt+E**)
+- Hungry tames walk to it and eat
 
-### Kiln / smelter / cooking auto-fill
-- Look at a kiln, smelter, blast furnace, cooking spit, iron cooking station, stone oven, fermenter, or torch / fire with the inventory **closed** → **B** toggles auto-fill for that station.
-- When fuel or ore hits **0**, it sends a full load from nearby chests. Auto-fill **never takes from your bag**; only chests (same link, or both unlinked). Ignored / hide-only chests are skipped. Same for Shift+[E] fill-to-max.
-- Then it waits until that slot is empty again. If chests are empty too, the next chest check is after **20 seconds**.
-- Cooking / ovens top up **free slots**. Stone oven door hover shows the toggle; food is added even if the under-fire is out (baking still needs fire to cook).
-- **Torches** (standing, wall, green / blue / mist): optional checkbox in **F10** (`TorchAutoFillDefault`, off by default). When on, torches start with auto-fill on; **B** on a torch still turns it off and it stays off.
-- Filter still applies (Wood OFF stays OFF).
-- Manual **[E]** refill is unchanged.
+### Scarecrow (hammer)
+- Plants a crop grid, harvests when all is ripe, replants
+- **Shift / Ctrl + wheel:** width / length. **E:** crop, harvest / plant, auto-fill, links
+- Needs cultivated ground. Unlocks with the Cultivator recipe
 
-### Station auto-store (N)
-- Look at a kiln, smelter, blast furnace, cooking spit, iron cooking station, stone oven, **fermenter**, or **beehive** with the inventory **closed** → **N** toggles auto-store. Independent from **B**.
-- Finished bars / food / honey go into nearby chests: **matching link first**, then an **unlinked** chest that already holds the item; never a chest with a **different** link. Otherwise the item drops on the ground.
-- Pair with **B** auto-fill for hands-off refining / cooking.
+### Armor stand
+- **E** swaps your armor with the stand's
+- **Alt+E**: pick a preset item from your bag per weapon / shield / tool slot. **E** swaps it with the stand's piece, back and forth
+- Without a preset, **E** puts the stand's weapon into your bag
+- Switch in F10
 
-### Station Settings (Alt+E)
-- Look at a kiln, multi-input smelter, cooking station, or similar → **Alt+E** → **Settings**.
-- Choose which wood / ore / food types may be pulled (also blocked from your bag on that station).
-- Same menu: **l1-l9** station link. Fill pulls only matching linked chests (or untagged when the station has no link). Output of a linked station goes only into chests with the same link; if none has room it stays on the ground.
+### Chest settings (**Alt+E**)
+- **Ignore:** skipped by everything
+- **Show on display:** ignored chest still counts on displays
+- **Manual fill:** nothing goes in automatically, stations can still take from it
+- **Only stations:** no dump, no ground pickup, stations and links still fill it
+- **l1-l9:** link for stations
+- Settings are saved on the chest, not in its name
 
-### Storage Display (Hammer)
-- Build **Small**, **Medium**, or **Large Storage Display**.
-- **Small:** assign with hotbar **1-8** while looking at it. **Shift + left click** cycles **Name + Amount** → **No name** → **Icon only**.
-- **Medium / Large:** **[E]** → type menu. Pick several types at once. **Shift + left click** cycles **Display Scale**. **Shift + right click** toggles **Layout** **Classic** ↔ **Compact**.
-- **Food**, **Ingredients**, and **Epic Loot** expand for subs.
-- Up to **12 categories** per Large board.
-- Chests set to **Ignore** (without Show on Display) are not counted.
-- Place several displays with the same selection next to each other → shared pages `(1/2)`, `(2/2)`, …
-- **Alt+R** → per-display chest scan range.
-
-### Feed Trough (Hammer)
-- Build a **Feed Trough** (Storage tab).
-- Put carrots, mushrooms, berries, etc. inside. Hungry tames **walk to the trough** and eat, like drops on the ground. A small sparkle shows when food is inside.
-- Not used by dump, auto-store, craft pull, or Storage Displays.
-
-### Favorites
-- Inventory open → hover item → **F**.
-- Star badge on the item.
-- Skipped by dump and hover-store.
-
-### Rename / ignore / hide / link / manual-fill chests
-- Look at a chest → **Alt+E** opens **Settings**.
-- **Ignore** and **Show on Display** use on/off toggles:
-  - **Ignore** on → skipped by dump / auto-store / craft / auto-fill.
-  - **Ignore** + **Show on Display** → still skipped by dump/store/craft, but **counted on Storage Displays**.
-- **Manual fill** `[M]`: type `[M]` at the start of the chest name (no toggle). Dump, ground pickup, and auto-store will not put items **into** that chest. Stations and craft can still **pull from** it. Works with links, e.g. `[M] [l3] Wood`.
-- **l1-l9** link grid on the same panel → tag the chest for a station link.
-- Empty renamed chests keep their custom name.
-
-### Activity log
-- **F10** opens the StoreAndCraft panel. Tick **Show activity log** for a short log under the TopLeft status text with recent chest ↔ station moves.
-- The same panel has sliders and number fields for every range. **Save** applies them. On a server only admins from the adminlist can save; in your own world everyone can.
-
-### Search
-- Inventory open → hover an item → press **Y**.
-- Nearest chest that holds it **blinks 3 times** and gets a map ping.
-
-### Sort
-- Inventory open → **R**.
-- Bag only: sorts your inventory. Open chest: sorts **that chest only**.
-- Favorites stay put. Sort never moves items into the hotbar.
-
-### Multiplayer
-- Install on **server + all clients**, same version.
-- Server config sync.
-- Safe chest transfers (no ownership steal while someone has a chest open).
+### F10 mod manager
+- **F10** opens the list of all your mods. Click one to change its settings (switches, sliders, numbers, lists, hotkeys), **Save**, back arrow = list
+- StoreAndCraft opens its own panel (below)
+- Activity log, all ranges, all on/off switches, station capacities
+- Hotkey of each feature next to its slider: click, press new key (Esc cancel, Backspace unbind)
+- Servers: only admins from adminlist.txt can save
 
 ---
 
-## Keys (defaults)
+## Keys (defaults, change in F10)
 
 | Key | Action |
 |---|---|
-| **.** | Dump inventory into matching nearby chests |
-| **Middle mouse** | Store hovered inventory item (inventory open) |
-| **Ctrl + Middle mouse** | **Pull Stack**: fill hovered stack from nearby chests |
-| **Alt + E** | **Settings** for chest or station |
-| **F** | Favorite / unfavorite hovered inventory item |
-| **B** | Toggle auto-fill on the looked-at station (inventory closed) |
-| **N** | Toggle auto-store on kiln / smelter / cooking / fermenter / beehive (inventory closed) |
-| **F10** | Panel: activity log + ranges |
-| **Y** | Find nearest chest with the hovered item (blink + map ping) |
-| **Sort / Stack** buttons | Inventory and chest panel: sort, or merge partial stacks of the same item |
-| **C + place (hammer)** | Grab build materials from chests (do not place) |
-| **Alt + R** | Storage Display range |
-| **Shift + Left click** | Storage Display: scale (Medium/Large) or Small view mode |
-| **Shift + Right click** | Storage Display Medium/Large: Classic ↔ Compact layout |
-
-All hotkeys are configurable in the `.cfg` and stay **local**.
+| **.** | Dump |
+| **Middle mouse** | Store hovered item |
+| **Ctrl + middle mouse** | Fill hovered stack |
+| **F** | Favorite |
+| **Y** | Find item in chests |
+| **B** | Auto-fill on the station you look at |
+| **N** | Auto-store on the station you look at |
+| **Alt + E** | Settings: chest, station, display, trough |
+| **Alt + R** | Display range |
+| **C + place** | Grab materials |
+| **F10** | Panel |
+| **Shift + wheel / Ctrl + wheel** | Scarecrow width / length |
 
 ---
 
-## Chat / console commands
+## Commands
 
-Works in **chat** (`/…`) and in the **F5 console** (with or without leading `/`).
+Chat (`/...`) or F5 console. Ranges: host / server admin only.
 
-Changing ranges: **host / server admin only**. Anyone can view status / help.
+| Command | What |
+|---|---|
+| `/help store` | Help |
+| `/store enable` / `disable` / `status` | Ground auto-store |
+| `/sac status` | Current ranges |
+| `/dumprange` `/storerange` `/storagerange` `/craftrange` `/autofillrange` `/autofillchestrange` `<m>` | Set a range (0-1000) |
+| `/torchautofill` `/torchautofilloverride` `on` / `off` | Torch auto-fill |
 
-<details>
-<summary><b>Command list (click to expand)</b></summary>
-
-| Command | Who | What it does |
-|---|---|---|
-| `/help store` | Everyone | Print help to console (F5) |
-| `/help storeandcraft` | Everyone | Same as above |
-| `/storehelp` | Everyone | Same as above |
-| `/store enable` | Everyone | Turn **ground** auto-store on |
-| `/store disable` | Everyone | Turn **ground** auto-store off; dump / middle-click still work |
-| `/store status` | Everyone | Show ground auto-store on/off |
-| `/sac status` | Everyone | Show current ranges |
-| `/dumprange <n>` | Host / admin | Set dump / middle-click range (meters) |
-| `/storerange <n>` | Host / admin | Set auto-store ground→chest range |
-| `/storagerange <n>` | Host / admin | Set take-stack / search / display range |
-| `/craftrange <n>` | Host / admin | Set craft / build / station-pull range |
-| `/autofillrange <n>` | Host / admin | Set auto-fill player to station range |
-| `/autofillchestrange <n>` | Host / admin | Set auto-fill station to chest range (0 = same as autofillrange) |
-| `/sac dump <n>` | Host / admin | Alias for `/dumprange` |
-| `/sac store <n>` | Host / admin | Alias for `/storerange` |
-| `/sac storage <n>` | Host / admin | Alias for `/storagerange` |
-| `/sac craft <n>` | Host / admin | Alias for `/craftrange` |
-| `/sac autofill <n>` | Host / admin | Alias for `/autofillrange` |
-| `/sac autofillchest <n>` | Host / admin | Alias for `/autofillchestrange` |
-
-**Examples**
-
-```
-/sac status
-/craftrange 25
-/autofillrange 40
-/sac dump 10
-```
-
-Ranges are saved to `com.morda.storeandcraft.cfg` and synced to clients when LockConfig is on. Valid range: **0-1000**. Edit the `.cfg` on the host / server and save, or use the commands: **no restart**.
-
-</details>
-
----
-
-## Storage Display types
-
-**Resources:** Wood · Ore · Metals · Stone · Fuel · Hides · Parts · Crops & Seeds · Raw Food · Ingredients · Gems & Coins · Boss / Rare · Other materials  
-
-**Epic Loot (expandable):** Dust · Essence · Reagent · Shard · Runestone  
-
-**Other:** Food · Fish · Trophy · Ammo · Tools · Weapons · Armor · Utility · Misc  
+Same things in F10, no restart needed.
 
 ---
 
 ## Config
 
-**One file only:**
-
-`BepInEx/config/com.morda.storeandcraft.cfg`
+`BepInEx/config/com.morda.storeandcraft.cfg` (server owns gameplay values when `LockConfig` is on)
 
 | Setting | Meaning |
 |---|---|
-| `LockConfig` | Server owns gameplay values; clients receive them on join |
-| `ModEnabled` / `StoreEnabled` / `CraftEnabled` | Feature toggles |
-| `AutoIntakeEnabled` | Ground items auto-store into matching chests |
-| `MustHaveExisting` | Chest only accepts item types it already holds |
-| `LeaveOneItem` | Leave 1 in chest when pulling |
-| `IgnoreHotbar` | Dump skips hotbar row |
-| `AutoStackEnabled` | Compact stacks inside chests |
-| `PlayerDumpRange` | Dump / middle-click / pull-stack (m) |
-| `StoreRange` | Auto-store ground items (m) |
-| `StorageRange` | Take-stack / search / displays (m) |
-| `CraftRange` | Craft / build / station `[E]` (m) |
-| `AutoFillRange` | Auto-fill: player to station (m) |
-| `AutoFillChestRange` | Auto-fill / auto-store: station to chest (m), 0 = same as AutoFillRange |
-| `IntakeInterval` | Seconds between ground-item scans |
+| `LockConfig` | Server values replace client values |
+| `ModEnabled` / `StoreEnabled` / `CraftEnabled` | Feature switches |
+| `AutoIntakeEnabled` / `MustHaveExisting` / `LeaveOneItem` / `IgnoreHotbar` / `AutoStackEnabled` | Store behavior |
+| `PlayerDumpRange` / `StoreRange` / `StorageRange` / `CraftRange` | Ranges (m) |
+| `AutoFillRange` / `AutoFillChestRange` | Station ranges (m) |
+| `TorchAutoFillDefault` / `TorchAutoFillOverride` | Torches |
+| `ArmorStandSwap` | Armor stand swap |
+| `CatchUpWhileAway` | Catch-up |
+| `FermenterBatch` and station capacities | Station sizes |
+| `ShowReleaseNews` | Hugin news |
 | Hotkeys | Local only |
-
-**Dedicated:** edit the `.cfg` on the **server**, save. It reloads and syncs.
 
 ---
 
 ## Install
 
-1. Install [BepInExPack Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/).
-2. Drop `StoreAndCraft.dll` into `BepInEx/plugins/StoreAndCraft/` (or install via Thunderstore / r2modman).
-3. On dedicated servers: install the same version on the **server** and every client.
+1. Install [BepInExPack Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/)
+2. Put `StoreAndCraft.dll` in `BepInEx/plugins/StoreAndCraft/` (or use Thunderstore / r2modman)
+3. Servers: same version on the server and every client

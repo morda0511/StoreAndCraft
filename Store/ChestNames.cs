@@ -17,10 +17,56 @@ namespace StoreAndCraft
         /// </summary>
         public const string ManualPrefix = "[M]";
 
+        // Chest flags live in their own ZDO int (no prefix in the name). Name prefixes written by
+        // older versions or typed by hand still count (see FlagsOf).
+        public const string FlagsKey = "SAC_chestFlags";
+        public const int FlagIgnore = 1;   // [I]; with FlagShow = [H]
+        public const int FlagShow = 2;     // ignored chest still counts on Storage Displays
+        public const int FlagManual = 4;   // [M]
+        public const int FlagNoDump = 8;   // no bag dump / plain ground pickup; stations + links still deposit
+
+        /// <summary>Flags of a chest: its own flag int plus legacy [I]/[H]/[M] in the name.</summary>
+        public static int FlagsOf(Container container)
+        {
+            ZNetView nv = Refs.View(container);
+            if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
+                return 0;
+            ZDO zdo = nv.GetZDO();
+            return zdo.GetInt(FlagsKey, 0) | FlagsFromName(zdo.GetString(ZdoKey, string.Empty));
+        }
+
+        public static int FlagsFromName(string stored)
+        {
+            if (IsFullyIgnoredName(stored))
+                return FlagIgnore;
+            if (IsHiddenName(stored))
+                return FlagIgnore | FlagShow;
+            if (IsManualFillName(stored))
+                return FlagManual;
+            return 0;
+        }
+
+        public static bool SetFlags(Container container, int flags)
+        {
+            ZNetView nv = Refs.View(container);
+            if (nv == null || !nv.IsValid() || nv.GetZDO() == null)
+                return false;
+            if (!nv.IsOwner())
+                nv.ClaimOwnership();
+            nv.GetZDO().Set(FlagsKey, flags);
+            return true;
+        }
+
+        /// <summary>Dump key / store-one and plain ground pickup skip this chest; stations and links still fill it.</summary>
+        public static bool IsNoDump(Container container)
+        {
+            return (FlagsOf(container) & FlagNoDump) != 0;
+        }
+
         /// <summary>Dump / craft / auto-fill / build-grab skip these entirely ([I] or [H]). Not [M].</summary>
         public static bool IsIgnored(Container container)
         {
-            return IsIgnoredName(Get(container));
+            return (FlagsOf(container) & FlagIgnore) != 0;
         }
 
         public static bool IsIgnoredName(string stored)
@@ -31,7 +77,8 @@ namespace StoreAndCraft
         /// <summary>Manual-fill chests: no automated deposit in; station/craft pull still allowed.</summary>
         public static bool IsManualFill(Container container)
         {
-            return IsManualFillName(Get(container));
+            int f = FlagsOf(container);
+            return (f & FlagManual) != 0 && (f & FlagIgnore) == 0;
         }
 
         public static bool IsManualFillName(string stored)
@@ -45,7 +92,7 @@ namespace StoreAndCraft
         /// <summary>True when dump / intake / auto-store / station output must not put items in.</summary>
         public static bool BlocksDeposit(Container container)
         {
-            return BlocksDepositName(Get(container));
+            return (FlagsOf(container) & (FlagIgnore | FlagManual)) != 0;
         }
 
         public static bool BlocksDepositName(string stored)
@@ -56,7 +103,8 @@ namespace StoreAndCraft
         /// <summary>Only [I] — excluded from displays and search.</summary>
         public static bool IsFullyIgnored(Container container)
         {
-            return IsFullyIgnoredName(Get(container));
+            int f = FlagsOf(container);
+            return (f & FlagIgnore) != 0 && (f & FlagShow) == 0;
         }
 
         public static bool IsFullyIgnoredName(string stored)
@@ -70,7 +118,8 @@ namespace StoreAndCraft
         /// <summary>Only [H] — store/craft ignore, displays still count.</summary>
         public static bool IsHidden(Container container)
         {
-            return IsHiddenName(Get(container));
+            int f = FlagsOf(container);
+            return (f & FlagIgnore) != 0 && (f & FlagShow) != 0;
         }
 
         public static bool IsHiddenName(string stored)
@@ -201,30 +250,30 @@ namespace StoreAndCraft
         }
 
         /// <summary>Colored status lines above hover text (Ignore / Manual fill / Show on display).</summary>
-        public static void PrependStatusHover(ref string text, string stored)
+        public static void PrependStatusHover(ref string text, int flags)
         {
             if (string.IsNullOrEmpty(text))
                 return;
 
-            if (IsFullyIgnoredName(stored))
+            string lines = "";
+            if ((flags & FlagIgnore) != 0)
             {
-                text = "<color=#e74c3c>" + Loc.T("Status: Ignore", "Status: Ignorieren") + "</color>\n" + text;
-                return;
+                lines = "<color=#e74c3c>" + Loc.T("Status: Ignore", "Status: Ignorieren") + "</color>\n";
+                // Ignore + show = [H]: ignored for dump/store/craft, still on Storage Displays.
+                if ((flags & FlagShow) != 0)
+                    lines += "<color=#e67e22>" + Loc.T("Display ✓", "Display ✓") + "</color>\n";
+            }
+            else if ((flags & FlagManual) != 0)
+            {
+                lines = "<color=#3498db>" + Loc.T("Status: Manual fill", "Status: Manuell befüllen") + "</color>\n";
             }
 
-            if (IsHiddenName(stored))
-            {
-                // [H] = ignored for dump/store/craft, still on Storage Displays.
-                string lines = "<color=#e74c3c>" + Loc.T("Status: Ignore", "Status: Ignorieren") + "</color>\n"
-                    + "<color=#e67e22>" + Loc.T("Display ✓", "Display ✓") + "</color>";
-                text = lines + "\n" + text;
-                return;
-            }
+            // No dump is shown only alone; Ignore / Manual fill already block more.
+            if ((flags & FlagNoDump) != 0 && (flags & (FlagIgnore | FlagManual)) == 0)
+                lines += "<color=#1abc9c>" + Loc.T("Status: Only stations", "Status: Nur Stationen") + "</color>\n";
 
-            if (IsManualFillName(stored))
-            {
-                text = "<color=#3498db>" + Loc.T("Status: Manual fill", "Status: Manuell befüllen") + "</color>\n" + text;
-            }
+            if (lines.Length > 0)
+                text = lines + text;
         }
 
         public static bool CanRename(Container container)
@@ -295,7 +344,9 @@ namespace StoreAndCraft
     {
         public string GetText()
         {
-            return ChestNames.Get(GetComponent<Container>()) ?? string.Empty;
+            // Dialog text without legacy [I]/[H]/[M] prefix (those are flags now, see ChestNames.FlagsOf).
+            string name = ChestNames.Get(GetComponent<Container>()) ?? string.Empty;
+            return ChestNames.StripManualPrefix(ChestNames.StripIgnorePrefix(name));
         }
 
         public void SetText(string text)
@@ -308,6 +359,7 @@ namespace StoreAndCraft
                 return;
 
             string stored = ChestNames.FinalizeRename(container, text);
+            ChestRenameLinkBar.CommitFlags(container);
             if (ChestNames.Set(container, stored))
                 ActivityLog.Note(Loc.T("Chest", "Kiste"), "\"" + ChestNames.Sanitize(stored) + "\"");
         }

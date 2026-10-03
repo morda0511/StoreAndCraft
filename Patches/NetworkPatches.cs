@@ -152,6 +152,12 @@ namespace StoreAndCraft
                 false, false, false, false, false, false, null, false, false, true);
 
             new Terminal.ConsoleCommand(
+                "sacnews",
+                "StoreAndCraft: Hugin brings the news of this version again",
+                ReleaseNews.ShowAgain,
+                false, false, false, false, false, false, null, false, false, false);
+
+            new Terminal.ConsoleCommand(
                 "storehelp",
                 "StoreAndCraft: list admin chat/console commands",
                 args => ConfigCommands.ShowHelp(),

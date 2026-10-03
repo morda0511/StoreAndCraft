@@ -244,6 +244,8 @@ namespace StoreAndCraft
             znv.m_distant = false;
 
             bool custom = !string.IsNullOrEmpty(visualBase) && DisplayVisual.Available(visualBase);
+            if (custom)
+                CarvedVisual[clone] = visualBase;
             clone.transform.localScale = custom
                 ? Vector3.one
                 : Vector3.Scale(clone.transform.localScale, scaleMul);
@@ -260,6 +262,9 @@ namespace StoreAndCraft
                     piece.m_placeEffect = new EffectList { m_effectPrefabs = new EffectList.EffectData[0] };
                 if (piece.m_resources == null && source != null)
                     piece.m_resources = source.m_resources;
+                // Carved boards have their own recipe (the vanilla signs keep the sign recipe).
+                if (custom)
+                    ApplyCarvedRecipe(piece, visualBase);
                 // Hammer: Storage tab, next to the chests (same as the feed trough).
                 if (_chestPiece != null)
                 {
@@ -387,10 +392,58 @@ namespace StoreAndCraft
             }
         }
 
+        // Carved board prefab -> visual id (recipe is set again once ObjectDB exists).
+        private static readonly Dictionary<GameObject, string> CarvedVisual = new Dictionary<GameObject, string>();
+        private static readonly HashSet<GameObject> _carvedRecipeSet = new HashSet<GameObject>();
+
+        /// <summary>Recipe of a carved board by visual id; null for anything else (signs keep theirs).</summary>
+        private static List<Piece.Requirement> CarvedRecipe(string visualBase)
+        {
+            int wood, tar, leather, nails;
+            int chain = 2;
+            switch (visualBase)
+            {
+                case "large_vertical": wood = 10; tar = 3; leather = 5; nails = 2; break;
+                case "large_horizontal": wood = 10; tar = 3; leather = 5; nails = 4; break;
+                case "medium_vertical":
+                case "medium_horizontal": wood = 6; tar = 2; leather = 3; nails = 2; break;
+                case "small_vertical":
+                case "small_horizontal": wood = 1; tar = 1; leather = 1; nails = 0; break;
+                default: return null;
+            }
+            var list = new List<Piece.Requirement>();
+            ScarecrowPrefab.AddReq(list, "Wood", wood);
+            ScarecrowPrefab.AddReq(list, "Tar", tar);
+            ScarecrowPrefab.AddReq(list, "LeatherScraps", leather);
+            ScarecrowPrefab.AddReq(list, "Chain", chain);
+            if (nails > 0)
+                ScarecrowPrefab.AddReq(list, "BronzeNails", nails);
+            return list;
+        }
+
+        private static void ApplyCarvedRecipe(Piece piece, string visualBase)
+        {
+            if (piece == null || ObjectDB.instance == null)
+                return; // RegisterHammer applies it as soon as ObjectDB exists
+            List<Piece.Requirement> list = CarvedRecipe(visualBase);
+            if (list != null && list.Count > 0)
+                piece.m_resources = list.ToArray();
+        }
+
         private static void RegisterHammer()
         {
             if (AllPrefabs.Count == 0 || ObjectDB.instance == null)
                 return;
+
+            foreach (KeyValuePair<GameObject, string> kv in CarvedVisual)
+            {
+                Piece carved = kv.Key != null ? kv.Key.GetComponent<Piece>() : null;
+                if (carved != null && !_carvedRecipeSet.Contains(kv.Key))
+                {
+                    ApplyCarvedRecipe(carved, kv.Value);
+                    _carvedRecipeSet.Add(kv.Key);
+                }
+            }
 
             GameObject hammer = ObjectDB.instance.GetItemPrefab("Hammer");
             if (hammer == null)
@@ -524,6 +577,8 @@ namespace StoreAndCraft
             if (__instance == null || __instance != Player.m_localPlayer)
                 return true;
             // Block primary (scale) and secondary (layout) while Shift+hovering a display.
+            if (secondaryAttack && StorageDisplayBoard.ShouldBlockSecondaryForLocate())
+                return false; // plain right click on a display item: locate its chest instead
             return !StorageDisplayBoard.ShouldBlockAttackForCycle();
         }
     }

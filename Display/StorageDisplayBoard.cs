@@ -87,6 +87,7 @@ namespace StoreAndCraft
             public TextMeshProUGUI Amount;
             public TextMeshProUGUI Name;
             public bool IsChip;
+            public string Shared; // shared name of the item painted here (right click: locate its chest)
             // v2 sections only (0 / false elsewhere → unchanged behaviour).
             public float Font;
             public bool HideAmount;
@@ -471,6 +472,88 @@ namespace StoreAndCraft
             _cycleFrame = Time.frameCount;
 
             TryCycleHovered();
+        }
+
+        // ---- plain right click on an item on the display: camera flies to the chest that holds it
+
+        private static int _locateFrame = -1;
+
+        /// <summary>Slot under the crosshair that shows an item (-1 = none): ray from the camera against the icon rects.</summary>
+        private int SlotUnderCrosshair()
+        {
+            Camera cam = Utils.GetMainCamera();
+            if (_slots == null || cam == null)
+                return -1;
+            var ray = new Ray(cam.transform.position, cam.transform.forward);
+            int best = -1;
+            float bestScore = float.MaxValue;
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                Image icon = _slots[i].Icon;
+                if (icon == null || !icon.enabled || string.IsNullOrEmpty(_slots[i].Shared))
+                    continue;
+                RectTransform rt = icon.rectTransform;
+                var plane = new Plane(rt.forward, rt.position);
+                float dist;
+                if (!plane.Raycast(ray, out dist) || dist > 12f)
+                    continue;
+                Vector3 local = rt.InverseTransformPoint(ray.GetPoint(dist));
+                Rect r = rt.rect;
+                // Whole tile, not only the icon: a little padding around it.
+                float dx = Mathf.Abs(local.x - r.center.x) / Mathf.Max(0.0001f, r.width * 0.7f);
+                float dy = Mathf.Abs(local.y - r.center.y) / Mathf.Max(0.0001f, r.height * 0.7f);
+                if (dx > 1f || dy > 1f)
+                    continue;
+                float score = dx * dx + dy * dy;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = i;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>Plain right click on a display item: no weapon swing / block on that click.</summary>
+        public static bool ShouldBlockSecondaryForLocate()
+        {
+            if (IsScaleChordHeld() || !LocateInputAllowed())
+                return false;
+            StorageDisplayBoard board = HoveredBoard();
+            return board != null && board.SlotUnderCrosshair() >= 0;
+        }
+
+        private static bool LocateInputAllowed()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null || LocateCamera.Active || player.InPlaceMode())
+                return false;
+            if (DisplayTypeMenu.IsOpen || DisplayRangeMenu.IsOpen || DisplaySmallOptions.IsOpen || StationFilterMenu.IsOpen)
+                return false;
+            return !(InventoryGui.instance != null && InventoryGui.IsVisible()) && !Menu.IsActive() && !Chat.instance.HasFocus();
+        }
+
+        public static void TickLocateInput()
+        {
+            bool rmb = Input.GetMouseButtonDown(1);
+            try
+            {
+                if (ZInput.GetButtonDown("SecondaryAttack"))
+                    rmb = true;
+            }
+            catch
+            {
+            }
+            if (!rmb || IsScaleChordHeld() || !LocateInputAllowed() || _locateFrame == Time.frameCount)
+                return;
+            StorageDisplayBoard board = HoveredBoard();
+            if (board == null)
+                return;
+            int slot = board.SlotUnderCrosshair();
+            if (slot < 0)
+                return;
+            _locateFrame = Time.frameCount;
+            SearchPing.LocateForBoard(board, board._slots[slot].Shared);
         }
 
         public static bool TryCycleHovered()
@@ -2916,6 +2999,7 @@ namespace StoreAndCraft
                     _slots[i].Icon.sprite = StackLimits.Icon(sample);
                     _slots[i].Icon.enabled = _slots[i].Icon.sprite != null;
                     _slots[i].Icon.color = Color.white;
+                    _slots[i].Shared = sample.m_shared != null ? sample.m_shared.m_name : null;
                     SetAmount(i, FormatCount(total));
                     SetItemName(i, ItemLabel(sample.m_shared != null ? sample.m_shared.m_name : token));
                 }
@@ -2998,6 +3082,7 @@ namespace StoreAndCraft
         {
             if (_slots == null || i < 0 || i >= _slots.Length)
                 return;
+            _slots[i].Shared = null;
             if (_slots[i].Icon != null)
             {
                 _slots[i].Icon.enabled = false;
@@ -3651,6 +3736,7 @@ namespace StoreAndCraft
             _slots[i].Icon.sprite = StackLimits.Icon(entry.Sample);
             _slots[i].Icon.enabled = _slots[i].Icon.sprite != null;
             _slots[i].Icon.color = Color.white;
+            _slots[i].Shared = entry.Sample != null && entry.Sample.m_shared != null ? entry.Sample.m_shared.m_name : null;
             SetAmount(i, FormatCount(entry.Count));
         }
 
@@ -3708,6 +3794,7 @@ namespace StoreAndCraft
             if (_slots == null || i < 0 || i >= _slots.Length)
                 return;
             ResetSlotStyle(i);
+            _slots[i].Shared = null;
             if (_slots[i].Icon != null)
             {
                 _slots[i].Icon.enabled = false;
