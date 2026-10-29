@@ -12,7 +12,7 @@ Stations refill themselves from chests and put their output back. Storage displa
 
 **Looking for the beehives, berry bushes, wild herbs and mushrooms?** They live in **Forager's Garden** now. Install it and everything you built with them comes back; until then nothing is lost, queens and spores wait in your chests.
 
-![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-at-a-glance.png)
+![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-at-a-glance-alpha.png)
 
 | ![Store](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/glance-store-192.png) | ![Craft](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/glance-craft-192.png) | ![Stations](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/glance-stations-192.png) | ![Displays](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/glance-displays-192.png) |
 |:---:|:---:|:---:|:---:|
@@ -24,7 +24,7 @@ Stations refill themselves from chests and put their output back. Storage displa
 
 **Works with:** Epic Loot · PlanBuild · PierSupports · Path of Valheiman · Forager's Garden
 
-![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-hotkeys.png)
+![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-hotkeys-alpha.png)
 
 Every key can be changed in the mod manager (**F10**).
 
@@ -43,7 +43,7 @@ Every key can be changed in the mod manager (**F10**).
 | **Alt + R** | Scan range of a display |
 | **F10** | Morda Mod Manager |
 
-![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-store-and-craft.png)
+![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-store-and-craft-alpha.png)
 
 ### Whole loaded base
 - **On by default:** dump, crafting and building, stations, auto-store and the scarecrow use every chest in the area Valheim has loaded around you. No ranges to set
@@ -78,7 +78,7 @@ Every key can be changed in the mod manager (**F10**).
 - PierSupports: the extra pier segments are paid from chests too
 - PlanBuild: plan pieces take their materials from chests too
 
-![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-automation.png)
+![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-automation-alpha.png)
 
 ### Stations
 - **[E]** refill: fuel, ore, food from chests (inventory first)
@@ -102,7 +102,7 @@ Every key can be changed in the mod manager (**F10**).
 - **l1-l9:** link for stations
 - Settings are saved on the chest, not in its name
 
-![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-build-and-farm.png)
+![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-build-and-farm-alpha.png)
 
 All pieces are in the hammer's **Store and Craft** tab.
 
@@ -139,7 +139,7 @@ All pieces are in the hammer's **Store and Craft** tab.
 - **Alt+E**: pick a preset item from your bag per weapon / shield / tool slot. **E** swaps it with the stand's piece, back and forth
 - Without a preset, **E** puts the stand's weapon into your bag
 
-![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-control.png)
+![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-control-alpha.png)
 
 ### Morda Mod Manager
 - **F10** opens the list of all your mods. Click one to change its settings (switches, sliders, numbers, lists, hotkeys), then **Save**. The back arrow returns to the list
@@ -147,7 +147,7 @@ All pieces are in the hammer's **Store and Craft** tab.
 - Servers: only admins from adminlist.txt can save the server values
 - **Activity log** (optional): every transfer in a short list, renamed chests show as Chest[Name], lines fade out one by one
 
-![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-more-mods-by-morda.png)
+![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-more-mods-by-morda-alpha.png)
 
 | [![Workbenches+](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-workbenches-192.png)](https://thunderstore.io/c/valheim/p/Morda/WorkbenchesPlus/) | [![Forager's Garden](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-foragers-192.png)](https://thunderstore.io/c/valheim/p/Morda/ForagersGarden/) | [![Morda's Gearhold](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-gearhold-192.png)](https://thunderstore.io/c/valheim/p/Morda/MordasGearhold/) | [![Valheim Mannequins](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-mannequins-192.png)](https://thunderstore.io/c/valheim/p/Morda/ValheimMannequins/) |
 |:---:|:---:|:---:|:---:|
@@ -157,7 +157,7 @@ All pieces are in the hammer's **Store and Craft** tab.
 |:---:|:---:|:---:|
 | **[ServerRates](https://thunderstore.io/c/valheim/p/Morda/ServerRates/)** | **[Smooth Build Repair](https://thunderstore.io/c/valheim/p/Morda/SmoothBuildRepair/)** | **[Any Angle](https://thunderstore.io/c/valheim/p/Morda/AnyAngle/)** |
 
-![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-install.png)
+![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/dividers/divider-install-alpha.png)
 
 1. Install [BepInExPack Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/)
 2. Put `StoreAndCraft.dll` in `BepInEx/plugins/StoreAndCraft/` (or use Thunderstore / r2modman)
