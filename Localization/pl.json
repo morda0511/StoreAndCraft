@@ -400,7 +400,7 @@
   "Items auto-store leaves on the ground": "Przedmioty, których automatyczne zbieranie nie podnosi z ziemi",
   "Items dump keeps in your inventory (amount)": "Przedmioty pozostawiane w ekwipunku przy opróżnianiu (ilość)",
   "Ground cultivated again: ": "Ponownie spulchniono ziemię: ",
-  "New in this version:\n- Restock key (0, change it in F10): brings the items you marked Fill in the keep list up to their amount from your chests\n- Display filter: new categories Weapons, Armor, Trinkets and, with Path of Valheiman, its runes, essences, jewels and more\n- The lantern, torches and tankards have a category now": "Nowości w tej wersji:\n- Klawisz uzupełniania (0, do zmiany w F10): uzupełnia ze skrzyń przedmioty oznaczone Uzup. na liście zachowanych do ich ilości\n- Filtr tablicy: nowe kategorie Broń, Zbroja, Talizmany oraz, z Path of Valheiman, jego runy, esencje, klejnoty i inne\n- Latarnia, pochodnie i kufle mają teraz kategorię",
+  "New in this version:\n- Fix for cooking stations after the Valheim 1.0.21 update: auto-store no longer puts the same food into the chest again and again\n- Auto-fill and auto-store show [ON] in green and [OFF] in red when you look at a station\n- Shift+E opens the settings only if you set it as the settings key, so other mods can use it": "Nowości w tej wersji:\n- Poprawka dla stacji do gotowania po aktualizacji Valheim 1.0.21: automatyczne odkładanie nie wkłada już w kółko tego samego jedzenia do skrzyni\n- Automatyczne uzupełnianie i odkładanie pokazują [WŁ.] na zielono i [WYŁ.] na czerwono po spojrzeniu na stację\n- Shift+E otwiera ustawienia tylko po przypisaniu go jako klawisza ustawień, dzięki czemu inne mody mogą go używać",
   "Items left on the ground": "Przedmioty zostawiane na ziemi",
   "Items kept in inventory": "Przedmioty zachowane w ekwipunku",
   "Fill": "Uzup.",
@@ -414,5 +414,7 @@
   "PoV Oils & Bombs": "Oleje i bomby PoV",
   "Weapons": "Broń",
   "Armor": "Zbroja",
-  "Trinkets": "Talizmany"
+  "Trinkets": "Talizmany",
+  "ON": "WŁ.",
+  "OFF": "WYŁ."
 }

@@ -1570,11 +1570,12 @@ namespace StoreAndCraft
                 return true;
             }
 
-            // Small: Alt+E (alt use) opens Name / Amount toggles. Plain E does nothing special
+            // Small: the settings key opens Name / Amount toggles (Alt+E: Hotkeys.cs; Shift+E "alt use" only when the
+            // player set it as the settings key). Plain E does nothing special
             // (hotbar 1-8 while looking at it still assigns — see hover text).
             if (_kind == DisplayKind.Small)
             {
-                if (alt)
+                if (alt && ChestRename.AltUseIsSettingsKey())
                     DisplaySmallOptions.Open(this);
                 else if (UsesSections())
                     DisplayTypeMenu.Open(this); // v2 layouts: pick categories like Large

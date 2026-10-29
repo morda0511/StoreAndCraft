@@ -5,12 +5,31 @@ namespace StoreAndCraft
 {
     internal static class ChestRename
     {
+        /// <summary>
+        /// Valheim reports Shift+E as "alt use". It only counts as the settings key when the player has put
+        /// Shift+E on the settings key (F10 / config); by default (Alt+E) other mods may use Shift+E.
+        /// </summary>
+        public static bool AltUseIsSettingsKey()
+        {
+            if (Plugin.Settings == null)
+                return false;
+            KeyboardShortcut shortcut = Plugin.Settings.RenameKey.Value;
+            if (shortcut.MainKey != KeyCode.E)
+                return false;
+            foreach (KeyCode modifier in shortcut.Modifiers)
+            {
+                if (modifier == KeyCode.LeftShift || modifier == KeyCode.RightShift)
+                    return true;
+            }
+            return false;
+        }
+
         public static bool WantsRename(bool alt)
         {
             if (Plugin.Settings == null || !Plugin.Settings.ModEnabled.Value)
                 return false;
 
-            if (alt)
+            if (alt && AltUseIsSettingsKey())
                 return true;
 
             KeyboardShortcut shortcut = Plugin.Settings.RenameKey.Value;

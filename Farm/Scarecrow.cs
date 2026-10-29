@@ -1322,9 +1322,7 @@ namespace StoreAndCraft
 
         private static string StateText(bool on)
         {
-            return on
-                ? "<color=#5fd36b>" + Loc.T("on", "an") + "</color>"
-                : "<color=#e74c3c>" + Loc.T("off", "aus") + "</color>";
+            return StationAutoFill.OnOffTag(on);
         }
 
         public bool Interact(Humanoid user, bool hold, bool alt)

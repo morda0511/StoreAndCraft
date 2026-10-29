@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.3
+
+### UI IMPROVEMENTS
+- Hover text of stations, fires, torches and the scarecrow: Auto-fill and Auto-store show **[ON]** in green and **[OFF]** in red
+- The carved upright medium Storage Display shows larger amount numbers
+- **Shift+E** no longer opens the chest, feed trough and display settings by itself. It only does so if you set Shift+E as the settings key (F10), so other mods can use it. Alt+E works as before
+
+### FIX
+- **Valheim 1.0.21:** Auto-store (**N**) on cooking stations works again. After the game update it threw an error and put the same cooked food into the chest again and again (thanks to PapeThePope for the report and the fix)
+
 ## 1.6.2
 
 ### NEW FEATURES

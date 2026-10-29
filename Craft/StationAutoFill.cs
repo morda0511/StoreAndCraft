@@ -376,7 +376,15 @@ namespace StoreAndCraft
 
             text += "\n[<color=yellow><b>" + key + "</b></color>] "
                 + Loc.T("Auto-fill", "Auto-Fill")
-                + " (" + (IsOn(nv) ? Loc.T("on", "an") : Loc.T("off", "aus")) + ")";
+                + " " + OnOffTag(IsOn(nv));
+        }
+
+        /// <summary>Hover state of a switch: [ON] in green / [OFF] in red (the brackets are colored too).</summary>
+        public static string OnOffTag(bool on)
+        {
+            return on
+                ? "<color=#5fd36b>[" + Loc.T("ON", "AN") + "]</color>"
+                : "<color=#e74c3c>[" + Loc.T("OFF", "AUS") + "]</color>";
         }
 
         /// <summary>

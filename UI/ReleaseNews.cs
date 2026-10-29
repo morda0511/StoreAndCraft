@@ -21,13 +21,13 @@ namespace StoreAndCraft
 
         private static string Text => Loc.T(
             "New in this version:\n"
-            + "- Restock key (0, change it in F10): brings the items you marked Fill in the keep list up to their amount from your chests\n"
-            + "- Display filter: new categories Weapons, Armor, Trinkets and, with Path of Valheiman, its runes, essences, jewels and more\n"
-            + "- The lantern, torches and tankards have a category now",
+            + "- Fix for cooking stations after the Valheim 1.0.21 update: auto-store no longer puts the same food into the chest again and again\n"
+            + "- Auto-fill and auto-store show [ON] in green and [OFF] in red when you look at a station\n"
+            + "- Shift+E opens the settings only if you set it as the settings key, so other mods can use it",
             "Neu in dieser Version:\n"
-            + "- Auffüll-Taste (0, in F10 änderbar): bringt die Items, die du in der Behalten-Liste mit Auf markiert hast, aus deinen Kisten auf ihre Anzahl\n"
-            + "- Display-Filter: neue Kategorien Waffen, Rüstung, Schmuckstücke und, mit Path of Valheiman, dessen Runen, Essenzen, Juwelen und mehr\n"
-            + "- Laterne, Fackeln und Humpen haben jetzt eine Kategorie");
+            + "- Fix für Kochstationen nach dem Valheim-Update 1.0.21: Auto-Lagern legt dasselbe Essen nicht mehr immer wieder in die Kiste\n"
+            + "- Auto-Fill und Auto-Lagern zeigen [AN] in grün und [AUS] in rot, wenn du eine Station ansiehst\n"
+            + "- Umschalt+E öffnet die Einstellungen nur noch, wenn du es als Einstellungs-Taste gesetzt hast, so können andere Mods es nutzen");
 
         private static bool AlreadySeen()
         {
