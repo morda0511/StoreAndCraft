@@ -1,4 +1,4 @@
-![Store & Craft - Your base runs with you](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/store-and-craft-banner.png)
+![Store and Craft - Your base stores, crafts and builds with you](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/sac-banner.png)
 
 <br>
 
@@ -163,13 +163,13 @@ All pieces are in the hammer's **Store and Craft** tab.
 
 ## More mods by Morda
 
-| Mod | What it does |
-|:---|:---|
-| **[WorkbenchesPlus](https://thunderstore.io/c/valheim/p/Morda/WorkbenchesPlus/)** | Sort and filter crafting menus: craftable first, categories, armor and weapon sets by biome tier |
-| **[Forager's Garden](https://thunderstore.io/c/valheim/p/Morda/ForagersGarden/)** | Berry bushes, wild herbs and mushrooms with the Cultivator, plus Ice, Royal Jelly and Crystal beehives (formerly part of StoreAndCraft) |
-| **[Morda's Gearhold](https://thunderstore.io/c/valheim/p/Morda/MordasGearhold/)** | Three switchable equipment sets, shared inventory, 8 hotkey quickslots, ammo slots, trinkets, a weightless coin slot, transmog looks, armour dyes and weapon glow |
-| **[Valheim Mannequins](https://thunderstore.io/c/valheim/p/Morda/ValheimMannequins/)** | Player-shaped mannequins: dress them with real gear, pose and name them, keep several gear sets |
-| **[ServerRates](https://thunderstore.io/c/valheim/p/Morda/ServerRates/)** | Server-side rates for dedicated servers (PC and console), live apply, presets. Joining players need no install |
+| [![Workbenches+](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-workbenches-192.png)](https://thunderstore.io/c/valheim/p/Morda/WorkbenchesPlus/) | [![Forager's Garden](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-foragers-192.png)](https://thunderstore.io/c/valheim/p/Morda/ForagersGarden/) | [![Morda's Gearhold](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-gearhold-192.png)](https://thunderstore.io/c/valheim/p/Morda/MordasGearhold/) | [![Valheim Mannequins](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-mannequins-192.png)](https://thunderstore.io/c/valheim/p/Morda/ValheimMannequins/) |
+|:---:|:---:|:---:|:---:|
+| **[Workbenches+](https://thunderstore.io/c/valheim/p/Morda/WorkbenchesPlus/)** | **[Forager's Garden](https://thunderstore.io/c/valheim/p/Morda/ForagersGarden/)** | **[Morda's Gearhold](https://thunderstore.io/c/valheim/p/Morda/MordasGearhold/)** | **[Valheim Mannequins](https://thunderstore.io/c/valheim/p/Morda/ValheimMannequins/)** |
+
+| [![ServerRates](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-serverrates-192.png)](https://thunderstore.io/c/valheim/p/Morda/ServerRates/) | [![Smooth Build Repair](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-autorepair-192.png)](https://thunderstore.io/c/valheim/p/Morda/SmoothBuildRepair/) | [![Any Angle](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/motif-building-plus-192.png)](https://thunderstore.io/c/valheim/p/Morda/AnyAngle/) |
+|:---:|:---:|:---:|
+| **[ServerRates](https://thunderstore.io/c/valheim/p/Morda/ServerRates/)** | **[Smooth Build Repair](https://thunderstore.io/c/valheim/p/Morda/SmoothBuildRepair/)** | **[Any Angle](https://thunderstore.io/c/valheim/p/Morda/AnyAngle/)** |
 
 ![](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/divider-norse.png)
 
@@ -179,4 +179,4 @@ All pieces are in the hammer's **Store and Craft** tab.
 2. Put `StoreAndCraft.dll` in `BepInEx/plugins/StoreAndCraft/` (or use Thunderstore / r2modman)
 3. Servers: same version on the server and every client
 
-![Standing stones in the mist](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/store-and-craft-footer.png)
+![Store and Craft](https://raw.githubusercontent.com/morda0511/StoreAndCraft/main/thunderstore-assets/store-and-craft/sac-footer.png)
